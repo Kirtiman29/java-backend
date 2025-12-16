@@ -1,15 +1,21 @@
-// File: com.rdc.admin.entity.Category.java
 package com.rdc.admin.entity;
 
 import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
+
 import java.time.LocalDateTime;
 
 @Entity
+@Table(name = "categories")
 @Data
 @NoArgsConstructor
-@Table(name = "categories")
+@AllArgsConstructor
+@Builder
 public class Category {
 
     @Id
@@ -20,18 +26,14 @@ public class Category {
     private String name;
 
     @Column(nullable = false, unique = true)
-    private String slug;
+    private String slug; // Used for friendly URLs
 
-    @Column(columnDefinition = "TEXT")
     private String description;
 
-    private String imageUrl;
-
-    private boolean active = true;
-
-    private Integer sortOrder = 0;
-
+    @CreationTimestamp
+    @Column(updatable = false)
     private LocalDateTime createdAt;
 
-    // Many-to-One or One-to-Many relationships to Designs/Bundles would go here
+    @UpdateTimestamp
+    private LocalDateTime updatedAt;
 }

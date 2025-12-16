@@ -1,17 +1,14 @@
 package com.rdc.admin.dto;
 
-import jakarta.validation.constraints.*;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.Data;
 import java.time.LocalDateTime;
 
 @Data
-public class OfferCreateRequest {
-    @NotBlank(message = "Name is required")
+public class OfferUpdateRequest {
     private String name;
-
-    @NotBlank(message = "Code is required")
     private String code;
-
     private Long designId;
     private Long categoryId;
 
@@ -22,11 +19,7 @@ public class OfferCreateRequest {
     @Min(value = 1, message = "Discount amount must be positive")
     private Long discountCents;
 
-    @NotNull(message = "Start date is required")
     private LocalDateTime startsAt;
-
-    @NotNull(message = "End date is required")
     private LocalDateTime endsAt;
-
-    private Boolean active; // Use wrapper Boolean here to allow null in request body
-}   
+    private Boolean active;
+}

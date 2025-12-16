@@ -1,123 +1,119 @@
 package com.rdc.admin.service;
 
 import com.rdc.admin.dto.CategoryCreateRequest;
-import com.rdc.admin.dto.CategoryDto;
+import com.rdc.admin.dto.CategoryResponse;
 import com.rdc.admin.dto.CategoryUpdateRequest;
 import com.rdc.admin.entity.Category;
+import com.rdc.admin.exception.ResourceNotFoundException;
 import com.rdc.admin.repository.CategoryRepository;
 import com.rdc.admin.util.SlugGenerator;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
 @Service
+@RequiredArgsConstructor
 public class CategoryService {
 
     private final CategoryRepository categoryRepository;
 
-    public CategoryService(CategoryRepository categoryRepository) {
-        this.categoryRepository = categoryRepository;
-    }
-
-    /**
-     * Maps the Category Entity to the Category DTO for responses.
-     */
-    private CategoryDto mapToDto(Category entity) {
-        return CategoryDto.builder()
-                .id(entity.getId())
-                .name(entity.getName())
-                .slug(entity.getSlug())
-                .description(entity.getDescription())
-                .imageUrl(entity.getImageUrl())
-                .active(entity.isActive())
-                .sortOrder(entity.getSortOrder())
-                .createdAt(entity.getCreatedAt())
+    // --- Mapper Utility ---
+    private CategoryResponse toResponse(Category category) {
+        if (category == null) return null;
+        return CategoryResponse.builder()
+                .id(category.getId())
+                .name(category.getName())
+                .slug(category.getSlug())
+                .description(category.getDescription())
+                .createdAt(category.getCreatedAt())
+                .updatedAt(category.getUpdatedAt())
                 .build();
     }
 
-    /**
-     * Creates a new Category entity and saves it to the database.
-     */
-    public CategoryDto createCategory(CategoryCreateRequest request) {
-        // 1. Validation: Check for unique name
-        if (categoryRepository.existsByNameIgnoreCase(request.getName())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Category name already exists.");
-        }
-
-        // 2. Mapping and setting default values
-        Category category = new Category();
-        category.setName(request.getName());
-
-        // Use SlugGenerator utility
-        category.setSlug(request.getSlug() != null ? request.getSlug() : SlugGenerator.generateSlug(request.getName()));
-
-        category.setDescription(request.getDescription());
-        category.setImageUrl(request.getImageUrl());
-        category.setActive(request.getActive());
-        category.setSortOrder(request.getSortOrder());
-        category.setCreatedAt(LocalDateTime.now());
-
-        // 3. Save and return DTO
-        Category saved = categoryRepository.save(category);
-        return mapToDto(saved);
+    private Category getCategoryEntityById(Long id) {
+        return categoryRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Category", id));
     }
 
-    /**
-     * Retrieves all categories.
-     */
-    public List<CategoryDto> findAll() {
+    // --- CRUD Operations ---
+    @Transactional
+    public CategoryResponse createCategory(CategoryCreateRequest request) {
+        // 1. Check for unique name
+        if (categoryRepository.existsByName(request.getName())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Category name already exists: " + request.getName());
+        }
+
+        // 2. Generate Unique Slug (reusing the existing SlugGenerator utility)
+        String baseSlug = SlugGenerator.generateSlug(request.getName());
+        String finalSlug = baseSlug;
+        int counter = 1;
+        while (categoryRepository.existsBySlug(finalSlug)) {
+            finalSlug = baseSlug + "-" + counter++;
+        }
+
+        Category newCategory = Category.builder()
+                .name(request.getName())
+                .slug(finalSlug)
+                .description(request.getDescription())
+                .build();
+
+        Category savedCategory = categoryRepository.save(newCategory);
+        return toResponse(savedCategory);
+    }
+
+    public List<CategoryResponse> getAllCategories() {
         return categoryRepository.findAll().stream()
-                .map(this::mapToDto)
+                .map(this::toResponse)
                 .collect(Collectors.toList());
     }
 
-    /**
-     * Updates an existing Category.
-     */
-    public CategoryDto updateCategory(Long id, CategoryUpdateRequest request) {
-        Category existing = categoryRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found."));
-
-        // Only update fields if they are provided in the request
-        if (request.getName() != null) {
-            existing.setName(request.getName());
-            // Re-generate slug if name changes and a new slug isn't provided
-            if (request.getSlug() == null) {
-                existing.setSlug(SlugGenerator.generateSlug(request.getName()));
-            }
-        }
-        if (request.getSlug() != null) {
-            existing.setSlug(request.getSlug());
-        }
-        if (request.getDescription() != null) {
-            existing.setDescription(request.getDescription());
-        }
-        if (request.getImageUrl() != null) {
-            existing.setImageUrl(request.getImageUrl());
-        }
-        if (request.getActive() != null) {
-            existing.setActive(request.getActive());
-        }
-        if (request.getSortOrder() != null) {
-            existing.setSortOrder(request.getSortOrder());
-        }
-
-        Category updated = categoryRepository.save(existing);
-        return mapToDto(updated);
+    public CategoryResponse getCategoryById(Long id) {
+        return toResponse(getCategoryEntityById(id));
     }
 
-    /**
-     * Soft Delete: Sets the category to inactive.
-     */
-    public void deleteCategory(Long id) {
-        Category existing = categoryRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found."));
+    @Transactional
+    public CategoryResponse updateCategory(Long id, CategoryUpdateRequest request) {
+        Category existingCategory = getCategoryEntityById(id);
 
-        existing.setActive(false); // Soft Delete
-        categoryRepository.save(existing);
+        // Update Name and Slug if name is provided and changed
+        if (request.getName() != null && !request.getName().isBlank()) {
+            if (!existingCategory.getName().equalsIgnoreCase(request.getName())) {
+                // Check for unique name if changing
+                if (categoryRepository.existsByName(request.getName())) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Category name already exists: " + request.getName());
+                }
+
+                existingCategory.setName(request.getName());
+
+                // Regenerate slug based on the new name
+                String newBaseSlug = SlugGenerator.generateSlug(request.getName());
+                String newFinalSlug = newBaseSlug;
+                int counter = 1;
+                while (categoryRepository.existsBySlug(newFinalSlug)) {
+                    newFinalSlug = newBaseSlug + "-" + counter++;
+                }
+                existingCategory.setSlug(newFinalSlug);
+            }
+        }
+
+        if (request.getDescription() != null) {
+            existingCategory.setDescription(request.getDescription());
+        }
+
+        Category updatedCategory = categoryRepository.save(existingCategory);
+        return toResponse(updatedCategory);
+    }
+
+    @Transactional
+    public void deleteCategory(Long id) {
+        Category existingCategory = getCategoryEntityById(id);
+        // NOTE: In a real system, you must check if any Designs are linked to this Category
+        // and prevent deletion, or handle cascading (e.g., setting categoryId to null).
+        categoryRepository.delete(existingCategory);
     }
 }
