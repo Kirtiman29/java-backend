@@ -1,18 +1,16 @@
 package com.rdc.admin.service;
 
 import com.rdc.admin.dto.DesignCreateRequest;
-import com.rdc.admin.dto.DesignUpdateRequest;
 import com.rdc.admin.dto.DesignResponse;
+import com.rdc.admin.dto.DesignUpdateRequest;
 import com.rdc.admin.entity.Design;
+import com.rdc.admin.exception.ResourceNotFoundException;
 import com.rdc.admin.repository.DesignRepository;
-import com.rdc.admin.util.SlugGenerator;
 import com.rdc.admin.util.DesignMapper;
-import com.rdc.admin.exception.ResourceNotFoundException; // <-- NEW CUSTOM EXCEPTION
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -20,114 +18,124 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class DesignService {
 
-    private final DesignRepository designRepository;
+    private final DesignRepository repository;
+    private final DesignPricingService pricingService;
+    private final DesignMapper mapper;
 
+    /**
+     * Creates a new design with rule-based pricing and default draft status.
+     */
     @Transactional
     public DesignResponse createDesign(DesignCreateRequest request) {
-        // 1. Generate Slug and check for uniqueness
-        String baseSlug = SlugGenerator.generateSlug(request.getTitle());
-        String finalSlug = baseSlug;
-        int counter = 1;
+        Design design = new Design();
+        design.setTitle(request.getTitle());
+        design.setSlug(generateUniqueSlug(request.getTitle()));
+        design.setDescription(request.getDescription());
+        design.setCategoryId(request.getCategoryId());
 
-        while (designRepository.existsBySlug(finalSlug)) {
-            finalSlug = baseSlug + "-" + counter++;
-        }
+        // Pricing Logic
+        design.setBasePriceCents(request.getBasePriceCents());
+        design.setSpecialOffer(request.getSpecialOffer() != null ? request.getSpecialOffer() : false);
+        design.setDiscountPercent(request.getDiscountPercent() != null ? request.getDiscountPercent() : 0);
 
-        List<String> tags = request.getTags() != null ? request.getTags() : Collections.emptyList();
+        // Backend calculates the final price [Rule 7]
+        int finalPrice = pricingService.calculateFinalPrice(design);
+        design.setFinalPriceCents(finalPrice);
 
-        Design design = Design.builder()
-                .title(request.getTitle())
-                .description(request.getDescription())
-                .slug(finalSlug)
-                .priceCents(request.getPriceCents())
-                .categoryId(request.getCategoryId())
-                .assetId(request.getAssetId())
-                .assetUuid(request.getAssetUuid())
-                // Ensure tags is not null when building
-                .tags(tags)
-                .published(false)
-                .featured(false)
-                .build();
+        // Default Workflow States [Rule 4]
+        design.setDraft(true);
+        design.setActive(false);
+        design.setTrending(false);
+        design.setEditorsPick(false);
+        design.setNewArrival(true); // Default for new items
 
-        Design savedDesign = designRepository.save(design);
+        design.setTags(request.getTags());
+        design.setAssetId(request.getAssetId());
+        design.setAssetUuid(request.getAssetUuid());
 
-        return DesignMapper.toResponse(savedDesign);
-    }
-
-    public List<DesignResponse> getAllDesigns() {
-        return designRepository.findAll().stream()
-                .map(DesignMapper::toResponse)
-                .collect(Collectors.toList());
+        return mapper.toResponse(repository.save(design));
     }
 
     /**
-     * Helper method to retrieve the Design entity.
-     * Throws ResourceNotFoundException (mapped to 404) if not found.
+     * Updates an existing design with partial update support and pricing recalculation.
      */
-    private Design getDesignEntityById(Long id) {
-        return designRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Design", id));
-    }
-
-    public DesignResponse getDesignById(Long id) {
-        Design design = getDesignEntityById(id);
-        return DesignMapper.toResponse(design);
-    }
-
     @Transactional
     public DesignResponse updateDesign(Long id, DesignUpdateRequest request) {
-        Design existingDesign = getDesignEntityById(id);
+        Design design = repository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Design not found with id: " + id));
 
-        // Apply partial updates from DTO
-        if (request.getTitle() != null && !request.getTitle().isBlank()) {
-            existingDesign.setTitle(request.getTitle());
+        boolean needsPricingRecalculation = false;
 
-            // Re-generate slug only if the title changes
-            String newSlug = SlugGenerator.generateSlug(request.getTitle());
-            if (!existingDesign.getSlug().equals(newSlug)) {
-                // NOTE: Full slug uniqueness check is omitted here for simplicity,
-                // assuming titles are unique enough, or handle conflict as needed.
-                existingDesign.setSlug(newSlug);
-            }
+        if (request.getTitle() != null) {
+            design.setTitle(request.getTitle());
+            design.setSlug(generateUniqueSlug(request.getTitle()));
         }
 
-        // Null checks for all other optional fields
-        if (request.getDescription() != null) {
-            existingDesign.setDescription(request.getDescription());
+        if (request.getDescription() != null) design.setDescription(request.getDescription());
+        if (request.getCategoryId() != null) design.setCategoryId(request.getCategoryId());
+
+        // Pricing related updates
+        if (request.getBasePriceCents() != null) {
+            design.setBasePriceCents(request.getBasePriceCents());
+            needsPricingRecalculation = true;
         }
-        if (request.getPriceCents() != null) {
-            existingDesign.setPriceCents(request.getPriceCents());
+        if (request.getSpecialOffer() != null) {
+            design.setSpecialOffer(request.getSpecialOffer());
+            needsPricingRecalculation = true;
         }
-        if (request.getCategoryId() != null) {
-            existingDesign.setCategoryId(request.getCategoryId());
-        }
-        if (request.getAssetId() != null) {
-            existingDesign.setAssetId(request.getAssetId());
-        }
-        if (request.getAssetUuid() != null) {
-            existingDesign.setAssetUuid(request.getAssetUuid());
+        if (request.getDiscountPercent() != null) {
+            design.setDiscountPercent(request.getDiscountPercent());
+            needsPricingRecalculation = true;
         }
 
-        // Update tags collection
-        if (request.getTags() != null) {
-            existingDesign.setTags(request.getTags());
+        if (needsPricingRecalculation) {
+            design.setFinalPriceCents(pricingService.calculateFinalPrice(design));
         }
 
-        if (request.getPublished() != null) {
-            existingDesign.setPublished(request.getPublished());
-        }
-        if (request.getFeatured() != null) {
-            existingDesign.setFeatured(request.getFeatured());
-        }
+        // Workflow and Section Flags
+        if (request.getActive() != null) design.setActive(request.getActive());
+        if (request.getDraft() != null) design.setDraft(request.getDraft());
+        if (request.getTrending() != null) design.setTrending(request.getTrending());
+        if (request.getEditorsPick() != null) design.setEditorsPick(request.getEditorsPick());
+        if (request.getNewArrival() != null) design.setNewArrival(request.getNewArrival());
 
-        Design updatedDesign = designRepository.save(existingDesign);
-        return DesignMapper.toResponse(updatedDesign);
+        if (request.getTags() != null) design.setTags(request.getTags());
+
+        return mapper.toResponse(repository.save(design));
+    }
+
+    @Transactional(readOnly = true)
+    public List<DesignResponse> getAllDesigns() {
+        return repository.findAll().stream()
+                .map(mapper::toResponse)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public DesignResponse getDesignById(Long id) {
+        Design design = repository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Design not found with id: " + id));
+        return mapper.toResponse(design);
     }
 
     @Transactional
     public void deleteDesign(Long id) {
-        // Fetching first to ensure ResourceNotFoundException is thrown if ID is invalid
-        Design existingDesign = getDesignEntityById(id);
-        designRepository.delete(existingDesign);
+        if (!repository.existsById(id)) {
+            throw new ResourceNotFoundException("Design not found with id: " + id);
+        }
+        repository.deleteById(id);
+    }
+
+    /**
+     * Utility to ensure slugs are URL-friendly and unique.
+     */
+    private String generateUniqueSlug(String title) {
+        String baseSlug = title.toLowerCase().replaceAll("[^a-z0-9]+", "-").replaceAll("^-|-$", "");
+        String slug = baseSlug;
+        int count = 1;
+        while (repository.existsBySlug(slug)) {
+            slug = baseSlug + "-" + count++;
+        }
+        return slug;
     }
 }

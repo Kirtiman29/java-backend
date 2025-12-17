@@ -1,71 +1,57 @@
 package com.rdc.admin.entity;
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
-import lombok.NoArgsConstructor;
-
 import java.time.LocalDateTime;
 import java.util.List;
 
 @Entity
 @Table(name = "designs")
 @Data
-@Builder
-@NoArgsConstructor
-@AllArgsConstructor
 public class Design {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true)
     private String slug;
-
-    @Column(nullable = false)
     private String title;
-
-    @Column(length = 1000)
+    @Column(columnDefinition = "TEXT")
     private String description;
 
-    @Column(name = "price_cents", nullable = false)
-    private Integer priceCents;
+    // Pricing
+    private Integer basePriceCents;
+    private Integer finalPriceCents;
+    private Boolean specialOffer = false;
+    private Integer discountPercent = 0;
 
-    @Column(name = "category_id")
+    // Status
+    private Boolean active = false;
+    private Boolean draft = true;
+
+    // Section Flags
+    private Boolean trending = false;
+    private Boolean editorsPick = false;
+    private Boolean newArrival = true; // Default for new creations
+
     private Long categoryId;
-
-    @Column(name = "asset_id")
     private Long assetId;
-
-    @Column(name = "asset_uuid")
     private String assetUuid;
 
-    // The robust ElementCollection mapping:
-    @ElementCollection(fetch = FetchType.EAGER)
-    @CollectionTable(
-            name = "design_tags",
-            // Explicitly linking the child table's design_id column to the parent table's id column
-            joinColumns = @JoinColumn(name = "design_id", referencedColumnName = "id")
-    )
-    @Column(name = "tag")
+    @ElementCollection
     private List<String> tags;
 
-    @Column(nullable = false)
-    private Boolean published = false;
+    private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
 
-    @Column(nullable = false)
-    private Boolean featured = false;
-
-    @Column(name = "created_at", updatable = false)
-    private LocalDateTime createdAt = LocalDateTime.now();
-
-    @Column(name = "updated_at")
-    private LocalDateTime updatedAt = LocalDateTime.now();
+    @PrePersist
+    protected void onCreate() {
+        createdAt = LocalDateTime.now();
+        updatedAt = LocalDateTime.now();
+    }
 
     @PreUpdate
     protected void onUpdate() {
-        this.updatedAt = LocalDateTime.now();
+        updatedAt = LocalDateTime.now();
     }
 }

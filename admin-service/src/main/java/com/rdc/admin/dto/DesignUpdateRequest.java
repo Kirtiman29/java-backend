@@ -3,27 +3,23 @@ package com.rdc.admin.dto;
 import lombok.Data;
 import java.util.List;
 
-/**
- * DTO for updating an existing Design.
- * All fields are optional to allow for partial updates (PATCH semantics).
- */
 @Data
 public class DesignUpdateRequest {
-
-    // String fields - optional
     private String title;
     private String description;
+    private Integer basePriceCents;
+    private Integer discountPercent;
+    private Boolean specialOffer;
 
-    // Category ID and Asset references - optional
-    private Long categoryId;
-    private Long assetId;
-    private String assetUuid;
+    // Status Flags
+    private Boolean active;
+    private Boolean draft;
 
-    // Price - optional
-    private Integer priceCents;
+    // Section Flags
+    private Boolean trending;
+    private Boolean editorsPick;
+    private Boolean newArrival;
 
-    // Status/Tags - optional
     private List<String> tags;
-    private Boolean published;
-    private Boolean featured;
+    private Long categoryId;
 }

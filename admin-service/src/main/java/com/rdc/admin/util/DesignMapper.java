@@ -2,35 +2,37 @@ package com.rdc.admin.util;
 
 import com.rdc.admin.dto.DesignResponse;
 import com.rdc.admin.entity.Design;
+import org.springframework.stereotype.Component;
 
+@Component
 public class DesignMapper {
 
-    private DesignMapper() {
-        // Utility class
-    }
+    public DesignResponse toResponse(Design design) {
+        if (design == null) return null;
 
-    /**
-     * Converts a Design entity to a DesignResponse DTO.
-     */
-    public static DesignResponse toResponse(Design design) {
-        if (design == null) {
-            return null;
-        }
+        DesignResponse response = new DesignResponse();
+        response.setId(design.getId());
+        response.setTitle(design.getTitle());
+        response.setSlug(design.getSlug());
+        response.setDescription(design.getDescription());
 
-        return DesignResponse.builder()
-                .id(design.getId())
-                .slug(design.getSlug())
-                .title(design.getTitle())
-                .description(design.getDescription())
-                .priceCents(design.getPriceCents())
-                .categoryId(design.getCategoryId())
-                .assetId(design.getAssetId())
-                .assetUuid(design.getAssetUuid())
-                .tags(design.getTags())
-                .published(design.getPublished())
-                .featured(design.getFeatured())
-                .createdAt(design.getCreatedAt())
-                .updatedAt(design.getUpdatedAt())
-                .build();
+        // FIX: Using new pricing field
+        response.setFinalPriceCents(design.getFinalPriceCents());
+        response.setBasePriceCents(design.getBasePriceCents());
+
+        // FIX: Mapping new status flags
+        response.setActive(design.getActive());
+        response.setDraft(design.getDraft());
+
+        // FIX: Mapping new section flags
+        response.setTrending(design.getTrending());
+        response.setEditorsPick(design.getEditorsPick());
+        response.setNewArrival(design.getNewArrival());
+
+        response.setTags(design.getTags());
+        response.setCreatedAt(design.getCreatedAt());
+        response.setUpdatedAt(design.getUpdatedAt());
+
+        return response;
     }
 }
