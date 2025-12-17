@@ -7,15 +7,10 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 @Configuration
 public class WebConfig implements WebMvcConfigurer {
 
-    /**
-     * Global CORS configuration to allow the Admin UI to access the API.
-     * We use allowedOriginPatterns("*") instead of allowedOrigins("*")
-     * because we have allowCredentials(true) set.
-     */
     @Override
     public void addCorsMappings(CorsRegistry registry) {
-        registry.addMapping("/api/admin/**") // Apply to all admin API endpoints
-                .allowedOriginPatterns("*") // FIX: Changed from allowedOrigins("*")
+        registry.addMapping("/api/admin/**")
+                .allowedOriginPatterns("*") // Fix for CORS with credentials [cite: 22]
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                 .allowedHeaders("*")
                 .allowCredentials(true);
