@@ -35,7 +35,6 @@ public class Asset {
 
     private String contentType;
     private Long sizeBytes;
-    private Long priceCents;
 
     @Column(nullable = false)
     private Long sellerId;

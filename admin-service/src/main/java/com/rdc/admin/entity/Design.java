@@ -16,23 +16,22 @@ public class Design {
 
     private String slug;
     private String title;
+
     @Column(columnDefinition = "TEXT")
     private String description;
 
-    // Pricing
-    private Integer basePriceCents;
-    private Integer finalPriceCents;
+    // FIX: Standardized to Long to match DTO and Pricing Service
+    private Long basePriceCents;
+    private Long finalPriceCents;
+
     private Boolean specialOffer = false;
     private Integer discountPercent = 0;
 
-    // Status
     private Boolean active = false;
     private Boolean draft = true;
-
-    // Section Flags
     private Boolean trending = false;
     private Boolean editorsPick = false;
-    private Boolean newArrival = true; // Default for new creations
+    private Boolean newArrival = true;
 
     private Long categoryId;
     private Long assetId;

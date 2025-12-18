@@ -6,7 +6,6 @@ CREATE TABLE assets (
   filename VARCHAR(512) NOT NULL,
   content_type VARCHAR(128),
   size_bytes BIGINT,
-  price_cents BIGINT DEFAULT 0,
   seller_id BIGINT NOT NULL,
   is_published BOOLEAN DEFAULT FALSE,
   is_deleted BOOLEAN DEFAULT FALSE,

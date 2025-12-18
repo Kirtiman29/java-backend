@@ -10,29 +10,26 @@ public class DesignMapper {
     public DesignResponse toResponse(Design design) {
         if (design == null) return null;
 
-        DesignResponse response = new DesignResponse();
-        response.setId(design.getId());
-        response.setTitle(design.getTitle());
-        response.setSlug(design.getSlug());
-        response.setDescription(design.getDescription());
-
-        // FIX: Using new pricing field
-        response.setFinalPriceCents(design.getFinalPriceCents());
-        response.setBasePriceCents(design.getBasePriceCents());
-
-        // FIX: Mapping new status flags
-        response.setActive(design.getActive());
-        response.setDraft(design.getDraft());
-
-        // FIX: Mapping new section flags
-        response.setTrending(design.getTrending());
-        response.setEditorsPick(design.getEditorsPick());
-        response.setNewArrival(design.getNewArrival());
-
-        response.setTags(design.getTags());
-        response.setCreatedAt(design.getCreatedAt());
-        response.setUpdatedAt(design.getUpdatedAt());
-
-        return response;
+        return DesignResponse.builder()
+                .id(design.getId())
+                .title(design.getTitle())
+                .slug(design.getSlug())
+                .description(design.getDescription())
+                .basePriceCents(design.getBasePriceCents())
+                .finalPriceCents(design.getFinalPriceCents())
+                .discountPercent(design.getDiscountPercent())
+                .specialOffer(design.getSpecialOffer())
+                .categoryId(design.getCategoryId())
+                .assetId(design.getAssetId())
+                .assetUuid(design.getAssetUuid())
+                .active(design.getActive())
+                .draft(design.getDraft())
+                .trending(design.getTrending())
+                .editorsPick(design.getEditorsPick())
+                .newArrival(design.getNewArrival())
+                .tags(design.getTags())
+                .createdAt(design.getCreatedAt())
+                .updatedAt(design.getUpdatedAt())
+                .build();
     }
 }

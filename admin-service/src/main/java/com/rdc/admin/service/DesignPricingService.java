@@ -6,17 +6,17 @@ import org.springframework.stereotype.Service;
 @Service
 public class DesignPricingService {
 
-    public int calculateFinalPrice(Design design) {
-        if (design.getBasePriceCents() == null) return 0;
+    public long calculateFinalPrice(Design design) {
+        if (design.getBasePriceCents() == null) return 0L;
 
-        int price = design.getBasePriceCents();
+        long price = design.getBasePriceCents();
 
         if (Boolean.TRUE.equals(design.getSpecialOffer())
                 && design.getDiscountPercent() != null
                 && design.getDiscountPercent() > 0) {
 
             double discountMultiplier = (100.0 - design.getDiscountPercent()) / 100.0;
-            price = (int) Math.round(price * discountMultiplier);
+            price = Math.round(price * discountMultiplier);
         }
 
         return price;
