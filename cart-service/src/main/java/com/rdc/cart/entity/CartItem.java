@@ -1,7 +1,10 @@
+// File: src/main/java/com/rdc/cart/entity/CartItem.java
 package com.rdc.cart.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 import java.time.LocalDateTime;
 
 @Entity
@@ -20,8 +23,8 @@ public class CartItem {
     @Column(name = "user_id", nullable = false)
     private Long userId;
 
-    @Column(name = "asset_id", nullable = false)
-    private Long assetId;
+    @Column(name = "design_id", nullable = false) // Updated to designId
+    private Long designId;
 
     @Column(name = "asset_uuid", nullable = false)
     private String assetUuid;
@@ -29,16 +32,17 @@ public class CartItem {
     @Column(name = "quantity", nullable = false)
     private Integer quantity;
 
-    @Column(name = "price_cents", nullable = false)
+    @Column(name = "price_cents", nullable = false) // Backend-controlled field
     private Long priceCents;
 
-    @Column(name = "created_at")
+    @CreationTimestamp
+    @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
+    @UpdateTimestamp
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
-    // field ka naam "deleted" rakha hai, column ka naam is_deleted
     @Column(name = "is_deleted", nullable = false)
     private Boolean deleted;
 }

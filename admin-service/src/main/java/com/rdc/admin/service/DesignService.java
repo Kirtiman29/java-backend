@@ -25,6 +25,7 @@ public class DesignService {
 
     @Transactional
     public DesignResponse createDesign(DesignCreateRequest request) {
+        // Validate asset exists in Asset-Service before linking [cite: 343]
         assetClientService.validateAsset(request.getAssetUuid());
 
         Design design = new Design();
@@ -33,10 +34,18 @@ public class DesignService {
         design.setDescription(request.getDescription());
         design.setCategoryId(request.getCategoryId());
         design.setBasePriceCents(request.getBasePriceCents());
+
+        // Pricing logic
         design.setSpecialOffer(request.getSpecialOffer() != null ? request.getSpecialOffer() : false);
         design.setDiscountPercent(request.getDiscountPercent() != null ? request.getDiscountPercent() : 0);
-
         design.setFinalPriceCents(pricingService.calculateFinalPrice(design));
+
+        // FIX: Mapping Status and Section Flags from Request [cite: 193-194]
+        design.setActive(request.getActive() != null ? request.getActive() : false);
+        design.setDraft(request.getDraft() != null ? request.getDraft() : true);
+        design.setTrending(request.getTrending() != null ? request.getTrending() : false);
+        design.setEditorsPick(request.getEditorsPick() != null ? request.getEditorsPick() : false);
+        design.setNewArrival(request.getNewArrival() != null ? request.getNewArrival() : true);
 
         design.setTags(request.getTags());
         design.setAssetId(request.getAssetId());
@@ -66,8 +75,9 @@ public class DesignService {
             design.setFinalPriceCents(pricingService.calculateFinalPrice(design));
         }
 
-        // Flags
+        // Mapping flags for updates [cite: 350-351]
         if (request.getActive() != null) design.setActive(request.getActive());
+        if (request.getDraft() != null) design.setDraft(request.getDraft());
         if (request.getTrending() != null) design.setTrending(request.getTrending());
         if (request.getEditorsPick() != null) design.setEditorsPick(request.getEditorsPick());
         if (request.getNewArrival() != null) design.setNewArrival(request.getNewArrival());

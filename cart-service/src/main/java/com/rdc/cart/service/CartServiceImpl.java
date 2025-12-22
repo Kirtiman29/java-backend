@@ -1,3 +1,4 @@
+// File: src/main/java/com/rdc/cart/service/CartServiceImpl.java
 package com.rdc.cart.service;
 
 import com.rdc.cart.dto.CartItemRequest;
@@ -8,28 +9,46 @@ import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
 public class CartServiceImpl implements CartService {
 
     private final CartItemRepository cartItemRepository;
+    private final RestTemplate restTemplate; // Added to communicate with Admin Service
 
     @Override
     @Transactional
     public CartItemResponse addToCart(CartItemRequest request) {
+        // Fetch Design details from Admin Service
+        String adminUrl = "http://localhost:8080/api/admin/designs/" + request.getDesignId();
+
+        // We use Map to quickly access fields from the Admin Design response
+        Map<String, Object> design = restTemplate.getForObject(adminUrl, Map.class);
+
+        if (design == null) {
+            throw new EntityNotFoundException("Design not found in Admin Service");
+        }
+
+        // Validate business rules: Cannot add if inactive or a draft
+        boolean active = (boolean) design.get("active");
+        boolean draft = (boolean) design.get("draft");
+        if (!active || draft) {
+            throw new RuntimeException("This design is currently unavailable");
+        }
+
         CartItem item = CartItem.builder()
                 .userId(request.getUserId())
-                .assetId(request.getAssetId())
-                .assetUuid(request.getAssetUuid())
+                .designId(request.getDesignId())
+                .assetUuid((String) design.get("assetUuid"))
                 .quantity(request.getQuantity())
-                .priceCents(request.getPriceCents())
+                .priceCents(((Number) design.get("finalPriceCents")).longValue()) // Lock verified price
                 .deleted(false)
-                .createdAt(LocalDateTime.now())
-                .updatedAt(LocalDateTime.now())
                 .build();
 
         CartItem saved = cartItemRepository.save(item);
@@ -60,7 +79,7 @@ public class CartServiceImpl implements CartService {
         CartItemResponse resp = new CartItemResponse();
         resp.setId(item.getId());
         resp.setUserId(item.getUserId());
-        resp.setAssetId(item.getAssetId());
+        resp.setAssetId(item.getDesignId()); // Now returning Design ID
         resp.setAssetUuid(item.getAssetUuid());
         resp.setQuantity(item.getQuantity());
         resp.setPriceCents(item.getPriceCents());

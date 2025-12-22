@@ -10,8 +10,15 @@ public class DesignCreateRequest {
     private Long basePriceCents;
     private Integer discountPercent;
     private Boolean specialOffer;
-    private Long categoryId; // Add this
+    private Long categoryId;
     private List<String> tags;
-    private Long assetId;      // Add this
-    private String assetUuid;  // Add this
+    private Long assetId;
+    private String assetUuid;
+
+    // Added missing flags to capture from frontend request
+    private Boolean active;
+    private Boolean draft;
+    private Boolean trending;
+    private Boolean editorsPick;
+    private Boolean newArrival;
 }
