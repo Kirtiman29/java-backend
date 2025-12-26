@@ -46,6 +46,7 @@ public class EmailService {
             System.out.println("HTML email sent successfully to: " + toEmail + " with subject: " + subject);
         } catch (Exception e) {
             System.err.println("Error sending HTML email to " + toEmail + " [" + subject + "]: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
