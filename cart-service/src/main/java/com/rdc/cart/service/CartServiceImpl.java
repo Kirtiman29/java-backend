@@ -1,63 +1,84 @@
-// File: src/main/java/com/rdc/cart/service/CartServiceImpl.java
 package com.rdc.cart.service;
 
+import com.rdc.cart.client.AdminServiceClient;
 import com.rdc.cart.dto.CartItemRequest;
 import com.rdc.cart.dto.CartItemResponse;
+import com.rdc.cart.dto.DesignDto;
 import com.rdc.cart.entity.CartItem;
+import com.rdc.cart.exception.CartItemNotFoundException;
 import com.rdc.cart.repository.CartItemRepository;
-import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.client.RestTemplate;
 
-import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Map;
+import java.util.Optional;
 
+/**
+ * Cart Service Implementation
+ *
+ * SECURITY NOTES:
+ * 1. Price is ALWAYS fetched from Admin Service - NEVER from frontend request
+ * 2. userId comes from auth header (X-User-Id) - NEVER from request body
+ * 3. User can only access/modify their own cart items
+ */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class CartServiceImpl implements CartService {
 
     private final CartItemRepository cartItemRepository;
-    private final RestTemplate restTemplate; // Added to communicate with Admin Service
+    private final AdminServiceClient adminServiceClient;
 
     @Override
     @Transactional
-    public CartItemResponse addToCart(CartItemRequest request) {
-        // Fetch Design details from Admin Service
-        String adminUrl = "http://localhost:8080/api/admin/designs/" + request.getDesignId();
+    public CartItemResponse addToCart(Long userId, CartItemRequest request) {
+        log.info("Adding design {} to cart for user {}", request.getDesignId(), userId);
 
-        // We use Map to quickly access fields from the Admin Design response
-        Map<String, Object> design = restTemplate.getForObject(adminUrl, Map.class);
+        // 1. Fetch design from Admin Service (validates existence + availability)
+        DesignDto design = adminServiceClient.getDesignById(request.getDesignId());
 
-        if (design == null) {
-            throw new EntityNotFoundException("Design not found in Admin Service");
+        // 2. Check if design already exists in cart
+        Optional<CartItem> existingItem = cartItemRepository
+                .findByUserIdAndDesignIdAndDeletedFalse(userId, request.getDesignId());
+
+        if (existingItem.isPresent()) {
+            // Update quantity instead of adding duplicate
+            CartItem item = existingItem.get();
+            item.setQuantity(item.getQuantity() + request.getQuantity());
+            // Update price snapshot to current price
+            item.setPriceCents(design.getFinalPriceCents());
+            item.setDesignTitle(design.getTitle());
+            item.setAssetUuid(design.getAssetUuid());
+
+            CartItem saved = cartItemRepository.save(item);
+            log.info("Updated existing cart item {} with new quantity {}", saved.getId(), saved.getQuantity());
+            return toResponse(saved);
         }
 
-        // Validate business rules: Cannot add if inactive or a draft
-        boolean active = (boolean) design.get("active");
-        boolean draft = (boolean) design.get("draft");
-        if (!active || draft) {
-            throw new RuntimeException("This design is currently unavailable");
-        }
-
+        // 3. Create new cart item with price from Admin Service
         CartItem item = CartItem.builder()
-                .userId(request.getUserId())
+                .userId(userId)
                 .designId(request.getDesignId())
-                .assetUuid((String) design.get("assetUuid"))
+                .assetUuid(design.getAssetUuid())
+                .designTitle(design.getTitle())
                 .quantity(request.getQuantity())
-                .priceCents(((Number) design.get("finalPriceCents")).longValue()) // Lock verified price
+                .priceCents(design.getFinalPriceCents())  // Price from Admin Service, NOT from request!
                 .deleted(false)
                 .build();
 
         CartItem saved = cartItemRepository.save(item);
+        log.info("Created new cart item {} for design {}", saved.getId(), saved.getDesignId());
+
         return toResponse(saved);
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<CartItemResponse> getCartByUserId(Long userId) {
+        log.debug("Fetching cart for user {}", userId);
+
         return cartItemRepository.findByUserIdAndDeletedFalse(userId)
                 .stream()
                 .map(this::toResponse)
@@ -66,23 +87,72 @@ public class CartServiceImpl implements CartService {
 
     @Override
     @Transactional
-    public void removeFromCart(Long cartItemId) {
-        CartItem item = cartItemRepository.findById(cartItemId)
-                .orElseThrow(() -> new EntityNotFoundException("Cart item not found: " + cartItemId));
+    public CartItemResponse updateQuantity(Long userId, Long cartItemId, Integer quantity) {
+        log.info("Updating quantity for cart item {} to {} for user {}", cartItemId, quantity, userId);
 
-        item.setDeleted(true);
-        item.setUpdatedAt(LocalDateTime.now());
-        cartItemRepository.save(item);
+        CartItem item = cartItemRepository.findByIdAndUserIdAndDeletedFalse(cartItemId, userId)
+                .orElseThrow(() -> new CartItemNotFoundException(
+                        "Cart item not found: " + cartItemId));
+
+        if (quantity <= 0) {
+            // Remove item if quantity is 0 or negative
+            item.setDeleted(true);
+            cartItemRepository.save(item);
+            log.info("Removed cart item {} (quantity was {})", cartItemId, quantity);
+            return toResponse(item);
+        }
+
+        item.setQuantity(quantity);
+        CartItem saved = cartItemRepository.save(item);
+
+        return toResponse(saved);
     }
 
+    @Override
+    @Transactional
+    public void removeFromCart(Long userId, Long cartItemId) {
+        log.info("Removing cart item {} for user {}", cartItemId, userId);
+
+        CartItem item = cartItemRepository.findByIdAndUserIdAndDeletedFalse(cartItemId, userId)
+                .orElseThrow(() -> new CartItemNotFoundException(
+                        "Cart item not found: " + cartItemId));
+
+        // Soft delete
+        item.setDeleted(true);
+        cartItemRepository.save(item);
+
+        log.info("Soft deleted cart item {}", cartItemId);
+    }
+
+    @Override
+    @Transactional
+    public void clearCart(Long userId) {
+        log.info("Clearing cart for user {}", userId);
+
+        int deletedCount = cartItemRepository.softDeleteAllByUserId(userId);
+
+        log.info("Cleared {} items from cart for user {}", deletedCount, userId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long getCartItemCount(Long userId) {
+        return cartItemRepository.countByUserIdAndDeletedFalse(userId);
+    }
+
+    /**
+     * Map entity to response DTO.
+     */
     private CartItemResponse toResponse(CartItem item) {
-        CartItemResponse resp = new CartItemResponse();
-        resp.setId(item.getId());
-        resp.setUserId(item.getUserId());
-        resp.setAssetId(item.getDesignId()); // Now returning Design ID
-        resp.setAssetUuid(item.getAssetUuid());
-        resp.setQuantity(item.getQuantity());
-        resp.setPriceCents(item.getPriceCents());
-        return resp;
+        return CartItemResponse.builder()
+                .id(item.getId())
+                .userId(item.getUserId())
+                .designId(item.getDesignId())
+                .assetUuid(item.getAssetUuid())
+                .designTitle(item.getDesignTitle())
+                .quantity(item.getQuantity())
+                .priceCents(item.getPriceCents())
+                .totalPriceCents(item.getPriceCents() * item.getQuantity())
+                .build();
     }
 }

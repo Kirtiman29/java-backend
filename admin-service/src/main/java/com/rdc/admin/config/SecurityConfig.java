@@ -2,7 +2,7 @@ package com.rdc.admin.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.HttpMethod; // IMPORT THIS
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -13,9 +13,9 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.web.cors.CorsConfiguration; // IMPORT THIS
-import org.springframework.web.cors.CorsConfigurationSource; // IMPORT THIS
-import org.springframework.web.cors.UrlBasedCorsConfigurationSource; // IMPORT THIS
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.List;
 
@@ -30,15 +30,12 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder();
     }
 
-    // 1. Updated CORS Source as per your Frontend Dev's request
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        // Vite default port
         config.setAllowedOrigins(List.of("http://localhost:5173"));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        // Explicitly allow Authorization header for Basic Auth
-        config.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept"));
+        config.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept", "X-User-Id"));
         config.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
@@ -49,13 +46,18 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                // Enable the CORS configuration defined above
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
-                        // 2. Permit all OPTIONS requests (The "Preflight" fix)
+                        // Allow preflight requests
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        // Allow public design endpoint (for Cart Service)
+                        .requestMatchers("/api/public/**").permitAll()
+                        // Allow login endpoint
                         .requestMatchers("/api/admin/login").permitAll()
+                        // Allow actuator
+                        .requestMatchers("/actuator/**").permitAll()
+                        // Admin endpoints require ADMIN role
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
