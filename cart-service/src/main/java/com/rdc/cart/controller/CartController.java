@@ -2,31 +2,27 @@ package com.rdc.cart.controller;
 
 import com.rdc.cart.dto.CartItemRequest;
 import com.rdc.cart.dto.CartItemResponse;
+import com.rdc.cart.security.UserPrincipal;
 import com.rdc.cart.service.CartService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
 
 /**
- * Cart Controller
+ * Cart Controller with JWT Authentication
  *
- * SECURITY NOTES:
- * 1. userId comes from X-User-Id header (set by auth gateway/filter)
- * 2. User can only access their own cart
- * 3. All endpoints are protected (see SecurityConfig)
+ * Security:
+ * - User email is extracted from JWT token (NOT from request body)
+ * - All endpoints require valid JWT with USER role
  *
- * API Contract:
- * POST   /api/cart/items           - Add item to cart
- * GET    /api/cart/items           - Get user's cart
- * PUT    /api/cart/items/{id}      - Update quantity
- * DELETE /api/cart/items/{id}      - Remove item
- * DELETE /api/cart/items           - Clear cart
- * GET    /api/cart/count           - Get item count
+ * Note: Since Auth Service JWT doesn't include userId,
+ * we use email hash as a stable user identifier for the cart.
  */
 @RestController
 @RequestMapping("/api/cart")
@@ -37,16 +33,13 @@ public class CartController {
 
     /**
      * Add item to cart.
-     *
-     * Request body contains only designId and quantity.
-     * Price is fetched from Admin Service internally.
-     * userId comes from auth header.
      */
     @PostMapping("/items")
     public ResponseEntity<CartItemResponse> addToCart(
-            @RequestHeader("X-User-Id") Long userId,
+            Authentication authentication,
             @Valid @RequestBody CartItemRequest request) {
 
+        Long userId = getUserIdFromAuth(authentication);
         CartItemResponse response = cartService.addToCart(userId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
@@ -55,9 +48,8 @@ public class CartController {
      * Get all items in user's cart.
      */
     @GetMapping("/items")
-    public ResponseEntity<List<CartItemResponse>> getCart(
-            @RequestHeader("X-User-Id") Long userId) {
-
+    public ResponseEntity<List<CartItemResponse>> getCart(Authentication authentication) {
+        Long userId = getUserIdFromAuth(authentication);
         List<CartItemResponse> items = cartService.getCartByUserId(userId);
         return ResponseEntity.ok(items);
     }
@@ -66,14 +58,22 @@ public class CartController {
      * Update quantity of a cart item.
      */
     @PutMapping("/items/{itemId}")
-    public ResponseEntity<CartItemResponse> updateQuantity(
-            @RequestHeader("X-User-Id") Long userId,
+    public ResponseEntity<?> updateQuantity(
+            Authentication authentication,
             @PathVariable Long itemId,
             @RequestBody Map<String, Integer> body) {
 
+        Long userId = getUserIdFromAuth(authentication);
         Integer quantity = body.get("quantity");
+
         if (quantity == null) {
-            return ResponseEntity.badRequest().build();
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "quantity is required"));
+        }
+
+        if (quantity <= 0) {
+            cartService.removeFromCart(userId, itemId);
+            return ResponseEntity.noContent().build();
         }
 
         CartItemResponse response = cartService.updateQuantity(userId, itemId, quantity);
@@ -85,9 +85,10 @@ public class CartController {
      */
     @DeleteMapping("/items/{itemId}")
     public ResponseEntity<Void> removeFromCart(
-            @RequestHeader("X-User-Id") Long userId,
+            Authentication authentication,
             @PathVariable Long itemId) {
 
+        Long userId = getUserIdFromAuth(authentication);
         cartService.removeFromCart(userId, itemId);
         return ResponseEntity.noContent().build();
     }
@@ -96,9 +97,8 @@ public class CartController {
      * Clear all items from cart.
      */
     @DeleteMapping("/items")
-    public ResponseEntity<Void> clearCart(
-            @RequestHeader("X-User-Id") Long userId) {
-
+    public ResponseEntity<Void> clearCart(Authentication authentication) {
+        Long userId = getUserIdFromAuth(authentication);
         cartService.clearCart(userId);
         return ResponseEntity.noContent().build();
     }
@@ -107,10 +107,27 @@ public class CartController {
      * Get cart item count.
      */
     @GetMapping("/count")
-    public ResponseEntity<Map<String, Long>> getCartCount(
-            @RequestHeader("X-User-Id") Long userId) {
-
+    public ResponseEntity<Map<String, Long>> getCartCount(Authentication authentication) {
+        Long userId = getUserIdFromAuth(authentication);
         long count = cartService.getCartItemCount(userId);
         return ResponseEntity.ok(Map.of("count", count));
+    }
+
+    /**
+     * Convert email to a stable userId.
+     *
+     * Since Auth Service JWT doesn't include userId,
+     * we generate a stable ID from the email hash.
+     *
+     * This ensures:
+     * - Same email always gets same userId
+     * - userId is positive and within Long range
+     */
+    private Long getUserIdFromAuth(Authentication authentication) {
+        UserPrincipal principal = (UserPrincipal) authentication.getPrincipal();
+        String email = principal.getEmail();
+
+        // Use Math.abs to ensure positive, and mask to fit in reasonable range
+        return Math.abs(email.hashCode()) & 0x7FFFFFFFL;
     }
 }
