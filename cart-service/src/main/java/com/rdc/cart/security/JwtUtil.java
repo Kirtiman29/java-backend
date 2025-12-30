@@ -7,8 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import javax.crypto.SecretKey;
-import java.nio.charset.StandardCharsets;
+import java.security.Key;
 import java.util.Date;
 import java.util.function.Function;
 
@@ -19,8 +18,12 @@ public class JwtUtil {
     @Value("${jwt.secret}")
     private String secret;
 
-    private SecretKey getSigningKey() {
-        return Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+    /**
+     * Get signing key - MUST match Auth Service implementation
+     * Auth Service uses: Keys.hmacShaKeyFor(secret.getBytes())
+     */
+    private Key getSigningKey() {
+        return Keys.hmacShaKeyFor(secret.getBytes());
     }
 
     /**
@@ -48,12 +51,16 @@ public class JwtUtil {
         return claimsResolver.apply(claims);
     }
 
+    /**
+     * Parse and validate JWT token
+     * Uses JJWT 0.11.5 API (same as Auth Service)
+     */
     private Claims extractAllClaims(String token) {
-        return Jwts.parser()
-                .verifyWith(getSigningKey())
+        return Jwts.parserBuilder()
+                .setSigningKey(getSigningKey())
                 .build()
-                .parseSignedClaims(token)
-                .getPayload();
+                .parseClaimsJws(token)
+                .getBody();
     }
 
     public boolean isTokenExpired(String token) {
@@ -62,10 +69,17 @@ public class JwtUtil {
 
     public boolean validateToken(String token) {
         try {
-            extractAllClaims(token);
-            return !isTokenExpired(token);
+            Claims claims = extractAllClaims(token);
+            boolean expired = isTokenExpired(token);
+
+            log.debug("Token validation - Subject: {}, Role: {}, Expired: {}",
+                    claims.getSubject(),
+                    claims.get("role"),
+                    expired);
+
+            return !expired;
         } catch (Exception e) {
-            log.error("JWT validation failed: {}", e.getMessage());
+            log.error("JWT validation failed: {} - {}", e.getClass().getSimpleName(), e.getMessage());
             return false;
         }
     }

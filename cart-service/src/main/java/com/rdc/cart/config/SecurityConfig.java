@@ -29,26 +29,24 @@ public class SecurityConfig {
         CorsConfiguration config = new CorsConfiguration();
 
         // Allow frontend origins
-        config.setAllowedOrigins(Arrays.asList(
-                "http://localhost:5173",   // Vite dev server
-                "http://localhost:3000",   // React dev server
-                "http://127.0.0.1:5173",
-                "http://127.0.0.1:3000"
+        config.setAllowedOriginPatterns(Arrays.asList(
+                "http://localhost:*",
+                "http://127.0.0.1:*"
         ));
 
         // Allow all HTTP methods
-        config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
+        config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH", "HEAD"));
 
-        // Allow all headers - especially Authorization
+        // Allow ALL headers
         config.setAllowedHeaders(Arrays.asList("*"));
 
-        // Expose Authorization header to frontend
-        config.setExposedHeaders(Arrays.asList("Authorization", "Content-Type"));
+        // Expose headers to frontend
+        config.setExposedHeaders(Arrays.asList("Authorization", "Content-Type", "X-Requested-With"));
 
-        // Allow credentials (cookies, authorization headers)
+        // Allow credentials
         config.setAllowCredentials(true);
 
-        // Cache preflight response for 1 hour
+        // Cache preflight for 1 hour
         config.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
@@ -59,26 +57,26 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                // CORS must be first
+                // CORS - must be first and enabled
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-                // Disable CSRF for stateless API
+                // Disable CSRF
                 .csrf(csrf -> csrf.disable())
                 // Stateless session
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 // Authorization rules
                 .authorizeHttpRequests(auth -> auth
-                        // Allow ALL preflight OPTIONS requests
+                        // Allow ALL OPTIONS requests (preflight) - CRITICAL FOR CORS
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         // Allow actuator
                         .requestMatchers("/actuator/**").permitAll()
-                        // Internal endpoints (service-to-service)
+                        // Internal endpoints
                         .requestMatchers("/internal/**").permitAll()
-                        // Cart endpoints - require authenticated USER
+                        // Cart endpoints - require USER role
                         .requestMatchers("/api/cart/**").hasRole("USER")
-                        // Everything else requires authentication
+                        // Everything else
                         .anyRequest().authenticated()
                 )
-                // Add JWT filter BEFORE UsernamePasswordAuthenticationFilter
+                // Add JWT filter
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
