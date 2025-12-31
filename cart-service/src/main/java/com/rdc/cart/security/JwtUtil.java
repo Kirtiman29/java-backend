@@ -20,7 +20,6 @@ public class JwtUtil {
 
     /**
      * Get signing key - MUST match Auth Service implementation
-     * Auth Service uses: Keys.hmacShaKeyFor(secret.getBytes())
      */
     private Key getSigningKey() {
         return Keys.hmacShaKeyFor(secret.getBytes());
@@ -35,17 +34,22 @@ public class JwtUtil {
 
     /**
      * Extract role from JWT
-     * Auth Service stores role as "USER" (not "ROLE_USER")
      */
     public String extractRole(String token) {
         Claims claims = extractAllClaims(token);
         return claims.get("role", String.class);
     }
 
+    /**
+     * Extract expiration from JWT
+     */
     public Date extractExpiration(String token) {
         return extractClaim(token, Claims::getExpiration);
     }
 
+    /**
+     * Generic claim extractor
+     */
     public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
         final Claims claims = extractAllClaims(token);
         return claimsResolver.apply(claims);
@@ -63,19 +67,56 @@ public class JwtUtil {
                 .getBody();
     }
 
+    /**
+     * Get token type (access or refresh)
+     */
+    public String getTokenType(String token) {
+        try {
+            Claims claims = extractAllClaims(token);
+            return claims.get("type", String.class);
+        } catch (Exception e) {
+            log.debug("No token type claim found - likely old token format");
+            return null;
+        }
+    }
+
+    /**
+     * Check if token is an access token
+     */
+    public boolean isAccessToken(String token) {
+        String type = getTokenType(token);
+        // Accept tokens without type (backward compatibility) or with type=access
+        return type == null || "access".equals(type);
+    }
+
+    /**
+     * Check if token is expired
+     */
     public boolean isTokenExpired(String token) {
         return extractExpiration(token).before(new Date());
     }
 
+    /**
+     * Validate token
+     * Accepts both access tokens and tokens without type (backward compatibility)
+     */
     public boolean validateToken(String token) {
         try {
             Claims claims = extractAllClaims(token);
             boolean expired = isTokenExpired(token);
+            String tokenType = claims.get("type", String.class);
 
-            log.debug("Token validation - Subject: {}, Role: {}, Expired: {}",
+            log.debug("Token validation - Subject: {}, Role: {}, Type: {}, Expired: {}",
                     claims.getSubject(),
                     claims.get("role"),
+                    tokenType != null ? tokenType : "none (old format)",
                     expired);
+
+            // Reject refresh tokens for API calls (they should only be used for /auth/refresh)
+            if ("refresh".equals(tokenType)) {
+                log.warn("Refresh token used for API call - rejecting");
+                return false;
+            }
 
             return !expired;
         } catch (Exception e) {

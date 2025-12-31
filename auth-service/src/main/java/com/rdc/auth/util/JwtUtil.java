@@ -1,7 +1,6 @@
 package com.rdc.auth.util;
 
-import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.SignatureAlgorithm;
+import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -12,36 +11,98 @@ import java.util.Date;
 @Component
 public class JwtUtil {
 
-    // You need to configure this in your application.properties or application.yml
-    // Example: jwt.secret=a_very_long_and_secure_base64_secret_key_at_least_32_bytes_long
     @Value("${jwt.secret}")
     private String secret;
 
-    // You can set the token expiration time (e.g., 24 hours in milliseconds)
     @Value("${jwt.expiration.ms}")
-    private long jwtExpirationMs;
+    private long jwtExpirationMs; // Access token: 15 minutes
+
+    @Value("${jwt.refresh.expiration.ms:604800000}") // Refresh token: 7 days default
+    private long refreshExpirationMs;
 
     private Key getSigningKey() {
-        // Generates a secure key from your application secret
         return Keys.hmacShaKeyFor(secret.getBytes());
     }
 
     /**
-     * Generates a JWT token for the authenticated user.
-     * @param email The user's email (used as the subject).
-     * @param role The user's role (used as a custom claim).
-     * @return The generated JWT string.
+     * Generate short-lived access token
      */
     public String generateToken(String email, String role) {
         return Jwts.builder()
                 .setSubject(email)
-                .claim("role", role) // Add role as a claim
+                .claim("role", role)
+                .claim("type", "access")
                 .setIssuedAt(new Date())
                 .setExpiration(new Date(System.currentTimeMillis() + jwtExpirationMs))
                 .signWith(getSigningKey(), SignatureAlgorithm.HS256)
                 .compact();
     }
 
-    // You would typically add validation/parsing methods here too,
-    // but this is enough to resolve the immediate compilation error.
+    /**
+     * Generate long-lived refresh token
+     */
+    public String generateRefreshToken(String email) {
+        return Jwts.builder()
+                .setSubject(email)
+                .claim("type", "refresh")
+                .setIssuedAt(new Date())
+                .setExpiration(new Date(System.currentTimeMillis() + refreshExpirationMs))
+                .signWith(getSigningKey(), SignatureAlgorithm.HS256)
+                .compact();
+    }
+
+    /**
+     * Validate and parse token
+     */
+    public Claims validateToken(String token) throws JwtException {
+        return Jwts.parserBuilder()
+                .setSigningKey(getSigningKey())
+                .build()
+                .parseClaimsJws(token)
+                .getBody();
+    }
+
+    /**
+     * Extract email from token
+     */
+    public String getEmailFromToken(String token) {
+        return validateToken(token).getSubject();
+    }
+
+    /**
+     * Extract role from token
+     */
+    public String getRoleFromToken(String token) {
+        return validateToken(token).get("role", String.class);
+    }
+
+    /**
+     * Check if token is expired
+     */
+    public boolean isTokenExpired(String token) {
+        try {
+            return validateToken(token).getExpiration().before(new Date());
+        } catch (JwtException e) {
+            return true;
+        }
+    }
+
+    /**
+     * Validate refresh token
+     */
+    public boolean isRefreshToken(String token) {
+        try {
+            Claims claims = validateToken(token);
+            return "refresh".equals(claims.get("type"));
+        } catch (JwtException e) {
+            return false;
+        }
+    }
+
+    /**
+     * Get access token expiration in seconds
+     */
+    public long getAccessTokenExpirationSeconds() {
+        return jwtExpirationMs / 1000;
+    }
 }

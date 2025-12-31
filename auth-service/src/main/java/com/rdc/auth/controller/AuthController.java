@@ -5,8 +5,13 @@ import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier;
 import com.google.api.client.http.javanet.NetHttpTransport;
 import com.google.api.client.json.gson.GsonFactory;
 import com.rdc.auth.dto.LoginRequest;
+import com.rdc.auth.dto.RefreshTokenRequest;
+import com.rdc.auth.dto.TokenResponse;
 import com.rdc.auth.entity.User;
+import com.rdc.auth.repository.UserRepository;
 import com.rdc.auth.service.UserService;
+import com.rdc.auth.util.JwtUtil;
+import io.jsonwebtoken.JwtException;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -16,14 +21,16 @@ import org.springframework.web.bind.annotation.*;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.util.Collections;
-import java.util.Map; // NEW IMPORT
+import java.util.Map;
 
-@CrossOrigin(origins = "http://localhost:5173/")
+@CrossOrigin(origins = "http://localhost:5173")
 @RestController
 @RequestMapping("/auth")
 public class AuthController {
 
     private final UserService userService;
+    private final UserRepository userRepository;
+    private final JwtUtil jwtUtil;
 
     @Value("${frontend.url}")
     private String frontendUrl;
@@ -31,8 +38,10 @@ public class AuthController {
     @Value("${google.client.id}")
     private String googleClientId;
 
-    public AuthController(UserService userService) {
+    public AuthController(UserService userService, UserRepository userRepository, JwtUtil jwtUtil) {
         this.userService = userService;
+        this.userRepository = userRepository;
+        this.jwtUtil = jwtUtil;
     }
 
     // --- DTOs ---
@@ -51,13 +60,11 @@ public class AuthController {
         public void setToken(String token) { this.token = token; }
     }
 
-    // NEW DTO for Facebook/External Access Token
     private static class ExternalAccessTokenRequest {
         private String accessToken;
         public String getAccessToken() { return accessToken; }
         public void setAccessToken(String accessToken) { this.accessToken = accessToken; }
     }
-
 
     // --- AUTH ENDPOINTS ---
 
@@ -67,19 +74,94 @@ public class AuthController {
         return ResponseEntity.ok("Account created. Please check your email to verify your account.");
     }
 
+    /**
+     * Login - Returns access token + refresh token
+     */
     @PostMapping("/login")
     public ResponseEntity<?> login(@Valid @RequestBody LoginRequest req) {
         try {
-            String jwt = userService.authenticateAndGetJwt(req.getEmail(), req.getPassword());
-            return ResponseEntity.ok().body(jwt);
+            // Authenticate user (this validates password and checks isVerified)
+            String email = req.getEmail();
+            String password = req.getPassword();
+
+            // Use existing authentication logic
+            User user = userRepository.findByEmail(email)
+                    .orElseThrow(() -> new IllegalArgumentException("Invalid credentials."));
+
+            // Validate password using UserService (reuse existing logic)
+            userService.authenticateAndGetJwt(email, password); // This validates password
+
+            // Generate tokens
+            String accessToken = jwtUtil.generateToken(user.getEmail(), user.getRole());
+            String refreshToken = jwtUtil.generateRefreshToken(user.getEmail());
+
+            // Return both tokens
+            TokenResponse response = new TokenResponse(
+                    accessToken,
+                    refreshToken,
+                    jwtUtil.getAccessTokenExpirationSeconds()
+            );
+
+            return ResponseEntity.ok(response);
+
         } catch (IllegalStateException e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(e.getMessage());
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", e.getMessage()));
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(e.getMessage());
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", e.getMessage()));
         }
     }
 
-    // --- GOOGLE LOGIN (Existing) ---
+    /**
+     * Refresh access token using refresh token
+     * POST /auth/refresh
+     */
+    @PostMapping("/refresh")
+    public ResponseEntity<?> refreshToken(@Valid @RequestBody RefreshTokenRequest request) {
+        try {
+            String refreshToken = request.getRefreshToken();
+
+            // Validate it's a refresh token
+            if (!jwtUtil.isRefreshToken(refreshToken)) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(Map.of("error", "Invalid refresh token"));
+            }
+
+            // Check if expired
+            if (jwtUtil.isTokenExpired(refreshToken)) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(Map.of("error", "Refresh token expired. Please login again."));
+            }
+
+            // Extract email from refresh token
+            String email = jwtUtil.getEmailFromToken(refreshToken);
+
+            // Find user
+            User user = userRepository.findByEmail(email)
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+
+            // Generate new tokens
+            String newAccessToken = jwtUtil.generateToken(user.getEmail(), user.getRole());
+            String newRefreshToken = jwtUtil.generateRefreshToken(user.getEmail());
+
+            // Return new tokens
+            TokenResponse response = new TokenResponse(
+                    newAccessToken,
+                    newRefreshToken,
+                    jwtUtil.getAccessTokenExpirationSeconds()
+            );
+
+            return ResponseEntity.ok(response);
+
+        } catch (JwtException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", "Invalid or expired refresh token"));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Token refresh failed: " + e.getMessage()));
+        }
+    }
+
+    // --- GOOGLE LOGIN ---
     @PostMapping("/google/login")
     public ResponseEntity<?> googleLogin(@RequestBody GoogleTokenRequest req) {
         if (req.getToken() == null || req.getToken().isEmpty()) {
@@ -100,8 +182,24 @@ public class AuthController {
                 String name = (String) payload.get("name");
                 String pictureUrl = (String) payload.get("picture");
 
-                String appJwtToken = userService.authenticateOrCreateGoogleUser(email, name, pictureUrl);
-                return ResponseEntity.ok(appJwtToken);
+                // Create or get user
+                userService.authenticateOrCreateGoogleUser(email, name, pictureUrl);
+
+                // Get user for role
+                User user = userRepository.findByEmail(email)
+                        .orElseThrow(() -> new RuntimeException("User not found"));
+
+                // Generate tokens
+                String accessToken = jwtUtil.generateToken(user.getEmail(), user.getRole());
+                String refreshToken = jwtUtil.generateRefreshToken(user.getEmail());
+
+                TokenResponse response = new TokenResponse(
+                        accessToken,
+                        refreshToken,
+                        jwtUtil.getAccessTokenExpirationSeconds()
+                );
+
+                return ResponseEntity.ok(response);
             } else {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid or expired Google ID Token.");
             }
@@ -112,7 +210,7 @@ public class AuthController {
         }
     }
 
-    // --- NEW FACEBOOK LOGIN ENDPOINT ---
+    // --- FACEBOOK LOGIN ---
     @PostMapping("/facebook/login")
     public ResponseEntity<?> facebookLogin(@RequestBody ExternalAccessTokenRequest req) {
         if (req.getAccessToken() == null || req.getAccessToken().isEmpty()) {
@@ -120,18 +218,23 @@ public class AuthController {
         }
 
         try {
+            // Create or get user
+            userService.authenticateOrCreateFacebookUser(req.getAccessToken());
+
+            // Note: We need to get the email from Facebook response
+            // For now, return the JWT from service (old behavior)
+            // You may need to modify this based on your Facebook implementation
             String jwt = userService.authenticateOrCreateFacebookUser(req.getAccessToken());
+
             return ResponseEntity.ok(jwt);
         } catch (Exception e) {
             e.printStackTrace();
-            // Catching generic Exception for network/API parsing errors from the service layer
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("Facebook authentication failed: " + e.getMessage());
         }
     }
 
-
-    // --- EMAIL VERIFICATION ENDPOINT (Existing) ---
+    // --- EMAIL VERIFICATION ---
     @GetMapping("/verify-email")
     public ResponseEntity<Void> verifyEmail(@RequestParam("token") String token) {
         String frontendRedirectPath;
@@ -155,9 +258,7 @@ public class AuthController {
                 .build();
     }
 
-
-    // --- PASSWORD RESET ENDPOINTS (Existing) ---
-
+    // --- PASSWORD RESET ---
     @PostMapping("/password/request-reset")
     public ResponseEntity<?> requestPasswordReset(@RequestBody LoginRequest req) {
         try {
