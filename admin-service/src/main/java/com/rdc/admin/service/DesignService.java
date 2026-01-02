@@ -25,7 +25,6 @@ public class DesignService {
 
     @Transactional
     public DesignResponse createDesign(DesignCreateRequest request) {
-        // Validate asset exists in Asset-Service before linking [cite: 343]
         assetClientService.validateAsset(request.getAssetUuid());
 
         Design design = new Design();
@@ -34,22 +33,20 @@ public class DesignService {
         design.setDescription(request.getDescription());
         design.setCategoryId(request.getCategoryId());
         design.setBasePriceCents(request.getBasePriceCents());
-
-        // Pricing logic
         design.setSpecialOffer(request.getSpecialOffer() != null ? request.getSpecialOffer() : false);
         design.setDiscountPercent(request.getDiscountPercent() != null ? request.getDiscountPercent() : 0);
-        design.setFinalPriceCents(pricingService.calculateFinalPrice(design));
 
-        // FIX: Mapping Status and Section Flags from Request [cite: 193-194]
-        design.setActive(request.getActive() != null ? request.getActive() : false);
-        design.setDraft(request.getDraft() != null ? request.getDraft() : true);
-        design.setTrending(request.getTrending() != null ? request.getTrending() : false);
-        design.setEditorsPick(request.getEditorsPick() != null ? request.getEditorsPick() : false);
-        design.setNewArrival(request.getNewArrival() != null ? request.getNewArrival() : true);
+        design.setFinalPriceCents(pricingService.calculateFinalPrice(design));
 
         design.setTags(request.getTags());
         design.setAssetId(request.getAssetId());
         design.setAssetUuid(request.getAssetUuid());
+
+        // Section flags (optional during creation)
+        if (request.getTrending() != null) design.setTrending(request.getTrending());
+        if (request.getEditorsPick() != null) design.setEditorsPick(request.getEditorsPick());
+        if (request.getNewArrival() != null) design.setNewArrival(request.getNewArrival());
+        if (request.getPremium() != null) design.setPremium(request.getPremium());  // NEW: Premium flag
 
         return mapper.toResponse(repository.save(design));
     }
@@ -66,8 +63,22 @@ public class DesignService {
             design.setSlug(generateUniqueSlug(request.getTitle()));
         }
 
+        if (request.getDescription() != null) {
+            design.setDescription(request.getDescription());
+        }
+
         if (request.getBasePriceCents() != null) {
             design.setBasePriceCents(request.getBasePriceCents().longValue());
+            needsPricingRecalculation = true;
+        }
+
+        if (request.getDiscountPercent() != null) {
+            design.setDiscountPercent(request.getDiscountPercent());
+            needsPricingRecalculation = true;
+        }
+
+        if (request.getSpecialOffer() != null) {
+            design.setSpecialOffer(request.getSpecialOffer());
             needsPricingRecalculation = true;
         }
 
@@ -75,12 +86,21 @@ public class DesignService {
             design.setFinalPriceCents(pricingService.calculateFinalPrice(design));
         }
 
-        // Mapping flags for updates [cite: 350-351]
+        // Status Flags
         if (request.getActive() != null) design.setActive(request.getActive());
         if (request.getDraft() != null) design.setDraft(request.getDraft());
+
+        // Section Flags
         if (request.getTrending() != null) design.setTrending(request.getTrending());
         if (request.getEditorsPick() != null) design.setEditorsPick(request.getEditorsPick());
         if (request.getNewArrival() != null) design.setNewArrival(request.getNewArrival());
+        if (request.getPremium() != null) design.setPremium(request.getPremium());  // NEW: Premium flag
+
+        // Tags
+        if (request.getTags() != null) design.setTags(request.getTags());
+
+        // Category
+        if (request.getCategoryId() != null) design.setCategoryId(request.getCategoryId());
 
         return mapper.toResponse(repository.save(design));
     }

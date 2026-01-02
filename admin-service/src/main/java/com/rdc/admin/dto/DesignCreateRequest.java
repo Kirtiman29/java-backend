@@ -15,10 +15,9 @@ public class DesignCreateRequest {
     private Long assetId;
     private String assetUuid;
 
-    // Added missing flags to capture from frontend request
-    private Boolean active;
-    private Boolean draft;
+    // Section Flags (optional during creation)
     private Boolean trending;
     private Boolean editorsPick;
     private Boolean newArrival;
+    private Boolean premium;  // NEW: Premium section flag
 }

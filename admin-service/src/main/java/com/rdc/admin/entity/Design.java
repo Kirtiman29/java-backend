@@ -20,19 +20,24 @@ public class Design {
     @Column(columnDefinition = "TEXT")
     private String description;
 
-    // FIX: Standardized to Long to match DTO and Pricing Service
+    // Pricing
     private Long basePriceCents;
     private Long finalPriceCents;
 
     private Boolean specialOffer = false;
     private Integer discountPercent = 0;
 
+    // Status Flags
     private Boolean active = false;
     private Boolean draft = true;
+
+    // Section Flags
     private Boolean trending = false;
     private Boolean editorsPick = false;
     private Boolean newArrival = true;
+    private Boolean premium = false;  // NEW: Premium section flag
 
+    // Relations
     private Long categoryId;
     private Long assetId;
     private String assetUuid;
@@ -40,6 +45,7 @@ public class Design {
     @ElementCollection
     private List<String> tags;
 
+    // Timestamps
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 

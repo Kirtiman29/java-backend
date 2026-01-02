@@ -27,6 +27,7 @@ public class DesignMapper {
                 .trending(design.getTrending())
                 .editorsPick(design.getEditorsPick())
                 .newArrival(design.getNewArrival())
+                .premium(design.getPremium())  // NEW: Premium flag
                 .tags(design.getTags())
                 .createdAt(design.getCreatedAt())
                 .updatedAt(design.getUpdatedAt())

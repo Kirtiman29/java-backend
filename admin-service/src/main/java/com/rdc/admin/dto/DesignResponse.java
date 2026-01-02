@@ -21,11 +21,17 @@ public class DesignResponse {
     private List<String> tags;
     private Long assetId;
     private String assetUuid;
+
+    // Status Flags
     private Boolean draft;
     private Boolean active;
+
+    // Section Flags
     private Boolean trending;
     private Boolean editorsPick;
     private Boolean newArrival;
+    private Boolean premium;  // NEW: Premium section flag
+
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

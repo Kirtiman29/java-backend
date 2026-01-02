@@ -19,6 +19,7 @@ public class DesignUpdateRequest {
     private Boolean trending;
     private Boolean editorsPick;
     private Boolean newArrival;
+    private Boolean premium;  // NEW: Premium section flag
 
     private List<String> tags;
     private Long categoryId;
