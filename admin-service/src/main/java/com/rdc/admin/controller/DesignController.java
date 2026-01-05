@@ -1,3 +1,4 @@
+// src/main/java/com/rdc/admin/controller/DesignController.java
 package com.rdc.admin.controller;
 
 import com.rdc.admin.dto.DesignCreateRequest;
@@ -25,14 +26,18 @@ public class DesignController {
 
     @GetMapping
     public ResponseEntity<List<DesignResponse>> getAllDesigns() {
-        // FIX: Changed from findAll() to getAllDesigns()
         return ResponseEntity.ok(designService.getAllDesigns());
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<DesignResponse> getDesignById(@PathVariable Long id) {
-        // FIX: Changed from findById() to getDesignById()
         return ResponseEntity.ok(designService.getDesignById(id));
+    }
+
+    // NEW: Get designs by Segment (Menswear, Womenswear, etc.)
+    @GetMapping("/segment/{segment}")
+    public ResponseEntity<List<DesignResponse>> getBySegment(@PathVariable String segment) {
+        return ResponseEntity.ok(designService.getBySegment(segment));
     }
 
     @PutMapping("/{id}")
@@ -44,7 +49,6 @@ public class DesignController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteDesign(@PathVariable Long id) {
-        // FIX: Changed from deleteById() to deleteDesign()
         designService.deleteDesign(id);
         return ResponseEntity.noContent().build();
     }

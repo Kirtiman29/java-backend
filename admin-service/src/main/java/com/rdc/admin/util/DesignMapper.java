@@ -1,3 +1,4 @@
+// src/main/java/com/rdc/admin/util/DesignMapper.java
 package com.rdc.admin.util;
 
 import com.rdc.admin.dto.DesignResponse;
@@ -27,7 +28,8 @@ public class DesignMapper {
                 .trending(design.getTrending())
                 .editorsPick(design.getEditorsPick())
                 .newArrival(design.getNewArrival())
-                .premium(design.getPremium())  // NEW: Premium flag
+                .premium(design.getPremium()) // Added Premium flag
+                .segment(design.getSegment() != null ? design.getSegment().name() : null) // Map segment to String
                 .tags(design.getTags())
                 .createdAt(design.getCreatedAt())
                 .updatedAt(design.getUpdatedAt())

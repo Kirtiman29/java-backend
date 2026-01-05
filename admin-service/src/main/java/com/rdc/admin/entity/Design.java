@@ -1,3 +1,4 @@
+// src/main/java/com/rdc/admin/entity/Design.java
 package com.rdc.admin.entity;
 
 import jakarta.persistence.*;
@@ -35,7 +36,7 @@ public class Design {
     private Boolean trending = false;
     private Boolean editorsPick = false;
     private Boolean newArrival = true;
-    private Boolean premium = false;  // NEW: Premium section flag
+    private Boolean premium = false; // NEW: Premium section flag
 
     // Relations
     private Long categoryId;
@@ -44,6 +45,10 @@ public class Design {
 
     @ElementCollection
     private List<String> tags;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private Segment segment; // Represents primary usage category: MENSWEAR, etc.
 
     // Timestamps
     private LocalDateTime createdAt;
