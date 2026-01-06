@@ -6,6 +6,7 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -47,6 +48,9 @@ public class Asset {
 
     @UpdateTimestamp
     private Instant updatedAt;
+
+    @OneToMany(mappedBy = "assetId", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private List<AssetMedia> mediaList;
 
     @PrePersist
     private void autoUuid() {

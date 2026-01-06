@@ -21,6 +21,7 @@ import java.util.stream.Collectors;
 public class CategoryService {
 
     private final CategoryRepository categoryRepository;
+    private final AssetClientService assetClientService; // Injected to validate imageUuid [cite: 228, 231]
 
     // --- Mapper Utility ---
     private CategoryResponse toResponse(Category category) {
@@ -30,6 +31,7 @@ public class CategoryService {
                 .name(category.getName())
                 .slug(category.getSlug())
                 .description(category.getDescription())
+                .imageUrl(category.getImageUrl()) // Map the URL to the response
                 .createdAt(category.getCreatedAt())
                 .updatedAt(category.getUpdatedAt())
                 .build();
@@ -43,12 +45,17 @@ public class CategoryService {
     // --- CRUD Operations ---
     @Transactional
     public CategoryResponse createCategory(CategoryCreateRequest request) {
-        // 1. Check for unique name
         if (categoryRepository.existsByName(request.getName())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Category name already exists: " + request.getName());
         }
 
-        // 2. Generate Unique Slug (reusing the existing SlugGenerator utility)
+        // 1. Handle Image Logic
+        String resolvedImageUrl = null;
+        if (request.getImageUuid() != null && !request.getImageUuid().isBlank()) {
+            assetClientService.validateAsset(request.getImageUuid()); // Validate via Port 8090
+            resolvedImageUrl = "http://localhost:8090/api/assets/" + request.getImageUuid() + "/download";
+        }
+
         String baseSlug = SlugGenerator.generateSlug(request.getName());
         String finalSlug = baseSlug;
         int counter = 1;
@@ -60,6 +67,7 @@ public class CategoryService {
                 .name(request.getName())
                 .slug(finalSlug)
                 .description(request.getDescription())
+                .imageUrl(resolvedImageUrl) // Save the URL in the DB
                 .build();
 
         Category savedCategory = categoryRepository.save(newCategory);
@@ -80,17 +88,13 @@ public class CategoryService {
     public CategoryResponse updateCategory(Long id, CategoryUpdateRequest request) {
         Category existingCategory = getCategoryEntityById(id);
 
-        // Update Name and Slug if name is provided and changed
+        // Update Name/Slug
         if (request.getName() != null && !request.getName().isBlank()) {
             if (!existingCategory.getName().equalsIgnoreCase(request.getName())) {
-                // Check for unique name if changing
                 if (categoryRepository.existsByName(request.getName())) {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Category name already exists: " + request.getName());
                 }
-
                 existingCategory.setName(request.getName());
-
-                // Regenerate slug based on the new name
                 String newBaseSlug = SlugGenerator.generateSlug(request.getName());
                 String newFinalSlug = newBaseSlug;
                 int counter = 1;
@@ -99,6 +103,12 @@ public class CategoryService {
                 }
                 existingCategory.setSlug(newFinalSlug);
             }
+        }
+
+        // 2. Handle Image Update
+        if (request.getImageUuid() != null) {
+            assetClientService.validateAsset(request.getImageUuid());
+            existingCategory.setImageUrl("http://localhost:8090/api/assets/" + request.getImageUuid() + "/download");
         }
 
         if (request.getDescription() != null) {
@@ -112,8 +122,6 @@ public class CategoryService {
     @Transactional
     public void deleteCategory(Long id) {
         Category existingCategory = getCategoryEntityById(id);
-        // NOTE: In a real system, you must check if any Designs are linked to this Category
-        // and prevent deletion, or handle cascading (e.g., setting categoryId to null).
         categoryRepository.delete(existingCategory);
     }
 }

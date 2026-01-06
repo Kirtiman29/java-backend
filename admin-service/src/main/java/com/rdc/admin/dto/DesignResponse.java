@@ -27,9 +27,10 @@ public class DesignResponse {
     private Boolean editorsPick;
     private Boolean newArrival;
     private Boolean premium;
-
-    // ADD THIS FIELD TO FIX THE COMPILATION ERROR
     private String segment;
+
+    // NEW: List of all associated media (Gallery/Videos)
+    private List<DesignMediaDto> media;
 
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

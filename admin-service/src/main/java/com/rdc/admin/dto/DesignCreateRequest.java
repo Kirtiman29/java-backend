@@ -27,6 +27,7 @@ public class DesignCreateRequest {
     private Boolean draft;
     private Boolean trending;
     private Boolean editorsPick;
+    private String imageUuid;
     private Boolean newArrival;
     private Boolean premium; // Added for premium section
 }
