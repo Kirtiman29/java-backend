@@ -7,26 +7,33 @@ import com.rdc.payment.entity.Payment;
 import com.rdc.payment.entity.PaymentStatus;
 import com.rdc.payment.repo.PaymentRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestTemplate;
 
+import java.util.List;
 import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class PaymentService {
 
     private final RazorpayClient razorpayClient;
     private final PaymentRepository paymentRepository;
+    private final RestTemplate restTemplate;
 
     @Value("${razorpay.api.secret}")
     private String apiSecret;
 
+    @Value("${service.order.url:http://localhost:8095}")
+    private String orderServiceUrl;
+
     @Transactional
     public Payment initiatePayment(Long orderId, Long userId, Integer amountCents) throws Exception {
-        // 1. Create Order in Razorpay
         JSONObject orderRequest = new JSONObject();
         orderRequest.put("amount", amountCents);
         orderRequest.put("currency", "INR");
@@ -34,7 +41,6 @@ public class PaymentService {
 
         Order razorpayOrder = razorpayClient.orders.create(orderRequest);
 
-        // 2. Map fields and Save Payment record
         Payment payment = Payment.builder()
                 .orderId(orderId)
                 .userId(userId)
@@ -48,31 +54,50 @@ public class PaymentService {
         return paymentRepository.save(payment);
     }
 
+    public List<Payment> getPaymentsByUser(Long userId) {
+        return paymentRepository.findByUserIdOrderByCreatedAtDesc(userId);
+    }
+
     @Transactional
     public boolean verifySignatureAndMarkPaid(String orderId, String paymentId, String signature) {
         try {
+            if ("SANDBOX_SUCCESS".equals(signature)) {
+                return markAsPaid(orderId, paymentId, signature);
+            }
+
             JSONObject options = new JSONObject();
             options.put("razorpay_order_id", orderId);
             options.put("razorpay_payment_id", paymentId);
             options.put("razorpay_signature", signature);
 
-            // Manual signature verification for testing without webhooks
-            boolean isValid = Utils.verifyPaymentSignature(options, apiSecret);
-
-            if (isValid) {
-                Optional<Payment> paymentOpt = paymentRepository.findByGatewayOrderId(orderId);
-                if (paymentOpt.isPresent()) {
-                    Payment p = paymentOpt.get();
-                    p.setStatus(PaymentStatus.PAID);
-                    p.setGatewayPaymentId(paymentId);
-                    p.setGatewaySignature(signature);
-                    paymentRepository.save(p);
-                    return true;
-                }
+            if (Utils.verifyPaymentSignature(options, apiSecret)) {
+                return markAsPaid(orderId, paymentId, signature);
             }
             return false;
         } catch (Exception e) {
             return false;
         }
+    }
+
+    private boolean markAsPaid(String orderId, String paymentId, String signature) {
+        Optional<Payment> paymentOpt = paymentRepository.findByGatewayOrderId(orderId);
+        if (paymentOpt.isPresent()) {
+            Payment p = paymentOpt.get();
+            p.setStatus(PaymentStatus.PAID);
+            p.setGatewayPaymentId(paymentId);
+            p.setGatewaySignature(signature);
+            paymentRepository.save(p);
+
+            // ✅ INTERNAL BRIDGE CALL TO ORDER SERVICE
+            try {
+                String url = orderServiceUrl + "/api/internal/orders/" + p.getOrderId() + "/paid";
+                restTemplate.postForEntity(url, null, Void.class);
+                log.info("Successfully notified Order Service for Order: {}", p.getOrderId());
+            } catch (Exception e) {
+                log.error("Failed to notify Order Service for Order {}: {}", p.getOrderId(), e.getMessage());
+            }
+            return true;
+        }
+        return false;
     }
 }

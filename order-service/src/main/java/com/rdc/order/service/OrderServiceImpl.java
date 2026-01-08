@@ -18,15 +18,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.stream.Collectors;
 
-/**
- * Order Service Implementation
- *
- * SECURITY NOTES:
- * 1. Order is created ONLY from cart - items are fetched from Cart Service
- * 2. Price is LOCKED at order creation - won't change if design price changes
- * 3. User can only access their own orders
- * 4. userId comes from auth header, not request body
- */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -39,49 +30,34 @@ public class OrderServiceImpl implements OrderService {
     @Override
     public OrderResponse createOrder(Long userId) {
         log.info("Creating order for user {}", userId);
+        List<CartItemDto> cartItems = cartServiceClient.getCartItems(userId); // [cite: 416]
 
-        // 1. Fetch cart items from Cart Service
-        // This throws EmptyCartException if cart is empty
-        List<CartItemDto> cartItems = cartServiceClient.getCartItems(userId);
-
-        log.info("Found {} items in cart for user {}", cartItems.size(), userId);
-
-        // 2. Create order entity
         Order order = Order.builder()
                 .userId(userId)
                 .status(OrderStatus.CREATED.name())
                 .totalPriceCents(0L)
                 .build();
 
-        // 3. Create order items from cart items
-        // Price is LOCKED here - it won't change even if design price changes later
         long totalPriceCents = 0L;
-
         for (CartItemDto cartItem : cartItems) {
             OrderItem orderItem = OrderItem.builder()
                     .designId(cartItem.getDesignId())
                     .assetUuid(cartItem.getAssetUuid())
                     .designTitle(cartItem.getDesignTitle())
                     .quantity(cartItem.getQuantity())
-                    .priceCents(cartItem.getPriceCents())  // Price from cart (already fetched from Admin)
+                    .priceCents(cartItem.getPriceCents())
                     .build();
-
-            order.addItem(orderItem);
+            order.addItem(orderItem); // [cite: 422]
             totalPriceCents += cartItem.getPriceCents() * cartItem.getQuantity();
         }
 
         order.setTotalPriceCents(totalPriceCents);
+        Order savedOrder = orderRepository.save(order); // [cite: 423]
 
-        // 4. Save order
-        Order savedOrder = orderRepository.save(order);
-        log.info("Created order {} with total {} cents", savedOrder.getId(), totalPriceCents);
-
-        // 5. Clear cart (async-safe - we don't fail if this fails)
         try {
-            cartServiceClient.clearCart(userId);
+            cartServiceClient.clearCart(userId); // [cite: 424]
         } catch (Exception e) {
-            log.warn("Failed to clear cart for user {}, but order {} was created successfully",
-                    userId, savedOrder.getId());
+            log.warn("Failed to clear cart for user {}, order {} created", userId, savedOrder.getId());
         }
 
         return mapToResponse(savedOrder);
@@ -90,54 +66,48 @@ public class OrderServiceImpl implements OrderService {
     @Override
     @Transactional(readOnly = true)
     public OrderResponse getOrderById(Long orderId, Long userId) {
-        log.debug("Fetching order {} for user {}", orderId, userId);
-
         Order order = orderRepository.findByIdAndUserId(orderId, userId)
-                .orElseThrow(() -> new OrderNotFoundException(
-                        "Order not found: " + orderId));
-
+                .orElseThrow(() -> new OrderNotFoundException("Order not found: " + orderId)); // [cite: 428]
         return mapToResponse(order);
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<OrderResponse> getOrdersByUser(Long userId) {
-        log.debug("Fetching all orders for user {}", userId);
-
         return orderRepository.findByUserIdOrderByCreatedAtDesc(userId)
                 .stream()
                 .map(this::mapToResponse)
-                .collect(Collectors.toList());
+                .collect(Collectors.toList()); // [cite: 430]
     }
 
     @Override
     public void cancelOrder(Long orderId, Long userId) {
         log.info("Cancelling order {} for user {}", orderId, userId);
-
         Order order = orderRepository.findByIdAndUserId(orderId, userId)
-                .orElseThrow(() -> new OrderNotFoundException(
-                        "Order not found: " + orderId));
+                .orElseThrow(() -> new OrderNotFoundException("Order not found: " + orderId)); // [cite: 432]
 
-        // Only CREATED orders can be cancelled
         if (!OrderStatus.CREATED.name().equals(order.getStatus())) {
-            throw new OrderCancellationException(
-                    "Cannot cancel order with status: " + order.getStatus() +
-                            ". Only orders with status CREATED can be cancelled.");
+            throw new OrderCancellationException("Cannot cancel order with status: " + order.getStatus()); // [cite: 433]
         }
 
         order.setStatus(OrderStatus.CANCELLED.name());
         orderRepository.save(order);
-
         log.info("Order {} cancelled successfully", orderId);
     }
 
-    /**
-     * Map Order entity to OrderResponse DTO.
-     */
+    @Override
+    public void updateStatus(Long orderId, String status) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new OrderNotFoundException("Order not found: " + orderId));
+        order.setStatus(status);
+        orderRepository.save(order);
+    }
+
+
     private OrderResponse mapToResponse(Order order) {
         List<OrderItemResponse> itemResponses = order.getItems().stream()
                 .map(this::mapItemToResponse)
-                .collect(Collectors.toList());
+                .collect(Collectors.toList()); // [cite: 436]
 
         return OrderResponse.builder()
                 .id(order.getId())
@@ -150,9 +120,6 @@ public class OrderServiceImpl implements OrderService {
                 .build();
     }
 
-    /**
-     * Map OrderItem entity to OrderItemResponse DTO.
-     */
     private OrderItemResponse mapItemToResponse(OrderItem item) {
         return OrderItemResponse.builder()
                 .id(item.getId())
@@ -162,6 +129,6 @@ public class OrderServiceImpl implements OrderService {
                 .quantity(item.getQuantity())
                 .priceCents(item.getPriceCents())
                 .totalPriceCents(item.getTotalPriceCents())
-                .build();
+                .build(); // [cite: 441]
     }
 }
