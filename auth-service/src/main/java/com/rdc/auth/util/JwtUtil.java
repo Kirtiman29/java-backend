@@ -15,18 +15,15 @@ public class JwtUtil {
     private String secret;
 
     @Value("${jwt.expiration.ms}")
-    private long jwtExpirationMs; // Access token: 15 minutes
+    private long jwtExpirationMs;
 
-    @Value("${jwt.refresh.expiration.ms:604800000}") // Refresh token: 7 days default
+    @Value("${jwt.refresh.expiration.ms}")
     private long refreshExpirationMs;
 
     private Key getSigningKey() {
         return Keys.hmacShaKeyFor(secret.getBytes());
     }
 
-    /**
-     * Generate short-lived access token
-     */
     public String generateToken(String email, String role) {
         return Jwts.builder()
                 .setSubject(email)
@@ -38,9 +35,6 @@ public class JwtUtil {
                 .compact();
     }
 
-    /**
-     * Generate long-lived refresh token
-     */
     public String generateRefreshToken(String email) {
         return Jwts.builder()
                 .setSubject(email)
@@ -51,10 +45,7 @@ public class JwtUtil {
                 .compact();
     }
 
-    /**
-     * Validate and parse token
-     */
-    public Claims validateToken(String token) throws JwtException {
+    public Claims validateToken(String token) {
         return Jwts.parserBuilder()
                 .setSigningKey(getSigningKey())
                 .build()
@@ -62,23 +53,12 @@ public class JwtUtil {
                 .getBody();
     }
 
-    /**
-     * Extract email from token
-     */
+    // This fixes error at AuthController line 136 [cite: 38]
     public String getEmailFromToken(String token) {
         return validateToken(token).getSubject();
     }
 
-    /**
-     * Extract role from token
-     */
-    public String getRoleFromToken(String token) {
-        return validateToken(token).get("role", String.class);
-    }
-
-    /**
-     * Check if token is expired
-     */
+    // This fixes error at AuthController line 130 [cite: 37]
     public boolean isTokenExpired(String token) {
         try {
             return validateToken(token).getExpiration().before(new Date());
@@ -87,9 +67,7 @@ public class JwtUtil {
         }
     }
 
-    /**
-     * Validate refresh token
-     */
+    // This fixes error at AuthController line 124 [cite: 35]
     public boolean isRefreshToken(String token) {
         try {
             Claims claims = validateToken(token);
@@ -99,9 +77,6 @@ public class JwtUtil {
         }
     }
 
-    /**
-     * Get access token expiration in seconds
-     */
     public long getAccessTokenExpirationSeconds() {
         return jwtExpirationMs / 1000;
     }

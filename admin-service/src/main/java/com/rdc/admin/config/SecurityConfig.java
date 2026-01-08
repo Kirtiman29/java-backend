@@ -49,16 +49,19 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
-                        // Allow preflight requests
+                        // 1. Preflight
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        // Allow public design endpoint (for Cart Service)
+
+                        // 2. PUBLIC ENDPOINTS (No Auth Required)
                         .requestMatchers("/api/public/**").permitAll()
-                        // Allow login endpoint
+                        .requestMatchers("/api/banners/active").permitAll() // ✅ FIXED: Added public access
                         .requestMatchers("/api/admin/login").permitAll()
-                        // Allow actuator
                         .requestMatchers("/actuator/**").permitAll()
-                        // Admin endpoints require ADMIN role
+
+                        // 3. ADMIN ENDPOINTS (Requires Role)
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
+
+                        // 4. Default
                         .anyRequest().authenticated()
                 )
                 .httpBasic(withDefaults());
