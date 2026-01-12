@@ -2,7 +2,6 @@ package com.rdc.auth.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
-
 import java.time.Instant;
 
 @Entity
@@ -12,6 +11,7 @@ import java.time.Instant;
 @AllArgsConstructor
 @Builder
 public class User {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -27,20 +27,24 @@ public class User {
 
     private String displayName;
 
-    // Use 'enabled' for overall status, and 'isVerified' for email confirmation
+    @Builder.Default
     @Column(nullable = false)
     private boolean enabled = true;
 
-    @Column(nullable = false)
-    private boolean isVerified = false; // <<< NEW FIELD for email confirmation
+    @Builder.Default
+    @Column(name = "is_verified", nullable = false)
+    private boolean isVerified = false;
 
     private Instant createdAt;
 
-    // --- FIELDS FOR PASSWORD RESET ---
     @Column(name = "reset_token")
     private String resetToken;
 
     @Column(name = "token_expiry_date")
     private Instant resetTokenExpiryDate;
-    // --- END FIELDS ---
+
+    // Helper for consistency if Lombok generates setVerified()
+    public void setVerified(boolean verified) {
+        this.isVerified = verified;
+    }
 }

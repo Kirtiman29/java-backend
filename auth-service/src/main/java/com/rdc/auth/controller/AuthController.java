@@ -4,28 +4,26 @@ import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier;
 import com.google.api.client.http.javanet.NetHttpTransport;
 import com.google.api.client.json.gson.GsonFactory;
-import com.rdc.auth.dto.LoginRequest;
-import com.rdc.auth.dto.RefreshTokenRequest;
-import com.rdc.auth.dto.TokenResponse;
+import com.rdc.auth.dto.*;
 import com.rdc.auth.entity.User;
 import com.rdc.auth.repository.UserRepository;
 import com.rdc.auth.service.UserService;
 import com.rdc.auth.util.JwtUtil;
 import io.jsonwebtoken.JwtException;
 import jakarta.validation.Valid;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.io.IOException;
-import java.security.GeneralSecurityException;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
-@CrossOrigin(origins = "http://localhost:5173")
 @RestController
 @RequestMapping("/auth")
+@Slf4j
 public class AuthController {
 
     private final UserService userService;
@@ -38,81 +36,81 @@ public class AuthController {
     @Value("${google.client.id}")
     private String googleClientId;
 
+    // Alert message for spam folder
+    private static final String EMAIL_SPAM_ALERT =
+            "Check your Spam or Promotions folder and mark the email as 'Not Spam'.";
+
     public AuthController(UserService userService, UserRepository userRepository, JwtUtil jwtUtil) {
         this.userService = userService;
         this.userRepository = userRepository;
         this.jwtUtil = jwtUtil;
     }
 
-    // --- DTOs ---
-    private static class PasswordResetRequest {
-        private String token;
-        private String newPassword;
-        public String getToken() { return token; }
-        public void setToken(String token) { this.token = token; }
-        public String getNewPassword() { return newPassword; }
-        public void setNewPassword(String newPassword) { this.newPassword = newPassword; }
-    }
-
-    private static class GoogleTokenRequest {
-        private String token;
-        public String getToken() { return token; }
-        public void setToken(String token) { this.token = token; }
-    }
-
-    private static class ExternalAccessTokenRequest {
-        private String accessToken;
-        public String getAccessToken() { return accessToken; }
-        public void setAccessToken(String accessToken) { this.accessToken = accessToken; }
-    }
-
-    // --- AUTH ENDPOINTS ---
-
+    /**
+     * Signup - Create new user account
+     * POST /auth/signup
+     */
     @PostMapping("/signup")
     public ResponseEntity<?> signup(@Valid @RequestBody LoginRequest req) {
-        User u = userService.createUser(req.getEmail(), req.getPassword());
-        return ResponseEntity.ok("Account created. Please check your email to verify your account.");
-    }
-
-    /**
-     * Login - Returns access token + refresh token
-     */
-    @PostMapping("/login")
-    public ResponseEntity<?> login(@Valid @RequestBody LoginRequest req) {
         try {
-            // Authenticate user (this validates password and checks isVerified)
-            String email = req.getEmail();
-            String password = req.getPassword();
+            userService.createUser(req.getEmail(), req.getPassword());
 
-            // Use existing authentication logic
-            User user = userRepository.findByEmail(email)
-                    .orElseThrow(() -> new IllegalArgumentException("Invalid credentials."));
-
-            // Validate password using UserService (reuse existing logic)
-            userService.authenticateAndGetJwt(email, password); // This validates password
-
-            // Generate tokens
-            String accessToken = jwtUtil.generateToken(user.getEmail(), user.getRole());
-            String refreshToken = jwtUtil.generateRefreshToken(user.getEmail());
-
-            // Return both tokens
-            TokenResponse response = new TokenResponse(
-                    accessToken,
-                    refreshToken,
-                    jwtUtil.getAccessTokenExpirationSeconds()
-            );
+            Map<String, String> response = new LinkedHashMap<>();
+            response.put("message", "Account created. Please check your email to verify.");
+            response.put("alert", EMAIL_SPAM_ALERT);
 
             return ResponseEntity.ok(response);
 
-        } catch (IllegalStateException e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", e.getMessage()));
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", e.getMessage()));
+        } catch (RuntimeException e) {
+            log.error("Signup failed: {}", e.getMessage());
+
+            if (e.getMessage().contains("Unable to send")) {
+                return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                        .body(Map.of(
+                                "error", "Unable to send verification email. Please try again later.",
+                                "retryable", true
+                        ));
+            }
+
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("error", e.getMessage()));
         }
     }
 
     /**
-     * Refresh access token using refresh token
+     * Login - Authenticate and get tokens
+     * POST /auth/login
+     */
+    @PostMapping("/login")
+    public ResponseEntity<?> login(@Valid @RequestBody LoginRequest req) {
+        try {
+            String accessToken = userService.authenticateAndGetJwt(req.getEmail(), req.getPassword());
+            User user = userRepository.findByEmail(req.getEmail()).orElseThrow();
+
+            return ResponseEntity.ok(new TokenResponse(
+                    accessToken,
+                    jwtUtil.generateRefreshToken(user),
+                    jwtUtil.getAccessTokenExpirationSeconds()
+            ));
+
+        } catch (IllegalStateException e) {
+            // Email not verified
+            log.warn("Login failed - email not verified: {}", req.getEmail());
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of(
+                            "error", "Email not verified",
+                            "alert", "Please verify your email before logging in. " + EMAIL_SPAM_ALERT
+                    ));
+
+        } catch (Exception e) {
+            log.error("Login failed: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", "Invalid credentials"));
+        }
+    }
+
+    /**
+     * Refresh Token - Get new access token using refresh token
      * POST /auth/refresh
      */
     @PostMapping("/refresh")
@@ -120,170 +118,204 @@ public class AuthController {
         try {
             String refreshToken = request.getRefreshToken();
 
-            // Validate it's a refresh token
             if (!jwtUtil.isRefreshToken(refreshToken)) {
+                log.warn("Invalid token type - not a refresh token");
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                         .body(Map.of("error", "Invalid refresh token"));
             }
 
-            // Check if expired
             if (jwtUtil.isTokenExpired(refreshToken)) {
+                log.warn("Refresh token expired");
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                        .body(Map.of("error", "Refresh token expired. Please login again."));
+                        .body(Map.of("error", "Refresh token expired"));
             }
 
-            // Extract email from refresh token
             String email = jwtUtil.getEmailFromToken(refreshToken);
 
-            // Find user
             User user = userRepository.findByEmail(email)
                     .orElseThrow(() -> new RuntimeException("User not found"));
 
-            // Generate new tokens
-            String newAccessToken = jwtUtil.generateToken(user.getEmail(), user.getRole());
-            String newRefreshToken = jwtUtil.generateRefreshToken(user.getEmail());
+            if (!user.isEnabled() || !user.isVerified()) {
+                log.warn("User account not active: {}", email);
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(Map.of("error", "User account not active"));
+            }
 
-            // Return new tokens
-            TokenResponse response = new TokenResponse(
-                    newAccessToken,
-                    newRefreshToken,
-                    jwtUtil.getAccessTokenExpirationSeconds()
-            );
+            String newAccessToken = jwtUtil.generateToken(user);
 
-            return ResponseEntity.ok(response);
+            log.info("Token refreshed for user: {}", email);
+
+            return ResponseEntity.ok(Map.of(
+                    "accessToken", newAccessToken,
+                    "expiresIn", jwtUtil.getAccessTokenExpirationSeconds()
+            ));
 
         } catch (JwtException e) {
+            log.error("JWT validation error during refresh: {}", e.getMessage());
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of("error", "Invalid or expired refresh token"));
         } catch (Exception e) {
+            log.error("Token refresh failed: {}", e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Map.of("error", "Token refresh failed: " + e.getMessage()));
+                    .body(Map.of("error", "Token refresh failed"));
         }
     }
 
-    // --- GOOGLE LOGIN ---
-    @PostMapping("/google/login")
-    public ResponseEntity<?> googleLogin(@RequestBody GoogleTokenRequest req) {
-        if (req.getToken() == null || req.getToken().isEmpty()) {
-            return ResponseEntity.badRequest().body("Token is missing.");
-        }
-
+    /**
+     * Verify Email - Called when user clicks verification link
+     * GET /auth/verify-email?token=xxx
+     */
+    @GetMapping("/verify-email")
+    public ResponseEntity<Void> verifyEmail(@RequestParam("token") String token) {
+        String redirectUrl;
         try {
+            userService.verifyAccount(token);
+            redirectUrl = frontendUrl + "/verification-success";
+            log.info("Email verified successfully");
+        } catch (Exception e) {
+            log.error("Email verification failed: {}", e.getMessage());
+            redirectUrl = frontendUrl + "/verification-failed?error=" + e.getMessage().replace(" ", "_");
+        }
+        return ResponseEntity.status(HttpStatus.FOUND).header("Location", redirectUrl).build();
+    }
+
+    /**
+     * Resend Verification Email (Rate Limited)
+     * POST /auth/resend-verification
+     */
+    @PostMapping("/resend-verification")
+    public ResponseEntity<?> resendVerification(@RequestBody Map<String, String> req) {
+        try {
+            String email = req.get("email");
+            if (email == null || email.isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Email is required"));
+            }
+
+            userService.resendVerificationEmail(email);
+
+            log.info("Verification email resent to: {}", email);
+            return ResponseEntity.ok(Map.of(
+                    "message", "Verification email resent",
+                    "alert", EMAIL_SPAM_ALERT
+            ));
+
+        } catch (IllegalStateException e) {
+            // Rate limit exceeded
+            log.warn("Resend rate limit: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                    .body(Map.of("error", e.getMessage()));
+
+        } catch (IllegalArgumentException e) {
+            log.warn("Resend verification failed: {}", e.getMessage());
+            return ResponseEntity.ok(Map.of(
+                    "message", "If the email exists and is not verified, a verification link has been sent",
+                    "alert", EMAIL_SPAM_ALERT
+            ));
+
+        } catch (RuntimeException e) {
+            log.error("Resend verification email failed: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .body(Map.of(
+                            "error", "Unable to send email. Please try again later.",
+                            "retryable", true
+                    ));
+        }
+    }
+
+    /**
+     * Request Password Reset
+     * POST /auth/password/request-reset
+     */
+    @PostMapping("/password/request-reset")
+    public ResponseEntity<?> requestReset(@RequestBody Map<String, String> req) {
+        try {
+            String email = req.get("email");
+            if (email != null) {
+                userService.createPasswordResetToken(email);
+            }
+            return ResponseEntity.ok(Map.of(
+                    "message", "If an account exists, a reset email has been sent.",
+                    "alert", EMAIL_SPAM_ALERT
+            ));
+
+        } catch (RuntimeException e) {
+            log.error("Password reset email failed: {}", e.getMessage());
+            return ResponseEntity.ok(Map.of(
+                    "message", "If an account exists, a reset email has been sent.",
+                    "alert", EMAIL_SPAM_ALERT
+            ));
+        }
+    }
+
+    /**
+     * Reset Password
+     * POST /auth/password/reset
+     */
+    @PostMapping("/password/reset")
+    public ResponseEntity<?> resetPassword(@RequestBody Map<String, String> req) {
+        try {
+            String token = req.get("token");
+            String newPassword = req.get("newPassword");
+
+            if (token == null || newPassword == null) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "Token and new password are required"));
+            }
+
+            userService.resetPassword(token, newPassword);
+            log.info("Password reset successfully");
+            return ResponseEntity.ok(Map.of("message", "Password reset successfully."));
+
+        } catch (Exception e) {
+            log.error("Password reset failed: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * Google Login
+     * POST /auth/google/login
+     */
+    @PostMapping("/google/login")
+    public ResponseEntity<?> googleLogin(@RequestBody Map<String, String> req) {
+        try {
+            String token = req.get("token");
+            if (token == null || token.isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Token is required"));
+            }
+
             GoogleIdTokenVerifier verifier = new GoogleIdTokenVerifier.Builder(
                     new NetHttpTransport(), GsonFactory.getDefaultInstance())
                     .setAudience(Collections.singletonList(googleClientId))
                     .build();
 
-            GoogleIdToken idToken = verifier.verify(req.getToken());
+            GoogleIdToken idToken = verifier.verify(token);
 
             if (idToken != null) {
                 GoogleIdToken.Payload payload = idToken.getPayload();
                 String email = payload.getEmail();
                 String name = (String) payload.get("name");
-                String pictureUrl = (String) payload.get("picture");
+                String picture = (String) payload.get("picture");
 
-                // Create or get user
-                userService.authenticateOrCreateGoogleUser(email, name, pictureUrl);
+                String jwt = userService.authenticateOrCreateGoogleUser(email, name, picture);
+                User user = userRepository.findByEmail(email).orElseThrow();
 
-                // Get user for role
-                User user = userRepository.findByEmail(email)
-                        .orElseThrow(() -> new RuntimeException("User not found"));
-
-                // Generate tokens
-                String accessToken = jwtUtil.generateToken(user.getEmail(), user.getRole());
-                String refreshToken = jwtUtil.generateRefreshToken(user.getEmail());
-
-                TokenResponse response = new TokenResponse(
-                        accessToken,
-                        refreshToken,
+                log.info("Google login successful for: {}", email);
+                return ResponseEntity.ok(new TokenResponse(
+                        jwt,
+                        jwtUtil.generateRefreshToken(user),
                         jwtUtil.getAccessTokenExpirationSeconds()
-                );
-
-                return ResponseEntity.ok(response);
-            } else {
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid or expired Google ID Token.");
+                ));
             }
-        } catch (GeneralSecurityException | IOException e) {
-            e.printStackTrace();
+
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", "Invalid Google Token"));
+
+        } catch (Exception e) {
+            log.error("Google login failed: {}", e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("Server error during Google token verification.");
-        }
-    }
-
-    // --- FACEBOOK LOGIN ---
-    @PostMapping("/facebook/login")
-    public ResponseEntity<?> facebookLogin(@RequestBody ExternalAccessTokenRequest req) {
-        if (req.getAccessToken() == null || req.getAccessToken().isEmpty()) {
-            return ResponseEntity.badRequest().body("Access Token is missing.");
-        }
-
-        try {
-            // Create or get user
-            userService.authenticateOrCreateFacebookUser(req.getAccessToken());
-
-            // Note: We need to get the email from Facebook response
-            // For now, return the JWT from service (old behavior)
-            // You may need to modify this based on your Facebook implementation
-            String jwt = userService.authenticateOrCreateFacebookUser(req.getAccessToken());
-
-            return ResponseEntity.ok(jwt);
-        } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("Facebook authentication failed: " + e.getMessage());
-        }
-    }
-
-    // --- EMAIL VERIFICATION ---
-    @GetMapping("/verify-email")
-    public ResponseEntity<Void> verifyEmail(@RequestParam("token") String token) {
-        String frontendRedirectPath;
-
-        try {
-            userService.verifyAccount(token);
-            frontendRedirectPath = frontendUrl + "/verification-success";
-
-        } catch (IllegalArgumentException e) {
-            String errorMessage = e.getMessage() != null ? e.getMessage() : "invalid_token";
-            frontendRedirectPath = frontendUrl + "/verification-failed?error=" + errorMessage.replace(" ", "_");
-
-        } catch (Exception e) {
-            e.printStackTrace();
-            frontendRedirectPath = frontendUrl + "/verification-failed?error=server_error";
-        }
-
-        return ResponseEntity
-                .status(HttpStatus.FOUND)
-                .header("Location", frontendRedirectPath)
-                .build();
-    }
-
-    // --- PASSWORD RESET ---
-    @PostMapping("/password/request-reset")
-    public ResponseEntity<?> requestPasswordReset(@RequestBody LoginRequest req) {
-        try {
-            userService.createPasswordResetToken(req.getEmail());
-            return ResponseEntity.ok().body("If an account exists, a password reset email has been sent.");
-        } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.ok().body("If an account exists, a password reset email has been sent.");
-        }
-    }
-
-    @PostMapping("/password/reset")
-    public ResponseEntity<?> resetPassword(@RequestBody PasswordResetRequest req) {
-        if (req.getToken() == null || req.getNewPassword() == null) {
-            return ResponseEntity.badRequest().body("Missing token or new password.");
-        }
-
-        try {
-            userService.resetPassword(req.getToken(), req.getNewPassword());
-            return ResponseEntity.ok().body("Password has been successfully reset.");
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
-        } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("An unexpected error occurred.");
+                    .body(Map.of("error", "Google login failed"));
         }
     }
 }

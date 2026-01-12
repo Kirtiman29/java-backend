@@ -1,35 +1,48 @@
 package com.rdc.auth.service;
 
 import com.rdc.auth.entity.User;
-import com.rdc.auth.dto.LoginRequest; // Assuming you have a LoginRequest DTO
 
 public interface UserService {
 
-    // --- Authentication & User Creation ---
-
-    // Used for standard signup
+    /**
+     * Create new user account and send verification email.
+     * FAIL-FAST: If email delivery fails, signup fails.
+     */
     User createUser(String email, String password);
 
-    // Used for standard login (must now check isVerified)
+    /**
+     * Authenticate user and return JWT.
+     * @throws IllegalStateException if email not verified
+     * @throws IllegalArgumentException if credentials invalid
+     */
     String authenticateAndGetJwt(String email, String password);
 
-    // Used for Google login
-    String authenticateOrCreateGoogleUser(String email, String name, String pictureUrl);
-
-    // --- Account Verification (NEW METHOD) ---
+    /**
+     * Verify user account using email token.
+     */
+    void verifyAccount(String token);
 
     /**
-     * Finds the verification token, validates it, and sets the user's isVerified flag to true.
-     * @param token The unique verification token from the email link.
-     * @throws IllegalArgumentException if the token is invalid or expired.
+     * Resend verification email (rate limited).
+     * Rate Limits:
+     * - 2 minute cooldown between resends
+     * - Maximum 3 resends per hour
      */
-    void verifyAccount(String token); // <<< THE MISSING DECLARATION
+    void resendVerificationEmail(String email);
 
-    // --- Password Reset ---
-
+    /**
+     * Create password reset token and send email.
+     */
     void createPasswordResetToken(String email);
 
+    /**
+     * Reset password using reset token.
+     */
     void resetPassword(String token, String newPassword);
 
-    String authenticateOrCreateFacebookUser(String facebookAccessToken);
+    /**
+     * Google OAuth login - creates or updates user.
+     * Google users are auto-verified.
+     */
+    String authenticateOrCreateGoogleUser(String email, String name, String pictureUrl);
 }

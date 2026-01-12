@@ -6,73 +6,60 @@ import com.rdc.auth.repository.UserRepository;
 import com.rdc.auth.repository.VerificationTokenRepository;
 import com.rdc.auth.util.JwtUtil;
 import com.rdc.auth.exception.UserAlreadyExistsException;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import jakarta.transaction.Transactional;
-import org.springframework.web.reactive.function.client.WebClient;
-import com.fasterxml.jackson.databind.JsonNode;
 
 import java.time.Instant;
-import java.util.Optional;
+import java.time.temporal.ChronoUnit;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
+@Slf4j
 public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
     private final VerificationTokenRepository verificationTokenRepository;
     private final PasswordEncoder passwordEncoder;
-    private final EmailService emailService;
+    private final SmtpEmailService emailService;
     private final JwtUtil jwtUtil;
-    private final WebClient webClient; // WebClient is now properly injected
 
-    @Value("${facebook.app.id}") // Fixed line 14 error: Field initialization
-    private String fbAppId;
+    @Value("${frontend.url:http://localhost:5173}")
+    private String frontendUrl;
 
-    // NOTE: fbAppSecret is not strictly needed for this user endpoint, but good practice to include it if you needed App access token.
+    private final Map<String, Instant> resendRateLimits = new ConcurrentHashMap<>();
+    private final Map<String, Integer> resendCounts = new ConcurrentHashMap<>();
 
-    // Constructor Injection (Fixed lines 29, 45, 53 errors: WebClient Injection)
-    @Autowired
+    private static final int RESEND_COOLDOWN_MINUTES = 2;
+    private static final int MAX_RESENDS_PER_HOUR = 3;
+
     public UserServiceImpl(
             UserRepository userRepository,
             VerificationTokenRepository verificationTokenRepository,
             PasswordEncoder passwordEncoder,
-            EmailService emailService,
-            JwtUtil jwtUtil,
-            WebClient.Builder webClientBuilder // Injecting the builder
+            SmtpEmailService emailService,
+            JwtUtil jwtUtil
     ) {
         this.userRepository = userRepository;
         this.verificationTokenRepository = verificationTokenRepository;
         this.passwordEncoder = passwordEncoder;
         this.emailService = emailService;
         this.jwtUtil = jwtUtil;
-        // Base URL for Facebook Graph API (Fixed line 53 logic)
-        this.webClient = webClientBuilder.baseUrl("https://graph.facebook.com/v18.0").build();
     }
-
-
-    // Helper method to generate and save the token (Same)
-    private String generateNewVerificationToken(User user) {
-        String token = UUID.randomUUID().toString();
-        Instant expiryDate = Instant.now().plusSeconds(24 * 3600);
-        VerificationToken verificationToken = new VerificationToken(token, user, expiryDate);
-        verificationTokenRepository.save(verificationToken);
-        return token;
-    }
-
-    // ===============================================
-    // 1. SIGNUP LOGIC (Same)
-    // ===============================================
 
     @Override
     @Transactional
     public User createUser(String email, String password) {
+        log.info("Creating new user: {}", email); // Fixed log
         if (userRepository.findByEmail(email).isPresent()) {
             throw new UserAlreadyExistsException("User with this email already exists.");
         }
 
+        // Line 63 Fix: Uses Lombok Builder
         User newUser = User.builder()
                 .email(email)
                 .passwordHash(passwordEncoder.encode(password))
@@ -83,89 +70,55 @@ public class UserServiceImpl implements UserService {
                 .build();
 
         newUser = userRepository.save(newUser);
-        String token = generateNewVerificationToken(newUser);
-
-        String verificationLink = "http://localhost:8081/auth/verify-email?token=" + token;
-        emailService.sendVerificationEmail(newUser.getEmail(), verificationLink);
-
+        sendVerificationToken(newUser);
+        log.info("User created successfully: {}", email); // Fixed log
         return newUser;
     }
 
-    // ===============================================
-    // 2. VERIFICATION LOGIC (Same)
-    // ===============================================
+    private void sendVerificationToken(User user) {
+        String token = UUID.randomUUID().toString();
+        Instant expiryDate = Instant.now().plusSeconds(24 * 3600);
+
+        verificationTokenRepository.save(new VerificationToken(token, user, expiryDate));
+        String verificationLink = "http://localhost:8081/auth/verify-email?token=" + token;
+
+        // Line 88 Fix: Using user.getEmail()
+        emailService.sendVerificationEmail(user.getEmail(), verificationLink);
+    }
 
     @Override
     @Transactional
     public void verifyAccount(String token) {
-        Optional<VerificationToken> tokenOptional = verificationTokenRepository.findByToken(token);
+        VerificationToken vt = verificationTokenRepository.findByToken(token)
+                .orElseThrow(() -> new IllegalArgumentException("Verification token is invalid."));
 
-        if (tokenOptional.isEmpty()) {
-            throw new IllegalArgumentException("Verification token is invalid or does not exist.");
-        }
-
-        VerificationToken verificationToken = tokenOptional.get();
-        User user = verificationToken.getUser();
-
-        if (verificationToken.getExpiryDate().isBefore(Instant.now())) {
-            verificationTokenRepository.delete(verificationToken);
+        // Line 196 Fix: getExpiryDate() from Lombok @Data
+        if (vt.getExpiryDate().isBefore(Instant.now())) {
+            verificationTokenRepository.delete(vt);
             throw new IllegalArgumentException("Verification token has expired.");
         }
 
-        if (user.isVerified()) {
-            verificationTokenRepository.delete(verificationToken);
-            throw new IllegalArgumentException("Account is already verified.");
-        }
-
-        user.setVerified(true);
+        // Line 200/201 Fix: getUser() and setVerified()
+        User user = vt.getUser();
+        user.setVerified(true); // Matches helper or Lombok isVerified setter
         userRepository.save(user);
-        verificationTokenRepository.delete(verificationToken);
+        verificationTokenRepository.delete(vt);
     }
-
-    // ===============================================
-    // 3. AUTHENTICATION / LOGIN (Same)
-    // ===============================================
-
-    @Override
-    public String authenticateAndGetJwt(String email, String password) {
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new IllegalArgumentException("Invalid credentials."));
-
-        if (!passwordEncoder.matches(password, user.getPasswordHash())) {
-            throw new IllegalArgumentException("Invalid credentials.");
-        }
-
-        if (!user.isVerified()) {
-            throw new IllegalStateException("Account is not verified. Please check your email for the verification link.");
-        }
-
-        return jwtUtil.generateToken(user.getEmail(), user.getRole());
-    }
-
-    // ===============================================
-    // 4. PASSWORD RESET LOGIC (TOKEN CREATION) (Same)
-    // ===============================================
 
     @Override
     @Transactional
     public void createPasswordResetToken(String email) {
-        User user = userRepository.findByEmail(email).orElse(null);
-
-        if (user != null) {
+        userRepository.findByEmail(email).ifPresent(user -> {
             String token = UUID.randomUUID().toString();
-            Instant expiryDate = Instant.now().plusSeconds(600);
+            // Line 135/136 Fix: setters generated by @Data
             user.setResetToken(token);
-            user.setResetTokenExpiryDate(expiryDate);
+            user.setResetTokenExpiryDate(Instant.now().plusSeconds(600));
             userRepository.save(user);
 
-            String resetLink = "http://localhost:5173/reset-password?token=" + token;
-            emailService.sendResetPasswordEmail(email, resetLink);
-        }
+            String resetLink = frontendUrl + "/reset-password?token=" + token;
+            emailService.sendPasswordResetEmail(email, resetLink);
+        });
     }
-
-    // ===============================================
-    // 5. PASSWORD RESET LOGIC (IMPLEMENTATION FIX) (Same)
-    // ===============================================
 
     @Override
     @Transactional
@@ -173,104 +126,82 @@ public class UserServiceImpl implements UserService {
         User user = userRepository.findByResetToken(token)
                 .orElseThrow(() -> new IllegalArgumentException("Invalid or expired reset token."));
 
+        // Line 150 Fix: getResetTokenExpiryDate()
         if (user.getResetTokenExpiryDate() != null && user.getResetTokenExpiryDate().isBefore(Instant.now())) {
-            user.setResetToken(null);
-            user.setResetTokenExpiryDate(null);
-            userRepository.save(user);
-            throw new IllegalArgumentException("Password reset token has expired.");
+            throw new IllegalArgumentException("Reset token has expired.");
         }
 
+        // Line 154 Fix: setPasswordHash()
         user.setPasswordHash(passwordEncoder.encode(newPassword));
         user.setResetToken(null);
         user.setResetTokenExpiryDate(null);
         userRepository.save(user);
     }
 
-    // ===============================================
-    // 6. GOOGLE AUTHENTICATION (Same)
-    // ===============================================
+    // Rate limit check
+    private void checkResendRateLimit(String email) {
+        Instant lastResend = resendRateLimits.get(email);
+        Integer count = resendCounts.getOrDefault(email, 0);
 
-    @Override
-    public String authenticateOrCreateGoogleUser(String email, String name, String pictureUrl) {
-        Optional<User> existingUser = userRepository.findByEmail(email);
-
-        if (existingUser.isPresent()) {
-            User user = existingUser.get();
-            if (!user.isVerified()) {
-                user.setVerified(true);
-                userRepository.save(user);
+        if (lastResend != null) {
+            Instant cooldownEnd = lastResend.plus(RESEND_COOLDOWN_MINUTES, ChronoUnit.MINUTES);
+            if (Instant.now().isBefore(cooldownEnd)) {
+                long secondsRemaining = ChronoUnit.SECONDS.between(Instant.now(), cooldownEnd);
+                throw new IllegalStateException(String.format("Wait %d seconds.", secondsRemaining));
             }
-            return jwtUtil.generateToken(user.getEmail(), user.getRole());
         }
-
-        User newUser = User.builder()
-                .email(email)
-                .passwordHash(UUID.randomUUID().toString())
-                .displayName(name)
-                .role("USER")
-                .createdAt(Instant.now())
-                .isVerified(true)
-                .enabled(true)
-                .build();
-
-        userRepository.save(newUser);
-        return jwtUtil.generateToken(newUser.getEmail(), newUser.getRole());
+        if (count >= MAX_RESENDS_PER_HOUR) {
+            throw new IllegalStateException("Hourly limit reached.");
+        }
     }
 
-    // ===============================================
-    // 7. NEW FACEBOOK AUTHENTICATION (Method signature fixed)
-    // ===============================================
-
-    @Override // Must be present to match the interface
+    @Override
     @Transactional
-    public String authenticateOrCreateFacebookUser(String facebookAccessToken) {
-        // 1. Call Facebook Graph API to get user details
-        JsonNode userData = webClient.get()
-                .uri(uriBuilder -> uriBuilder
-                        .path("/me")
-                        .queryParam("fields", "id,email,name,picture")
-                        .queryParam("access_token", facebookAccessToken)
-                        .build())
-                .retrieve()
-                .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
-                        response -> response.createException().flatMap(e -> {
-                            throw new RuntimeException("Error verifying token with Facebook: " + e.getMessage());
-                        }))
-                .bodyToMono(JsonNode.class)
-                .block();
-
-        // Basic error checking on returned data
-        if (userData == null || !userData.has("email")) {
-            throw new IllegalArgumentException("Could not retrieve email from Facebook. Check user permissions or token validity.");
+    public void resendVerificationEmail(String email) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new IllegalArgumentException("User not found."));
+        if (user.isVerified()) { // Line 99 Fix
+            throw new IllegalArgumentException("Already verified.");
         }
+        checkResendRateLimit(email);
+        verificationTokenRepository.deleteByUser(user);
+        sendVerificationToken(user);
+        resendRateLimits.put(email, Instant.now());
+        resendCounts.put(email, resendCounts.getOrDefault(email, 0) + 1);
+    }
 
-        String email = userData.get("email").asText();
-        String name = userData.get("name").asText();
-
-        // 2. Check if user exists in the database
-        Optional<User> existingUser = userRepository.findByEmail(email);
-
-        if (existingUser.isPresent()) {
-            User user = existingUser.get();
-            if (!user.isVerified()) {
-                user.setVerified(true);
-                userRepository.save(user);
-            }
-            return jwtUtil.generateToken(user.getEmail(), user.getRole());
+    @Override
+    public String authenticateAndGetJwt(String email, String password) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new IllegalArgumentException("Invalid credentials."));
+        if (!passwordEncoder.matches(password, user.getPasswordHash())) {
+            throw new IllegalArgumentException("Invalid credentials.");
         }
+        if (!user.isVerified()) {
+            throw new IllegalStateException("Email not verified");
+        }
+        return jwtUtil.generateToken(user);
+    }
 
-        // 3. Create a new user
-        User newUser = User.builder()
-                .email(email)
-                .passwordHash(UUID.randomUUID().toString())
-                .displayName(name)
-                .role("USER")
-                .createdAt(Instant.now())
-                .isVerified(true)
-                .enabled(true)
-                .build();
-
-        userRepository.save(newUser);
-        return jwtUtil.generateToken(newUser.getEmail(), newUser.getRole());
+    @Override
+    @Transactional
+    public String authenticateOrCreateGoogleUser(String email, String name, String pictureUrl) {
+        User user = userRepository.findByEmail(email).orElseGet(() -> {
+            User newUser = User.builder()
+                    .email(email)
+                    .passwordHash(UUID.randomUUID().toString())
+                    .displayName(name)
+                    .role("USER")
+                    .createdAt(Instant.now())
+                    .isVerified(true)
+                    .enabled(true)
+                    .build();
+            return userRepository.save(newUser);
+        });
+        if (!user.isVerified()) {
+            user.setVerified(true);
+            userRepository.save(user);
+        }
+        return jwtUtil.generateToken(user);
     }
 }

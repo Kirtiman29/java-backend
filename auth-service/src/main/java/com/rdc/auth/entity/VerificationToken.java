@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+
 import java.time.Instant;
 
 @Entity
@@ -26,7 +27,6 @@ public class VerificationToken {
     @Column(nullable = false)
     private Instant expiryDate;
 
-    // Constructor for creating a new token easily
     public VerificationToken(String token, User user, Instant expiryDate) {
         this.token = token;
         this.user = user;
