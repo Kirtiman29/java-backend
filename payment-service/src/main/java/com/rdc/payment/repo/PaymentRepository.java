@@ -8,6 +8,6 @@ import java.util.Optional;
 public interface PaymentRepository extends JpaRepository<Payment, Long> {
     Optional<Payment> findByGatewayOrderId(String gatewayOrderId);
 
-    // Support for history lookup using dynamic userId
+    // This supports the getPaymentsByUser call in the Service [cite: 380, 388]
     List<Payment> findByUserIdOrderByCreatedAtDesc(Long userId);
 }
