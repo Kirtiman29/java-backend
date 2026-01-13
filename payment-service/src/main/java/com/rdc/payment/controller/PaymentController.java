@@ -10,12 +10,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
-
 import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/payments") // Base path: http://localhost:8092/api/payments
+@RequestMapping("/api/payments")
 @RequiredArgsConstructor
 public class PaymentController {
 
@@ -24,21 +23,16 @@ public class PaymentController {
     @Value("${razorpay.api.key}")
     private String razorpayKey;
 
-    /**
-     * Fetch payment history for the authenticated user
-     * GET http://localhost:8092/api/payments/my [cite: 371]
-     */
     @GetMapping("/my")
     public ResponseEntity<List<Payment>> getMyPayments(@AuthenticationPrincipal Jwt jwt) {
-        // Extract userId from JWT subject [cite: 369, 371]
-        Long userId = Long.parseLong(jwt.getSubject());
-        List<Payment> payments = paymentService.getPaymentsByUser(userId);
+        Long userId = getUserIdFromJwt(jwt);
+        List<Payment> payments = paymentService.getPaymentsByUser(userId); // Ensure this method exists in Service [cite: 17, 39]
         return ResponseEntity.ok(payments);
     }
 
     @PostMapping("/create")
     public ResponseEntity<PaymentInitResponse> createOrder(@RequestBody PaymentRequest req, @AuthenticationPrincipal Jwt jwt) throws Exception {
-        Long userId = Long.parseLong(jwt.getSubject());
+        Long userId = getUserIdFromJwt(jwt);
         Payment payment = paymentService.initiatePayment(req.getOrderId(), userId, req.getAmountCents());
 
         return ResponseEntity.ok(new PaymentInitResponse(
@@ -58,5 +52,14 @@ public class PaymentController {
         );
         return isValid ? ResponseEntity.ok(Map.of("status", "SUCCESS"))
                 : ResponseEntity.status(400).body(Map.of("status", "FAILED"));
+    }
+
+    private Long getUserIdFromJwt(Jwt jwt) {
+        String subject = jwt.getSubject();
+        try {
+            return Long.parseLong(subject);
+        } catch (NumberFormatException e) {
+            return Math.abs(subject.hashCode()) & 0x7FFFFFFFL;
+        }
     }
 }

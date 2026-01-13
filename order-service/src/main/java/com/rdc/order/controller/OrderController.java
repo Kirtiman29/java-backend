@@ -14,17 +14,30 @@ import java.util.List;
 @RequestMapping("/api/orders")
 @RequiredArgsConstructor
 public class OrderController {
+
     private final OrderService orderService;
 
     @PostMapping
     public ResponseEntity<OrderResponse> createOrder(@AuthenticationPrincipal Jwt jwt) {
-        Long userId = Long.parseLong(jwt.getSubject()); // Dynamic Extraction
+        Long userId = getUserIdFromJwt(jwt);
         return ResponseEntity.status(HttpStatus.CREATED).body(orderService.createOrder(userId));
     }
 
     @GetMapping
     public ResponseEntity<List<OrderResponse>> getOrders(@AuthenticationPrincipal Jwt jwt) {
-        Long userId = Long.parseLong(jwt.getSubject());
+        Long userId = getUserIdFromJwt(jwt);
         return ResponseEntity.ok(orderService.getOrdersByUser(userId));
+    }
+
+    /**
+     * Standardized userId extraction to match Cart Service.
+     */
+    private Long getUserIdFromJwt(Jwt jwt) {
+        String subject = jwt.getSubject();
+        try {
+            return Long.parseLong(subject);
+        } catch (NumberFormatException e) {
+            return Math.abs(subject.hashCode()) & 0x7FFFFFFFL;
+        }
     }
 }

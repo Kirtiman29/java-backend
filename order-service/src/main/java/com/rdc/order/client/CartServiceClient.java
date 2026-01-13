@@ -7,20 +7,21 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.*;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
+import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
 
 /**
  * Client for communicating with Cart Service.
  *
- * Used to:
- * 1. Fetch cart items for order creation
- * 2. Clear cart after order is created
+ * ✅ FIXED: Uses actual Cart Service API endpoints
+ * ✅ FIXED: Forwards Authorization token from incoming request
  */
 @Component
 @RequiredArgsConstructor
@@ -34,22 +35,26 @@ public class CartServiceClient {
 
     /**
      * Get all cart items for a user.
-     *
-     * @param userId User ID
-     * @return List of cart items with locked prices
-     * @throws EmptyCartException if cart is empty
-     * @throws CartServiceException if cart service is unavailable
+     * ✅ FIXED: Uses /api/cart/items endpoint with Authorization header
      */
     public List<CartItemDto> getCartItems(Long userId) {
-        String url = cartServiceUrl + "/internal/cart/user/" + userId;
+        String url = cartServiceUrl + "/api/cart/items";
 
-        log.info("Fetching cart items from Cart Service: {}", url);
+        log.info("Fetching cart items from: {}", url);
 
         try {
+            // ✅ Get Authorization token from current request
+            HttpHeaders headers = new HttpHeaders();
+            String token = getAuthorizationHeader();
+            if (token != null) {
+                headers.set("Authorization", token);
+            }
+            HttpEntity<?> entity = new HttpEntity<>(headers);
+
             ResponseEntity<List<CartItemDto>> response = restTemplate.exchange(
                     url,
                     HttpMethod.GET,
-                    null,
+                    entity,
                     new ParameterizedTypeReference<List<CartItemDto>>() {}
             );
 
@@ -59,34 +64,55 @@ public class CartServiceClient {
                 throw new EmptyCartException("Cart is empty. Add items before checkout.");
             }
 
-            log.info("Fetched {} cart items for user {}", items.size(), userId);
+            log.info("✅ Fetched {} cart items for user {}", items.size(), userId);
             return items;
 
         } catch (EmptyCartException e) {
             throw e;
         } catch (RestClientException e) {
-            log.error("Error fetching cart from Cart Service: {}", e.getMessage());
+            log.error("❌ Error fetching cart: {}", e.getMessage());
             throw new CartServiceException("Failed to fetch cart. Please try again.", e);
         }
     }
 
     /**
      * Clear all cart items for a user.
-     * Called after order is successfully created.
-     *
-     * @param userId User ID
+     * ✅ FIXED: Uses /api/cart/items endpoint with Authorization header
      */
     public void clearCart(Long userId) {
-        String url = cartServiceUrl + "/internal/cart/user/" + userId;
+        String url = cartServiceUrl + "/api/cart/items";
 
-        log.info("Clearing cart for user {} via Cart Service", userId);
+        log.info("Clearing cart via: {}", url);
 
         try {
-            restTemplate.delete(url);
-            log.info("Cart cleared for user {}", userId);
+            // ✅ Get Authorization token from current request
+            HttpHeaders headers = new HttpHeaders();
+            String token = getAuthorizationHeader();
+            if (token != null) {
+                headers.set("Authorization", token);
+            }
+            HttpEntity<?> entity = new HttpEntity<>(headers);
+
+            restTemplate.exchange(url, HttpMethod.DELETE, entity, Void.class);
+            log.info("✅ Cart cleared for user {}", userId);
         } catch (RestClientException e) {
-            // Log but don't fail the order - cart clearing is secondary
-            log.error("Warning: Failed to clear cart for user {}: {}", userId, e.getMessage());
+            log.error("⚠️ Failed to clear cart: {}", e.getMessage());
         }
+    }
+
+    /**
+     * Extract Authorization header from current HTTP request.
+     * This forwards the user's JWT token to the Cart Service.
+     */
+    private String getAuthorizationHeader() {
+        ServletRequestAttributes attributes =
+                (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+
+        if (attributes != null) {
+            HttpServletRequest request = attributes.getRequest();
+            return request.getHeader("Authorization");
+        }
+
+        return null;
     }
 }
