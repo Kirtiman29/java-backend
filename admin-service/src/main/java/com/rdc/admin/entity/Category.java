@@ -21,10 +21,12 @@ public class Category {
     private String slug;
 
     private String description;
-
-    // NEW FIELDS
     private String imageUrl;
+
+    @Builder.Default // FIX: Ensures builder uses 'true' by default
     private Boolean active = true;
+
+    @Builder.Default // FIX: Ensures builder uses '0' by default
     private Integer sortOrder = 0;
 
     @CreationTimestamp

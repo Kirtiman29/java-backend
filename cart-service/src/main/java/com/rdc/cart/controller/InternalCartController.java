@@ -3,44 +3,37 @@ package com.rdc.cart.controller;
 import com.rdc.cart.dto.CartItemResponse;
 import com.rdc.cart.service.CartService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-/**
- * Internal Controller for Service-to-Service communication.
- *
- * This controller is used by Order Service to:
- * 1. Fetch user's cart items
- * 2. Clear cart after order creation
- *
- * SECURITY NOTE: In production, secure this with service-to-service auth
- * (e.g., API key, mTLS, or service mesh)
- */
 @RestController
 @RequestMapping("/internal/cart")
 @RequiredArgsConstructor
+@Slf4j
 public class InternalCartController {
 
     private final CartService cartService;
 
     /**
      * Get cart items for a user.
-     * Called by Order Service before creating order.
+     * Used by Order Service to calculate totals and create order lines.
      */
     @GetMapping("/user/{userId}")
     public ResponseEntity<List<CartItemResponse>> getCartByUserId(@PathVariable Long userId) {
-        List<CartItemResponse> items = cartService.getCartByUserId(userId);
-        return ResponseEntity.ok(items);
+        log.info("Internal request: Fetching cart for userId: {}", userId);
+        return ResponseEntity.ok(cartService.getCartByUserId(userId));
     }
 
     /**
      * Clear cart for a user.
-     * Called by Order Service after order is created.
+     * Called by Order Service as a best-effort cleanup after order placement. [cite: 237]
      */
     @DeleteMapping("/user/{userId}")
     public ResponseEntity<Void> clearCartByUserId(@PathVariable Long userId) {
+        log.info("Internal request: Clearing cart for userId: {}", userId);
         cartService.clearCart(userId);
         return ResponseEntity.noContent().build();
     }

@@ -21,6 +21,9 @@ public class BannerService {
     private final HomepageBannerRepository repository;
     private final AssetClientService assetClientService;
 
+    /**
+     * Retrieves the currently active banner based on the date and priority[cite: 31].
+     */
     @Transactional(readOnly = true)
     public BannerResponse getActiveBanner() {
         LocalDate today = LocalDate.now();
@@ -34,39 +37,48 @@ public class BannerService {
                         .orElse(null));
     }
 
+    /**
+     * Creates a new homepage banner after validating the background asset exists[cite: 76, 77].
+     */
     @Transactional
     public BannerResponse createBanner(BannerRequest request) {
         if (request.getBackgroundImageUuid() != null) {
+            // Bridge to Port 8090 to verify the asset [cite: 65-67]
             assetClientService.validateAsset(request.getBackgroundImageUuid());
         }
 
         HomepageBanner banner = new HomepageBanner();
         updateBannerFields(banner, request);
 
-        String imageUrl = "http://localhost:8090/api/assets/" + request.getBackgroundImageUuid() + "/download";
+        // ✅ FINAL FIX: Matches Asset Service @GetMapping("/download/{uuid}")
+        String imageUrl = "http://localhost:8090/api/assets/download/" + request.getBackgroundImageUuid();
         banner.setBackgroundImageUrl(imageUrl);
 
         return mapToResponse(repository.save(banner));
     }
 
+    /**
+     * Updates an existing banner and its linked asset URL [cite: 79-81].
+     */
     @Transactional
     public BannerResponse updateBanner(Long id, BannerRequest request) {
         HomepageBanner banner = repository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Banner not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Banner", id));
 
         if (request.getBackgroundImageUuid() != null) {
             assetClientService.validateAsset(request.getBackgroundImageUuid());
-            banner.setBackgroundImageUrl("http://localhost:8090/api/assets/" + request.getBackgroundImageUuid() + "/download");
+            // ✅ FINAL FIX: Matches Asset Service @GetMapping("/download/{uuid}")
+            banner.setBackgroundImageUrl("http://localhost:8090/api/assets/download/" + request.getBackgroundImageUuid());
         }
 
         updateBannerFields(banner, request);
         return mapToResponse(repository.save(banner));
     }
 
-    @Transactional // ✅ FIXED: Added Delete Logic
+    @Transactional
     public void deleteBanner(Long id) {
         if (!repository.existsById(id)) {
-            throw new ResourceNotFoundException("Banner not found with id: " + id);
+            throw new ResourceNotFoundException("Banner", id);
         }
         repository.deleteById(id);
     }
@@ -84,6 +96,7 @@ public class BannerService {
         banner.setDescription(request.getDescription());
         banner.setCtaText(request.getCtaText());
         banner.setCtaUrl(request.getCtaUrl());
+        // Uses the finalized WINTER, DIWALI, SUMMER, SALE, DEFAULT themes
         banner.setTheme(BannerTheme.valueOf(request.getTheme().toUpperCase()));
         banner.setStartDate(request.getStartDate());
         banner.setEndDate(request.getEndDate());

@@ -5,17 +5,18 @@ import com.rdc.cart.dto.CartItemResponse;
 import com.rdc.cart.service.CartService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
-
 import java.util.List;
 import java.util.Map;
 
 @RestController
 @RequestMapping("/api/cart")
 @RequiredArgsConstructor
+@Slf4j
 public class CartController {
 
     private final CartService cartService;
@@ -33,6 +34,14 @@ public class CartController {
     public ResponseEntity<List<CartItemResponse>> getCart(Authentication authentication) {
         Long userId = getUserIdFromAuth(authentication);
         return ResponseEntity.ok(cartService.getCartByUserId(userId));
+    }
+
+    // ✅ FIX: Added DELETE mapping for base items path
+    @DeleteMapping("/items")
+    public ResponseEntity<Void> clearCart(Authentication authentication) {
+        Long userId = getUserIdFromAuth(authentication);
+        cartService.clearCart(userId);
+        return ResponseEntity.noContent().build();
     }
 
     @PutMapping("/items/{itemId}")
@@ -61,12 +70,6 @@ public class CartController {
         return ResponseEntity.noContent().build();
     }
 
-    @DeleteMapping("/items")
-    public ResponseEntity<Void> clearCart(Authentication authentication) {
-        cartService.clearCart(getUserIdFromAuth(authentication));
-        return ResponseEntity.noContent().build();
-    }
-
     @GetMapping("/count")
     public ResponseEntity<Map<String, Long>> getCartCount(Authentication authentication) {
         long count = cartService.getCartItemCount(getUserIdFromAuth(authentication));
@@ -76,11 +79,10 @@ public class CartController {
     private Long getUserIdFromAuth(Authentication authentication) {
         String subject = authentication.getName();
         try {
-            // Try parsing as numeric ID first
             return Long.parseLong(subject);
         } catch (NumberFormatException e) {
-            // Fallback for email-based JWTs: generate stable hash
-            return Math.abs(subject.hashCode()) & 0x7FFFFFFFL;
+            log.error("Critical Auth Error: JWT subject is not a numeric ID: {}", subject);
+            throw new org.springframework.security.authentication.BadCredentialsException("Invalid User Identity");
         }
     }
 }

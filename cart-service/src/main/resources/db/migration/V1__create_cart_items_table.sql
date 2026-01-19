@@ -1,4 +1,4 @@
--- File: V1__create_cart_items_table.sql
+`-- File: V1__create_cart_items_table.sql
 CREATE TABLE cart_items (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     user_id BIGINT NOT NULL,
@@ -9,4 +9,4 @@ CREATE TABLE cart_items (
     created_at DATETIME NOT NULL,
     updated_at DATETIME NOT NULL,
     is_deleted BIT NOT NULL DEFAULT 0
-);
+);`

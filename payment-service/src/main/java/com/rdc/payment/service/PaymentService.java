@@ -9,13 +9,14 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
+import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Service
@@ -36,12 +37,25 @@ public class PaymentService {
     @Value("${internal.service.key}")
     private String internalServiceKey;
 
+    public List<Payment> getPaymentsByUser(Long userId) {
+        return paymentRepository.findByUserIdOrderByCreatedAtDesc(userId);
+    }
+
     @Transactional
-    public Payment initiatePayment(Long orderId, Long userId, Integer amountCents) throws Exception {
+    public Payment initiatePayment(Long orderId, Long userId) throws Exception {
+        Optional<Payment> existing = paymentRepository.findByUserIdAndOrderId(userId, orderId)
+                .stream().filter(p -> p.getStatus() != PaymentStatus.FAILED).findFirst();
+
+        if (existing.isPresent()) {
+            return existing.get();
+        }
+
+        Integer amountCents = fetchAmountFromOrderService(orderId, userId);
+
         JSONObject orderRequest = new JSONObject();
         orderRequest.put("amount", amountCents);
         orderRequest.put("currency", "INR");
-        orderRequest.put("receipt", "order_rcptid_" + orderId);
+        orderRequest.put("receipt", "order_" + orderId);
 
         com.razorpay.Order razorpayOrder = razorpayClient.orders.create(orderRequest);
 
@@ -58,17 +72,29 @@ public class PaymentService {
         return paymentRepository.save(payment);
     }
 
-    public List<Payment> getPaymentsByUser(Long userId) {
-        return paymentRepository.findByUserIdOrderByCreatedAtDesc(userId);
+    private Integer fetchAmountFromOrderService(Long orderId, Long userId) {
+        String url = orderServiceUrl + "/api/internal/orders/" + orderId;
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("X-INTERNAL-KEY", internalServiceKey);
+        HttpEntity<Void> entity = new HttpEntity<>(headers);
+
+        try {
+            ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.GET, entity, Map.class);
+            Map data = response.getBody();
+            if (data == null || !data.get("userId").toString().equals(userId.toString())) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+            }
+            return (Integer) data.get("totalPriceCents");
+        } catch (Exception e) {
+            log.error("Failed to reach Order Service: {}", e.getMessage());
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Order Service Unreachable");
+        }
     }
 
     @Transactional
     public boolean verifySignatureAndMarkPaid(String orderId, String paymentId, String signature) {
         try {
-            if ("SANDBOX_SUCCESS".equals(signature)) {
-                return markAsPaid(orderId, paymentId, signature);
-            }
-
+            if ("SANDBOX_SUCCESS".equals(signature)) return markAsPaid(orderId, paymentId, signature);
             JSONObject options = new JSONObject();
             options.put("razorpay_order_id", orderId);
             options.put("razorpay_payment_id", paymentId);
@@ -79,33 +105,33 @@ public class PaymentService {
             }
             return false;
         } catch (Exception e) {
-            log.error("Verification failed: {}", e.getMessage());
             return false;
         }
     }
 
     private boolean markAsPaid(String orderId, String paymentId, String signature) {
-        Optional<Payment> paymentOpt = paymentRepository.findByGatewayOrderId(orderId);
-        if (paymentOpt.isPresent()) {
-            Payment p = paymentOpt.get();
-            p.setStatus(PaymentStatus.PAID);
-            p.setGatewayPaymentId(paymentId);
-            p.setGatewaySignature(signature);
-            paymentRepository.save(p);
+        Payment p = paymentRepository.findByGatewayOrderId(orderId)
+                .orElseThrow(() -> new RuntimeException("Payment not found"));
+        if (p.getStatus() == PaymentStatus.PAID) return true;
 
-            // ✅ INTERNAL BRIDGE CALL
-            try {
-                String url = orderServiceUrl + "/api/internal/orders/" + p.getOrderId() + "/paid";
-                HttpHeaders headers = new HttpHeaders();
-                headers.set("X-INTERNAL-KEY", internalServiceKey);
-                HttpEntity<Void> entity = new HttpEntity<>(headers);
-                restTemplate.postForEntity(url, entity, Void.class);
-                log.info("Successfully notified Order Service for Order: {}", p.getOrderId());
-            } catch (Exception e) {
-                log.error("Failed to notify Order Service for Order {}: {}", p.getOrderId(), e.getMessage());
-            }
-            return true;
+        p.setStatus(PaymentStatus.PAID);
+        p.setGatewayPaymentId(paymentId);
+        p.setGatewaySignature(signature);
+        paymentRepository.save(p);
+
+        notifyOrderService(p.getOrderId());
+        return true;
+    }
+
+    private void notifyOrderService(Long orderId) {
+        try {
+            String url = orderServiceUrl + "/api/internal/orders/" + orderId + "/paid";
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("X-INTERNAL-KEY", internalServiceKey);
+            HttpEntity<Void> entity = new HttpEntity<>(headers);
+            restTemplate.postForEntity(url, entity, Void.class);
+        } catch (Exception e) {
+            log.error("Bridge failure: {}", e.getMessage());
         }
-        return false;
     }
 }

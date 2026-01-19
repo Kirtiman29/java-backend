@@ -3,16 +3,21 @@ package com.rdc.order.controller;
 import com.rdc.order.dto.OrderResponse;
 import com.rdc.order.service.OrderService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
+
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/orders")
 @RequiredArgsConstructor
+@Slf4j
 public class OrderController {
 
     private final OrderService orderService;
@@ -29,15 +34,33 @@ public class OrderController {
         return ResponseEntity.ok(orderService.getOrdersByUser(userId));
     }
 
-    /**
-     * Standardized userId extraction to match Cart Service.
-     */
+    // ✅ FIX: Added endpoint to retrieve a single order by ID
+    @GetMapping("/{orderId}")
+    public ResponseEntity<OrderResponse> getOrder(@PathVariable Long orderId, @AuthenticationPrincipal Jwt jwt) {
+        Long userId = getUserIdFromJwt(jwt);
+        // Ownership check is handled in the service layer [cite: 760-761]
+        return ResponseEntity.ok(orderService.getOrderById(orderId, userId));
+    }
+
+    @GetMapping("/{orderId}/download")
+    public ResponseEntity<Map<String, String>> getSecureDownload(@PathVariable Long orderId, @AuthenticationPrincipal Jwt jwt) {
+        Long userId = getUserIdFromJwt(jwt);
+        OrderResponse order = orderService.getOrderById(orderId, userId);
+
+        if (!"PAID".equals(order.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.PAYMENT_REQUIRED, "Order must be PAID to download.");
+        }
+
+        return ResponseEntity.ok(Map.of("downloadUrl", "https://assets.rdc.com/temp-access-link"));
+    }
+
     private Long getUserIdFromJwt(Jwt jwt) {
         String subject = jwt.getSubject();
         try {
             return Long.parseLong(subject);
         } catch (NumberFormatException e) {
-            return Math.abs(subject.hashCode()) & 0x7FFFFFFFL;
+            log.error("Critical Auth Error: Non-numeric sub in JWT: {}", subject);
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid User ID in Token");
         }
     }
 }

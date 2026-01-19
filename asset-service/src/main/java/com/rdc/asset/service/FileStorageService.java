@@ -1,17 +1,28 @@
 package com.rdc.asset.service;
 
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import java.io.*;
+import java.nio.file.*;
 
-import java.io.IOException;
-import java.nio.file.Path;
+@Service
+public class FileStorageService {
 
-public interface FileStorageService {
-    // store file and return stored filename (or key)
-    String store(MultipartFile file) throws IOException;
+    @Value("${app.storage.location:./data/uploads}")
+    private String storageLocation;
 
-    Path load(String filename);
+    public String store(MultipartFile file) throws IOException {
+        String filename = System.currentTimeMillis() + "_" + file.getOriginalFilename();
+        Path filePath = Paths.get(storageLocation).resolve(filename);
+        Files.createDirectories(filePath.getParent());
+        Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
+        return filename;
+    }
 
-    byte[] readAllBytes(String filename) throws IOException;
-
-    void delete(String filename) throws IOException;
+    // FIX: Added missing method for vault streaming
+    public InputStream getInputStream(String filename) throws IOException {
+        Path filePath = Paths.get(storageLocation).resolve(filename);
+        return new FileInputStream(filePath.toFile());
+    }
 }

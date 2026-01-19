@@ -26,26 +26,11 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-
-        // Allow frontend origins
-        config.setAllowedOriginPatterns(Arrays.asList(
-                "http://localhost:*",
-                "http://127.0.0.1:*"
-        ));
-
-        // Allow all HTTP methods
+        config.setAllowedOriginPatterns(Arrays.asList("http://localhost:*", "http://127.0.0.1:*"));
         config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
-
-        // Allow ALL headers
         config.setAllowedHeaders(List.of("*"));
-
-        // Expose headers to frontend
         config.setExposedHeaders(Arrays.asList("Authorization", "Content-Type"));
-
-        // Allow credentials
         config.setAllowCredentials(true);
-
-        // Cache preflight for 1 hour
         config.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
@@ -56,24 +41,15 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                // CORS - must be first
-                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-                // Disable CSRF
+                .cors(cors -> cors.configurationSource(corsConfigurationSource())) // Integrated CORS
                 .csrf(csrf -> csrf.disable())
-                // Stateless session
-                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                // Authorization rules
+                .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        // Allow ALL OPTIONS requests (preflight)
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        // Allow actuator
                         .requestMatchers("/actuator/**").permitAll()
-                        // Wishlist endpoints - require USER role
-                        .requestMatchers("/api/wishlist/**").hasRole("USER")
-                        // Everything else
-                        .anyRequest().authenticated()
+                        .requestMatchers("/api/wishlist/**").hasRole("USER") // Role-based guard
+                        .anyRequest().denyAll() // Fail-safe default
                 )
-                // Add JWT filter
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();

@@ -14,31 +14,30 @@ import java.util.Optional;
 public interface CartItemRepository extends JpaRepository<CartItem, Long> {
 
     /**
-     * Find all active (non-deleted) cart items for a user.
+     * Find all active (non-deleted) cart items for a user[cite: 285].
      */
     List<CartItem> findByUserIdAndDeletedFalse(Long userId);
 
     /**
-     * Find a specific cart item by ID and user ID (for security).
-     * Ensures user can only access their own cart items.
+     * Find a specific cart item by ID and user ID for security[cite: 286].
      */
     Optional<CartItem> findByIdAndUserIdAndDeletedFalse(Long id, Long userId);
 
     /**
-     * Check if a design already exists in user's cart.
-     * Useful for updating quantity instead of adding duplicate.
+     * Check if a design already exists in user's cart to update quantity[cite: 288].
      */
     Optional<CartItem> findByUserIdAndDesignIdAndDeletedFalse(Long userId, Long designId);
 
     /**
-     * Soft delete all cart items for a user (used after order creation).
+     * Soft delete all cart items for a user after order creation.
+     * Marks items as deleted without removing them from the database audit trail.
      */
     @Modifying
     @Query("UPDATE CartItem c SET c.deleted = true, c.updatedAt = CURRENT_TIMESTAMP WHERE c.userId = :userId AND c.deleted = false")
     int softDeleteAllByUserId(@Param("userId") Long userId);
 
     /**
-     * Count active items in user's cart.
+     * Count active items in user's cart[cite: 291].
      */
     long countByUserIdAndDeletedFalse(Long userId);
 }

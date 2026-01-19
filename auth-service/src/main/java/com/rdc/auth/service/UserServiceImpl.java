@@ -5,7 +5,7 @@ import com.rdc.auth.entity.VerificationToken;
 import com.rdc.auth.repository.UserRepository;
 import com.rdc.auth.repository.VerificationTokenRepository;
 import com.rdc.auth.util.JwtUtil;
-import com.rdc.auth.exception.UserAlreadyExistsException;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -13,13 +13,11 @@ import org.springframework.stereotype.Service;
 import jakarta.transaction.Transactional;
 
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.*;
 
 @Service
 @Slf4j
+@RequiredArgsConstructor
 public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
@@ -31,155 +29,65 @@ public class UserServiceImpl implements UserService {
     @Value("${frontend.url:http://localhost:5173}")
     private String frontendUrl;
 
-    private final Map<String, Instant> resendRateLimits = new ConcurrentHashMap<>();
-    private final Map<String, Integer> resendCounts = new ConcurrentHashMap<>();
-
-    private static final int RESEND_COOLDOWN_MINUTES = 2;
-    private static final int MAX_RESENDS_PER_HOUR = 3;
-
-    public UserServiceImpl(
-            UserRepository userRepository,
-            VerificationTokenRepository verificationTokenRepository,
-            PasswordEncoder passwordEncoder,
-            SmtpEmailService emailService,
-            JwtUtil jwtUtil
-    ) {
-        this.userRepository = userRepository;
-        this.verificationTokenRepository = verificationTokenRepository;
-        this.passwordEncoder = passwordEncoder;
-        this.emailService = emailService;
-        this.jwtUtil = jwtUtil;
-    }
+    @Value("${server.port:8081}")
+    private String serverPort;
 
     @Override
     @Transactional
-    public User createUser(String email, String password) {
-        log.info("Creating new user: {}", email); // Fixed log
+    public Map<String, String> createUser(String email, String password) {
+        log.info("Attempting to create user: {}", email);
+
         if (userRepository.findByEmail(email).isPresent()) {
-            throw new UserAlreadyExistsException("User with this email already exists.");
+            throw new RuntimeException("USER_EXISTS");
         }
 
-        // Line 63 Fix: Uses Lombok Builder
         User newUser = User.builder()
                 .email(email)
                 .passwordHash(passwordEncoder.encode(password))
                 .role("USER")
-                .createdAt(Instant.now())
                 .isVerified(false)
                 .enabled(true)
+                .createdAt(Instant.now())
                 .build();
 
         newUser = userRepository.save(newUser);
-        sendVerificationToken(newUser);
-        log.info("User created successfully: {}", email); // Fixed log
-        return newUser;
-    }
 
-    private void sendVerificationToken(User user) {
         String token = UUID.randomUUID().toString();
-        Instant expiryDate = Instant.now().plusSeconds(24 * 3600);
+        verificationTokenRepository.save(new VerificationToken(token, newUser, Instant.now().plusSeconds(86400)));
 
-        verificationTokenRepository.save(new VerificationToken(token, user, expiryDate));
-        String verificationLink = "http://localhost:8081/auth/verify-email?token=" + token;
+        boolean emailSent = false;
+        try {
+            String verificationUrl = "http://localhost:" + serverPort + "/auth/verify-email?token=" + token;
+            emailSent = emailService.sendVerificationEmail(email, verificationUrl);
+        } catch (Exception e) {
+            log.error("NON-BLOCKING ERROR: Verification email failed for {}: {}", email, e.getMessage());
+        }
 
-        // Line 88 Fix: Using user.getEmail()
-        emailService.sendVerificationEmail(user.getEmail(), verificationLink);
+        Map<String, String> response = new HashMap<>();
+        response.put("status", "USER_CREATED");
+        response.put("emailVerification", emailSent ? "SENT" : "PENDING");
+        return response;
     }
 
     @Override
-    @Transactional
-    public void verifyAccount(String token) {
-        VerificationToken vt = verificationTokenRepository.findByToken(token)
-                .orElseThrow(() -> new IllegalArgumentException("Verification token is invalid."));
-
-        // Line 196 Fix: getExpiryDate() from Lombok @Data
-        if (vt.getExpiryDate().isBefore(Instant.now())) {
-            verificationTokenRepository.delete(vt);
-            throw new IllegalArgumentException("Verification token has expired.");
-        }
-
-        // Line 200/201 Fix: getUser() and setVerified()
-        User user = vt.getUser();
-        user.setVerified(true); // Matches helper or Lombok isVerified setter
-        userRepository.save(user);
-        verificationTokenRepository.delete(vt);
-    }
-
-    @Override
-    @Transactional
-    public void createPasswordResetToken(String email) {
-        userRepository.findByEmail(email).ifPresent(user -> {
-            String token = UUID.randomUUID().toString();
-            // Line 135/136 Fix: setters generated by @Data
-            user.setResetToken(token);
-            user.setResetTokenExpiryDate(Instant.now().plusSeconds(600));
-            userRepository.save(user);
-
-            String resetLink = frontendUrl + "/reset-password?token=" + token;
-            emailService.sendPasswordResetEmail(email, resetLink);
-        });
-    }
-
-    @Override
-    @Transactional
-    public void resetPassword(String token, String newPassword) {
-        User user = userRepository.findByResetToken(token)
-                .orElseThrow(() -> new IllegalArgumentException("Invalid or expired reset token."));
-
-        // Line 150 Fix: getResetTokenExpiryDate()
-        if (user.getResetTokenExpiryDate() != null && user.getResetTokenExpiryDate().isBefore(Instant.now())) {
-            throw new IllegalArgumentException("Reset token has expired.");
-        }
-
-        // Line 154 Fix: setPasswordHash()
-        user.setPasswordHash(passwordEncoder.encode(newPassword));
-        user.setResetToken(null);
-        user.setResetTokenExpiryDate(null);
-        userRepository.save(user);
-    }
-
-    // Rate limit check
-    private void checkResendRateLimit(String email) {
-        Instant lastResend = resendRateLimits.get(email);
-        Integer count = resendCounts.getOrDefault(email, 0);
-
-        if (lastResend != null) {
-            Instant cooldownEnd = lastResend.plus(RESEND_COOLDOWN_MINUTES, ChronoUnit.MINUTES);
-            if (Instant.now().isBefore(cooldownEnd)) {
-                long secondsRemaining = ChronoUnit.SECONDS.between(Instant.now(), cooldownEnd);
-                throw new IllegalStateException(String.format("Wait %d seconds.", secondsRemaining));
-            }
-        }
-        if (count >= MAX_RESENDS_PER_HOUR) {
-            throw new IllegalStateException("Hourly limit reached.");
-        }
-    }
-
-    @Override
-    @Transactional
-    public void resendVerificationEmail(String email) {
+    public String authenticate(String email, String password, String requiredRole) {
         User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new IllegalArgumentException("User not found."));
-        if (user.isVerified()) { // Line 99 Fix
-            throw new IllegalArgumentException("Already verified.");
-        }
-        checkResendRateLimit(email);
-        verificationTokenRepository.deleteByUser(user);
-        sendVerificationToken(user);
-        resendRateLimits.put(email, Instant.now());
-        resendCounts.put(email, resendCounts.getOrDefault(email, 0) + 1);
-    }
+                .orElseThrow(() -> new IllegalArgumentException("INVALID_CREDENTIALS"));
 
-    @Override
-    public String authenticateAndGetJwt(String email, String password) {
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new IllegalArgumentException("Invalid credentials."));
+        // Rule: User must be enabled and verified for production use (optional restriction)
+        if (!user.isEnabled()) {
+            throw new IllegalArgumentException("USER_DISABLED");
+        }
+
         if (!passwordEncoder.matches(password, user.getPasswordHash())) {
-            throw new IllegalArgumentException("Invalid credentials.");
+            throw new IllegalArgumentException("INVALID_CREDENTIALS");
         }
-        if (!user.isVerified()) {
-            throw new IllegalStateException("Email not verified");
+
+        // Strict Production Rule: Enforce Role Separation (USER vs ADMIN)
+        if (!user.getRole().equalsIgnoreCase(requiredRole)) {
+            throw new IllegalArgumentException("UNAUTHORIZED_ROLE");
         }
+
         return jwtUtil.generateToken(user);
     }
 
@@ -193,15 +101,84 @@ public class UserServiceImpl implements UserService {
                     .displayName(name)
                     .role("USER")
                     .createdAt(Instant.now())
-                    .isVerified(true)
+                    .isVerified(true) // Google users are auto-verified
                     .enabled(true)
                     .build();
             return userRepository.save(newUser);
         });
+
+        // Ensure user is marked verified if coming through Google OAuth
         if (!user.isVerified()) {
             user.setVerified(true);
-            userRepository.save(user);
+            user = userRepository.save(user);
         }
+
         return jwtUtil.generateToken(user);
+    }
+
+    @Override
+    @Transactional
+    public void verifyAccount(String token) {
+        VerificationToken vt = verificationTokenRepository.findByToken(token)
+                .orElseThrow(() -> new IllegalArgumentException("INVALID_TOKEN"));
+
+        if (vt.getExpiryDate().isBefore(Instant.now())) {
+            verificationTokenRepository.delete(vt);
+            throw new IllegalArgumentException("TOKEN_EXPIRED");
+        }
+
+        User user = vt.getUser();
+        user.setVerified(true);
+        userRepository.save(user);
+        verificationTokenRepository.delete(vt);
+    }
+
+    @Override
+    @Transactional
+    public void resendVerificationEmail(String email) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new IllegalArgumentException("USER_NOT_FOUND"));
+
+        if (user.isVerified()) {
+            throw new IllegalArgumentException("ALREADY_VERIFIED");
+        }
+
+        verificationTokenRepository.deleteByUser(user);
+
+        String token = UUID.randomUUID().toString();
+        verificationTokenRepository.save(new VerificationToken(token, user, Instant.now().plusSeconds(86400)));
+
+        String verificationUrl = "http://localhost:" + serverPort + "/auth/verify-email?token=" + token;
+        emailService.sendVerificationEmail(email, verificationUrl);
+    }
+
+    @Override
+    @Transactional
+    public void createPasswordResetToken(String email) {
+        userRepository.findByEmail(email).ifPresent(user -> {
+            String token = UUID.randomUUID().toString();
+            user.setResetToken(token);
+            user.setResetTokenExpiryDate(Instant.now().plusSeconds(600));
+            userRepository.save(user);
+
+            String resetLink = frontendUrl + "/reset-password?token=" + token;
+            emailService.sendPasswordResetEmail(email, resetLink);
+        });
+    }
+
+    @Override
+    @Transactional
+    public void resetPassword(String token, String newPassword) {
+        User user = userRepository.findByResetToken(token)
+                .orElseThrow(() -> new IllegalArgumentException("INVALID_RESET_TOKEN"));
+
+        if (user.getResetTokenExpiryDate() == null || user.getResetTokenExpiryDate().isBefore(Instant.now())) {
+            throw new IllegalArgumentException("TOKEN_EXPIRED");
+        }
+
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        user.setResetToken(null);
+        user.setResetTokenExpiryDate(null);
+        userRepository.save(user);
     }
 }

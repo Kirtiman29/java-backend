@@ -2,47 +2,31 @@ package com.rdc.asset.service;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.web.multipart.MultipartFile;
-
-import jakarta.annotation.PostConstruct;
-import java.io.IOException;
+import java.io.*;
 import java.nio.file.*;
 
 @Service
-public class LocalFileStorageService implements FileStorageService {
+public class LocalFileStorageService implements StorageProvider {
 
     @Value("${app.storage.location:./data/uploads}")
     private String storageLocation;
 
-    private Path root;
-
-    @PostConstruct
-    public void init() throws IOException {
-        this.root = Paths.get(storageLocation).toAbsolutePath().normalize();
-        Files.createDirectories(root);
+    @Override
+    public void write(String path, InputStream data) throws IOException {
+        Path filePath = Paths.get(storageLocation).resolve(path);
+        Files.createDirectories(filePath.getParent());
+        Files.copy(data, filePath, StandardCopyOption.REPLACE_EXISTING);
     }
 
     @Override
-    public String store(MultipartFile file) throws IOException {
-        String original = Path.of(file.getOriginalFilename()).getFileName().toString();
-        String filename = System.currentTimeMillis() + "-" + java.util.UUID.randomUUID() + "-" + original;
-        Path target = root.resolve(filename);
-        Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
-        return filename;
+    public InputStream read(String path) throws IOException {
+        Path filePath = Paths.get(storageLocation).resolve(path);
+        return new FileInputStream(filePath.toFile());
     }
 
     @Override
-    public Path load(String filename) {
-        return root.resolve(filename).normalize();
-    }
-
-    @Override
-    public byte[] readAllBytes(String filename) throws IOException {
-        return Files.readAllBytes(load(filename));
-    }
-
-    @Override
-    public void delete(String filename) throws IOException {
-        Files.deleteIfExists(load(filename));
+    public void delete(String path) throws IOException {
+        Path filePath = Paths.get(storageLocation).resolve(path);
+        Files.deleteIfExists(filePath);
     }
 }

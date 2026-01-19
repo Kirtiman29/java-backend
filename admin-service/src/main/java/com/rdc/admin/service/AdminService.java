@@ -1,25 +1,43 @@
 package com.rdc.admin.service;
 
 import com.rdc.admin.repository.AdminRepository;
+import com.rdc.admin.entity.Admin;
+import com.rdc.admin.exception.ResourceNotFoundException;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 @Service
+@RequiredArgsConstructor
+@Slf4j
 public class AdminService {
 
     private final AdminRepository adminRepository;
-
-    public AdminService(AdminRepository adminRepository) {
-        this.adminRepository = adminRepository;
-    }
-
-    // This service would primarily house business logic related to Admin profiles,
-    // such as changing passwords, checking permissions, or tracking activity.
+    private final PasswordEncoder passwordEncoder;
 
     /**
-     * Placeholder method for finding an Admin by ID (e.g., used when tracking who uploaded a design).
+     * Finds an Admin by their numeric ID.
+     * This is used for cross-service identity tracking and audit logs.
      */
-    // public AdminDto findById(Long id) {
-    //    // return adminRepository.findById(id).map(this::mapToDto)...
-    //    return null;
-    // }
+    @Transactional(readOnly = true)
+    public Admin findById(Long id) {
+        return adminRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Admin not found with id: " + id));
+    }
+
+    /**
+     * Change Admin password with secure hashing.
+     * Implements logic for updating administrative credentials[cite: 299, 300].
+     */
+    @Transactional
+    public void updateAdminPassword(Long adminId, String rawNewPassword) {
+        log.info("Updating password for Admin ID: {}", adminId);
+        Admin admin = findById(adminId);
+
+        // Ensure the new password is encrypted using the BCrypt encoder
+        admin.setPassword(passwordEncoder.encode(rawNewPassword));
+        adminRepository.save(admin);
+    }
 }

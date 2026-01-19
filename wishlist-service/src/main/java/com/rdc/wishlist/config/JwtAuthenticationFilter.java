@@ -26,13 +26,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtUtil jwtUtil;
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request,
-                                    HttpServletResponse response,
-                                    FilterChain filterChain) throws ServletException, IOException {
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
+            throws ServletException, IOException {
 
         final String authHeader = request.getHeader("Authorization");
-
-        // No token provided
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
             return;
@@ -40,61 +37,34 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         try {
             final String jwt = authHeader.substring(7);
-
-            // Validate token
             if (!jwtUtil.validateToken(jwt)) {
-                log.warn("Invalid JWT token");
-                SecurityContextHolder.clearContext();
                 filterChain.doFilter(request, response);
                 return;
             }
 
-            // Extract claims from JWT
-            String email = jwtUtil.getEmailFromToken(jwt);
+            // MANDATORY FIX: Use Numeric Subject (userId) from token
+            String subject = jwtUtil.getSubjectFromToken(jwt);
+            Long userId = Long.parseLong(subject); // Fail request if non-numeric [cite: 3247]
             String role = jwtUtil.getRoleFromToken(jwt);
 
-            // Generate userId from email hash (same logic as Cart Service)
-            Long userId = generateUserIdFromEmail(email);
-
-            log.debug("JWT validated - Email: {}, Role: {}, UserId: {}", email, role, userId);
-
-            if (email != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-
-                // Create authority from role
-                // Auth Service stores "USER", we need "ROLE_USER" for Spring Security
+            if (userId != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                 List<SimpleGrantedAuthority> authorities = List.of(
                         new SimpleGrantedAuthority("ROLE_" + role.toUpperCase())
                 );
 
-                // Create UserPrincipal with userId, email, role
-                UserPrincipal principal = new UserPrincipal(userId, email, role);
-
-                // Create authentication token with UserPrincipal
+                UserPrincipal principal = new UserPrincipal(userId, null, role);
                 UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                        principal,
-                        null,
-                        authorities
+                        principal, null, authorities
                 );
 
                 authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 SecurityContextHolder.getContext().setAuthentication(authToken);
-
-                log.debug("Authenticated user: {} (userId: {}) with role: ROLE_{}", email, userId, role);
             }
-
         } catch (Exception e) {
-            log.error("JWT authentication failed: {}", e.getMessage());
+            log.error("Authentication Error: {}", e.getMessage());
             SecurityContextHolder.clearContext();
         }
 
         filterChain.doFilter(request, response);
-    }
-
-    /**
-     * Generate stable userId from email hash.
-     * Same logic as Cart Service for consistency across services.
-     */
-    private Long generateUserIdFromEmail(String email) {
-        return Math.abs(email.hashCode()) & 0x7FFFFFFFL;
     }
 }

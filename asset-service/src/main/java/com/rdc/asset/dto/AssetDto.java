@@ -1,16 +1,15 @@
 package com.rdc.asset.dto;
 
-import lombok.Data;
+import com.rdc.asset.model.AssetType; // ✅ Add this import
+import lombok.*;
 
 @Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class AssetDto {
     private String uuid;
     private String title;
-    private String description;
-    private String filename;
     private String contentType;
-    private Long sizeBytes;
-    private Long sellerId;
-    private Boolean isPublished;
-    private String url;
+    private AssetType assetType; // ✅ Change from String to AssetType
 }

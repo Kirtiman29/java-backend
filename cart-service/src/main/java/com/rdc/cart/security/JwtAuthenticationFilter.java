@@ -30,7 +30,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         final String authHeader = request.getHeader("Authorization");
 
-        // No token provided
+        // 1. Check for Bearer token [cite: 291]
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
             return;
@@ -39,30 +39,30 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         try {
             final String jwt = authHeader.substring(7);
 
-            // Validate token
+            // 2. Validate JWT structure and expiration [cite: 312, 313]
             if (!jwtUtil.validateToken(jwt)) {
-                log.warn("Invalid JWT token");
+                log.warn("Invalid JWT token provided");
                 filterChain.doFilter(request, response);
                 return;
             }
 
-            // Extract claims from JWT
-            String email = jwtUtil.extractEmail(jwt);
+            // 3. Extract claims - Numeric User ID is stored in the Subject claim [cite: 306, 311]
+            String userId = jwtUtil.extractEmail(jwt);
             String role = jwtUtil.extractRole(jwt);
 
-            log.debug("JWT validated - Email: {}, Role: {}", email, role);
+            log.debug("JWT validated - UserID: {}, Role: {}", userId, role);
 
-            if (email != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+            if (userId != null && SecurityContextHolder.getContext().getAuthentication() == null) {
 
-                // Create authority from role
-                // Auth Service stores "USER", we need "ROLE_USER" for Spring Security
+                // 4. Create authority with ROLE_ prefix for Spring Security [cite: 296, 297]
                 List<SimpleGrantedAuthority> authorities = List.of(
                         new SimpleGrantedAuthority("ROLE_" + role.toUpperCase())
                 );
 
-                // Create authentication token with UserPrincipal
+                // 5. CRITICAL FIX: Set numeric userId as the principal [cite: 222, 223]
+                // This ensures authentication.getName() returns the ID "2" instead of a UserPrincipal object string
                 UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                        new UserPrincipal(email, role),
+                        userId,
                         null,
                         authorities
                 );
@@ -70,11 +70,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 SecurityContextHolder.getContext().setAuthentication(authToken);
 
-                log.debug("Authenticated user: {} with role: ROLE_{}", email, role);
+                log.debug("Successfully authenticated userId: {} with ROLE_{}", userId, role);
             }
 
         } catch (Exception e) {
-            log.error("JWT authentication failed: {}", e.getMessage());
+            log.error("JWT authentication filter error: {}", e.getMessage());
         }
 
         filterChain.doFilter(request, response);

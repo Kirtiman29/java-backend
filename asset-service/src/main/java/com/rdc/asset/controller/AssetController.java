@@ -1,62 +1,97 @@
 package com.rdc.asset.controller;
 
 import com.rdc.asset.dto.AssetDto;
-import com.rdc.asset.service.AssetService;
-import com.rdc.asset.repo.AssetRepository;
 import com.rdc.asset.entity.Asset;
-import com.rdc.asset.service.FileStorageService;
+import com.rdc.asset.model.AssetType;
+import com.rdc.asset.repo.AssetRepository;
+import com.rdc.asset.service.AssetService;
+import com.rdc.asset.service.StorageProvider;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.ResponseEntity;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.io.InputStreamResource;
+import org.springframework.http.*;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
 
-import java.io.IOException;
-import java.util.List;
-
+import java.io.InputStream;
 
 @RestController
 @RequestMapping("/api/assets")
 @RequiredArgsConstructor
+@Slf4j
 public class AssetController {
 
     private final AssetService assetService;
     private final AssetRepository assetRepo;
-    private final FileStorageService fileStorageService;
+    private final StorageProvider storageProvider;
 
-    // Multipart Upload Endpoint for Admin [cite: 10]
     @PostMapping("/upload")
     public ResponseEntity<AssetDto> uploadAsset(
             @RequestParam("file") MultipartFile file,
             @RequestParam("title") String title,
-            @RequestParam(value = "description", required = false) String description,
-            @RequestParam("sellerId") Long sellerId
-    ) throws IOException {
-        return ResponseEntity.ok(assetService.uploadAndCreateAsset(file, title, description, sellerId));
+            @RequestParam("sellerId") Long sellerId,
+            @RequestParam("type") String type) throws Exception {
+        log.info("Processing upload for: {}", title);
+        AssetType assetType = AssetType.valueOf(type.toUpperCase());
+        AssetDto savedAsset = assetService.uploadAndCreateAsset(file, title, sellerId, assetType);
+        return ResponseEntity.status(HttpStatus.CREATED).body(savedAsset);
     }
 
-    // Download/Preview Endpoint - used by Admin Service for previews [cite: 11, 12]
-    @GetMapping("/{uuid}/download")
-    public ResponseEntity<byte[]> downloadAsset(@PathVariable String uuid) throws IOException {
+    @GetMapping("/public/{uuid}")
+    public ResponseEntity<?> streamPublic(@PathVariable String uuid) throws Exception {
         Asset asset = assetRepo.findByUuid(uuid)
-                .orElseThrow(() -> new RuntimeException("Asset not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Asset not found"));
 
-        byte[] data = fileStorageService.readAllBytes(asset.getFilename()); // [cite: 12, 52]
+        // Return metadata for TIFFs so Admin validation passes without downloading the whole file
+        if (asset.getAssetType() == AssetType.DESIGN_TIFF || asset.getAssetType() == AssetType.MASTER_TIFF) {
+            log.info("Returning metadata for restricted asset: {}", uuid);
+            return ResponseEntity.ok(new AssetDto(asset.getUuid(), asset.getTitle(), asset.getContentType(), asset.getAssetType()));
+        }
 
+        // Stream standard images directly
         return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_TYPE, asset.getContentType()) // [cite: 12]
-                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + asset.getFilename() + "\"") // [cite: 12]
-                .body(data);
+                .contentType(MediaType.parseMediaType(asset.getContentType()))
+                .body(new InputStreamResource(storageProvider.read(asset.getFilename())));
     }
 
-    // Metadata endpoint - used for Admin Service bridge validation [cite: 13, 303, 322]
-    @GetMapping("/{uuid}")
-    public ResponseEntity<AssetDto> getAsset(@PathVariable String uuid) {
-        return ResponseEntity.ok(assetService.getAssetByUuid(uuid));
+    @GetMapping("/download/{uuid}")
+    public ResponseEntity<InputStreamResource> downloadProtected(
+            @PathVariable String uuid,
+            @AuthenticationPrincipal(expression = "#this") Object principal) throws Exception {
+
+        // ✅ FIX: Extract JWT if present, otherwise null.
+        // This stops Spring from blocking the request before it hits our logic.
+        Jwt jwt = (principal instanceof Jwt) ? (Jwt) principal : null;
+
+        Asset asset = assetRepo.findByUuid(uuid)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+
+        // 🔒 SECURITY CHECK: Only allow TIFF downloads if user is authenticated and paid
+        if (asset.getAssetType() == AssetType.DESIGN_TIFF || asset.getAssetType() == AssetType.MASTER_TIFF) {
+            if (jwt == null) {
+                log.warn("Blocking public request for Master File: {}", uuid);
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Login required to download master files");
+            }
+
+            Long userId = Long.parseLong(jwt.getSubject());
+            InputStream stream = assetService.getProtectedStream(uuid, userId);
+            return serveFile(asset, stream);
+        }
+
+        // 🔓 PUBLIC ACCESS: Banners, Category icons, Previews
+        // This is safe and allows standard <img> tags to work.
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(asset.getContentType()))
+                .body(new InputStreamResource(storageProvider.read(asset.getFilename())));
     }
 
-    @GetMapping
-    public ResponseEntity<List<AssetDto>> getAll() {
-        return ResponseEntity.ok(assetService.getAllAssets()); // [cite: 14, 42]
+    private ResponseEntity<InputStreamResource> serveFile(Asset asset, InputStream stream) {
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(asset.getContentType()))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + asset.getOriginalFilename() + "\"")
+                .body(new InputStreamResource(stream));
     }
 }

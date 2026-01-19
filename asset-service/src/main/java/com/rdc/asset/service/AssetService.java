@@ -1,13 +1,13 @@
 package com.rdc.asset.service;
 
 import com.rdc.asset.dto.AssetDto;
+import com.rdc.asset.model.AssetType;
 import org.springframework.web.multipart.MultipartFile;
-import java.io.IOException;
+import java.io.InputStream;
 import java.util.List;
 
 public interface AssetService {
-    // Only multipart upload is allowed for creation
-    AssetDto uploadAndCreateAsset(MultipartFile file, String title, String description, Long sellerId) throws IOException;
-    AssetDto getAssetByUuid(String uuid);
-    List<AssetDto> getAllAssets();
+    AssetDto uploadAndCreateAsset(MultipartFile file, String title, Long sellerId, AssetType type) throws Exception;
+    InputStream getProtectedStream(String uuid, Long userId) throws Exception;
+    List<AssetDto> getAllAssets(); // Ensure this exists
 }

@@ -1,4 +1,6 @@
-CREATE TABLE assets (
+--V1__create_assets.sql
+
+CREATE TABLE IF NOT EXISTS assets (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   uuid VARCHAR(60) NOT NULL UNIQUE,
   title VARCHAR(255) NOT NULL,
@@ -6,12 +8,10 @@ CREATE TABLE assets (
   filename VARCHAR(512) NOT NULL,
   content_type VARCHAR(128),
   size_bytes BIGINT,
+  asset_type VARCHAR(50) NOT NULL, -- ✅ ADDED
   seller_id BIGINT NOT NULL,
   is_published BOOLEAN DEFAULT FALSE,
   is_deleted BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
-
-CREATE INDEX idx_assets_seller ON assets(seller_id);
-CREATE INDEX idx_assets_uuid ON assets(uuid);
