@@ -1,4 +1,3 @@
-// src/main/java/com/rdc/admin/controller/DesignController.java
 package com.rdc.admin.controller;
 
 import com.rdc.admin.dto.DesignCreateRequest;
@@ -9,35 +8,24 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/admin/designs")
 @RequiredArgsConstructor
+@RequestMapping("/api/admin/designs") // 🔒 Strictly for ROLE_ADMIN
 public class DesignController {
 
     private final DesignService designService;
 
     @PostMapping
     public ResponseEntity<DesignResponse> createDesign(@RequestBody DesignCreateRequest request) {
+        // Implementation logic handles the initial COVER media role [cite: 147]
         return new ResponseEntity<>(designService.createDesign(request), HttpStatus.CREATED);
     }
 
     @GetMapping
-    public ResponseEntity<List<DesignResponse>> getAllDesigns() {
+    public ResponseEntity<List<DesignResponse>> getAllDesignsAdmin() {
         return ResponseEntity.ok(designService.getAllDesigns());
-    }
-
-    @GetMapping("/{id}")
-    public ResponseEntity<DesignResponse> getDesignById(@PathVariable Long id) {
-        return ResponseEntity.ok(designService.getDesignById(id));
-    }
-
-    // NEW: Get designs by Segment (Menswear, Womenswear, etc.)
-    @GetMapping("/segment/{segment}")
-    public ResponseEntity<List<DesignResponse>> getBySegment(@PathVariable String segment) {
-        return ResponseEntity.ok(designService.getBySegment(segment));
     }
 
     @PutMapping("/{id}")

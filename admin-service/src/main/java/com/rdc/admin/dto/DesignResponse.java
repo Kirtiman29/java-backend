@@ -1,8 +1,8 @@
 package com.rdc.admin.dto;
 
 import lombok.*;
-import java.time.LocalDateTime;
 import java.util.List;
+import java.time.LocalDateTime;
 
 @Data
 @Builder
@@ -18,20 +18,17 @@ public class DesignResponse {
     private Integer discountPercent;
     private Boolean specialOffer;
     private Long categoryId;
-    private List<String> tags;
-    private Long assetId;
-    private String assetUuid;
+    private String segment;
+
+    // Flags
     private Boolean draft;
     private Boolean active;
     private Boolean trending;
     private Boolean editorsPick;
     private Boolean newArrival;
     private Boolean premium;
-    private String segment;
 
-    // NEW: List of all associated media (Gallery/Videos)
     private List<DesignMediaDto> media;
-
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

@@ -1,11 +1,14 @@
+// src/main/java/com/rdc/admin/dto/DesignMediaDto.java
 package com.rdc.admin.dto;
 
-import lombok.Builder;
-import lombok.Data;
+import lombok.*;
 
-@Data @Builder
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class DesignMediaDto {
     private String url;
-    private String type;
-    private Boolean primary;
+    private String type; // Will hold IMAGE, VIDEO, etc.
+    private String role; // Will hold COVER, GALLERY, etc.
 }

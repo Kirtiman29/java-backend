@@ -74,7 +74,6 @@ public class UserServiceImpl implements UserService {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new IllegalArgumentException("INVALID_CREDENTIALS"));
 
-        // Rule: User must be enabled and verified for production use (optional restriction)
         if (!user.isEnabled()) {
             throw new IllegalArgumentException("USER_DISABLED");
         }
@@ -83,7 +82,6 @@ public class UserServiceImpl implements UserService {
             throw new IllegalArgumentException("INVALID_CREDENTIALS");
         }
 
-        // Strict Production Rule: Enforce Role Separation (USER vs ADMIN)
         if (!user.getRole().equalsIgnoreCase(requiredRole)) {
             throw new IllegalArgumentException("UNAUTHORIZED_ROLE");
         }
@@ -91,28 +89,51 @@ public class UserServiceImpl implements UserService {
         return jwtUtil.generateToken(user);
     }
 
+    /**
+     * Google OAuth Authentication
+     * Handles both Registration and Login via Google [cite: 91-93]
+     */
     @Override
     @Transactional
     public String authenticateOrCreateGoogleUser(String email, String name, String pictureUrl) {
+        log.info("Authenticating Google user: {}", email);
+        return processSocialLogin(email, name);
+    }
+
+    /**
+     * Placeholder for Facebook OAuth
+     */
+    @Transactional
+    public String authenticateOrCreateFacebookUser(String email, String name) {
+        log.info("Authenticating Facebook user: {}", email);
+        return processSocialLogin(email, name);
+    }
+
+    /**
+     * Shared Internal logic for Social Auth
+     * Ensures consistent user creation and JWT generation
+     */
+    private String processSocialLogin(String email, String name) {
         User user = userRepository.findByEmail(email).orElseGet(() -> {
             User newUser = User.builder()
                     .email(email)
+                    // Use a random UUID for password as social users don't have local passwords
                     .passwordHash(UUID.randomUUID().toString())
                     .displayName(name)
                     .role("USER")
                     .createdAt(Instant.now())
-                    .isVerified(true) // Google users are auto-verified
+                    .isVerified(true) // Social users are auto-verified
                     .enabled(true)
                     .build();
             return userRepository.save(newUser);
         });
 
-        // Ensure user is marked verified if coming through Google OAuth
         if (!user.isVerified()) {
             user.setVerified(true);
             user = userRepository.save(user);
         }
 
+        // Return platform JWT with numeric user ID as 'sub'
         return jwtUtil.generateToken(user);
     }
 

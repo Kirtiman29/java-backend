@@ -1,26 +1,21 @@
+// src/main/java/com/rdc/admin/repository/DesignRepository.java
 package com.rdc.admin.repository;
 
 import com.rdc.admin.entity.Design;
-import com.rdc.admin.entity.Segment; // Ensure this is imported
+import com.rdc.admin.entity.Segment;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface DesignRepository extends JpaRepository<Design, Long> {
+    // Required for public SEO-friendly URLs [cite: 179, 341-343]
+    Optional<Design> findBySlug(String slug);
 
-    // Required for unique slug generation [cite: 637]
     boolean existsBySlug(String slug);
 
-    // NEW: Finder for Segment-based filtering
-    // This allows the getBySegment API to function
     List<Design> findBySegmentAndActiveTrue(Segment segment);
 
-    // Existing section filters [cite: 638]
-    List<Design> findByTrendingTrueAndActiveTrue();
-    List<Design> findByEditorsPickTrueAndActiveTrue();
-    List<Design> findByNewArrivalTrueAndActiveTrue();
-
-    // Public feed filter
     List<Design> findByDraftFalseAndActiveTrue();
 }

@@ -5,14 +5,24 @@ import java.util.List;
 
 @Data
 public class DesignUpdateRequest {
+    // Basic Info
     private String title;
     private String description;
-    private Integer basePriceCents;
+    private Long categoryId;
+    private String segment;
+
+    // Pricing
+    private Long basePriceCents;
     private Integer discountPercent;
     private Boolean specialOffer;
-    private String segment; // Can be updated
 
-    // Status & Section Flags
+    // Media Assets (UUIDs from Asset Service)
+    private String coverAssetUuid;
+    private List<String> galleryUuids;
+    private String previewVideoUuid;
+    private String downloadTiffUuid;
+
+    // UI & Status Flags
     private Boolean active;
     private Boolean draft;
     private Boolean trending;
@@ -21,5 +31,4 @@ public class DesignUpdateRequest {
     private Boolean premium;
 
     private List<String> tags;
-    private Long categoryId;
 }

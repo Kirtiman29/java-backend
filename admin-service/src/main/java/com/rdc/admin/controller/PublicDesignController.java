@@ -8,12 +8,27 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/public/designs")
+@RequestMapping("/api/designs") // ✅ Matched to SecurityConfig .permitAll()
 @RequiredArgsConstructor
 public class PublicDesignController {
 
     private final DesignService designService;
 
+    // Card Gallery / Storefront Feed
+    @GetMapping("/feed")
+    public ResponseEntity<List<DesignResponse>> getPublicFeed() {
+        // Returns designs where role = COVER
+        return ResponseEntity.ok(designService.getAllDesigns());
+    }
+
+    // Detail Page using SEO Slugs
+    @GetMapping("/slug/{slug}")
+    public ResponseEntity<DesignResponse> getPublicDesignBySlug(@PathVariable String slug) {
+        // Returns full gallery where MediaRole is GALLERY or PREVIEW_VIDEO
+        return ResponseEntity.ok(designService.getDesignBySlug(slug));
+    }
+
+    // Navigation Segments (Menswear, etc.)
     @GetMapping("/segment/{segment}")
     public ResponseEntity<List<DesignResponse>> getBySegment(@PathVariable String segment) {
         return ResponseEntity.ok(designService.getBySegment(segment));
@@ -22,7 +37,7 @@ public class PublicDesignController {
     @GetMapping("/{id}")
     public ResponseEntity<DesignResponse> getDesignById(@PathVariable Long id) {
         DesignResponse response = designService.getDesignById(id);
-        // Security check: Don't show drafts publicly
+        // Security check: Never show drafts to the public [cite: 159, 160]
         if (Boolean.TRUE.equals(response.getDraft())) {
             return ResponseEntity.notFound().build();
         }

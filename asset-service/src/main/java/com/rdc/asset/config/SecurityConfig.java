@@ -35,12 +35,15 @@ public class SecurityConfig {
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+
+                        // ✅ PUBLIC: Icons, health checks, AND the download endpoint
+                        // Logic inside the controller will still protect TIFF files.
+                        .requestMatchers(HttpMethod.GET, "/api/assets/download/**").permitAll()
                         .requestMatchers("/api/assets/public/**", "/actuator/health").permitAll()
 
-                        // ✅ FIX: Allows <img> tags to work without Authorization headers
-                        .requestMatchers(HttpMethod.GET, "/api/assets/download/**").permitAll()
-
+                        // 🔒 ADMIN ONLY: Uploading
                         .requestMatchers("/api/assets/upload").hasRole("ADMIN")
+
                         .anyRequest().authenticated()
                 )
                 .oauth2ResourceServer(oauth -> oauth

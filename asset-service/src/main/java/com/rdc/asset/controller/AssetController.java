@@ -7,7 +7,6 @@ import com.rdc.asset.repo.AssetRepository;
 import com.rdc.asset.service.AssetService;
 import com.rdc.asset.service.StorageProvider;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.*;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -15,74 +14,68 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
-
 import java.io.InputStream;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/assets")
 @RequiredArgsConstructor
-@Slf4j
 public class AssetController {
 
     private final AssetService assetService;
     private final AssetRepository assetRepo;
     private final StorageProvider storageProvider;
 
+    /**
+     * ✅ GET ALL ASSETS: Listing functionality
+     * Matches: GET http://localhost:8090/api/assets
+     */
+    @GetMapping
+    public ResponseEntity<List<AssetDto>> getAllAssets() {
+        return ResponseEntity.ok(assetService.getAllAssets());
+    }
+
+    /**
+     * ✅ UPLOAD ASSET: Admin only upload
+     */
     @PostMapping("/upload")
     public ResponseEntity<AssetDto> uploadAsset(
             @RequestParam("file") MultipartFile file,
             @RequestParam("title") String title,
             @RequestParam("sellerId") Long sellerId,
-            @RequestParam("type") String type) throws Exception {
-        log.info("Processing upload for: {}", title);
-        AssetType assetType = AssetType.valueOf(type.toUpperCase());
-        AssetDto savedAsset = assetService.uploadAndCreateAsset(file, title, sellerId, assetType);
-        return ResponseEntity.status(HttpStatus.CREATED).body(savedAsset);
+            @RequestParam("type") AssetType type) throws Exception {
+
+        AssetDto result = assetService.uploadAndCreateAsset(file, title, sellerId, type);
+        return new ResponseEntity<>(result, HttpStatus.CREATED);
     }
 
-    @GetMapping("/public/{uuid}")
-    public ResponseEntity<?> streamPublic(@PathVariable String uuid) throws Exception {
-        Asset asset = assetRepo.findByUuid(uuid)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Asset not found"));
-
-        // Return metadata for TIFFs so Admin validation passes without downloading the whole file
-        if (asset.getAssetType() == AssetType.DESIGN_TIFF || asset.getAssetType() == AssetType.MASTER_TIFF) {
-            log.info("Returning metadata for restricted asset: {}", uuid);
-            return ResponseEntity.ok(new AssetDto(asset.getUuid(), asset.getTitle(), asset.getContentType(), asset.getAssetType()));
-        }
-
-        // Stream standard images directly
-        return ResponseEntity.ok()
-                .contentType(MediaType.parseMediaType(asset.getContentType()))
-                .body(new InputStreamResource(storageProvider.read(asset.getFilename())));
-    }
-
+    /**
+     * ✅ DOWNLOAD ASSET: Handles Public Previews vs Paid TIFFs
+     */
     @GetMapping("/download/{uuid}")
     public ResponseEntity<InputStreamResource> downloadProtected(
             @PathVariable String uuid,
             @AuthenticationPrincipal(expression = "#this") Object principal) throws Exception {
 
-        // ✅ FIX: Extract JWT if present, otherwise null.
-        // This stops Spring from blocking the request before it hits our logic.
+        // principal is null if the request has no token (permitted by SecurityConfig)
         Jwt jwt = (principal instanceof Jwt) ? (Jwt) principal : null;
 
         Asset asset = assetRepo.findByUuid(uuid)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
 
-        // 🔒 SECURITY CHECK: Only allow TIFF downloads if user is authenticated and paid
-        if (asset.getAssetType() == AssetType.DESIGN_TIFF || asset.getAssetType() == AssetType.MASTER_TIFF) {
+        // 🔒 SECURE PATH: TIFF files require login and payment
+        if (asset.getAssetType() == AssetType.TIFF) {
             if (jwt == null) {
-                log.warn("Blocking public request for Master File: {}", uuid);
-                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Login required to download master files");
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Please login to download master files");
             }
 
             Long userId = Long.parseLong(jwt.getSubject());
+            // getProtectedStream verifies entitlement via Order Service
             InputStream stream = assetService.getProtectedStream(uuid, userId);
             return serveFile(asset, stream);
         }
 
-        // 🔓 PUBLIC ACCESS: Banners, Category icons, Previews
-        // This is safe and allows standard <img> tags to work.
+        // 🔓 PUBLIC PATH: IMAGE, VIDEO, etc. are served to guests
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(asset.getContentType()))
                 .body(new InputStreamResource(storageProvider.read(asset.getFilename())));

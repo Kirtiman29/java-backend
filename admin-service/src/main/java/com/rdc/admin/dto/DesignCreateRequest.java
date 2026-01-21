@@ -1,33 +1,29 @@
 package com.rdc.admin.dto;
 
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 import java.util.List;
 
 @Data
 public class DesignCreateRequest {
-    @NotBlank(message = "Title is required")
     private String title;
     private String description;
-    @NotNull(message = "Base price is required")
     private Long basePriceCents;
     private Integer discountPercent;
     private Boolean specialOffer;
-    @NotNull(message = "Category is required")
     private Long categoryId;
-    private List<String> tags;
-    private Long assetId;
-    private String assetUuid;
+    private String segment;
 
-    @NotBlank(message = "Segment is required (MENSWEAR, WOMENSWEAR, KIDSWEAR, HOME_INTERIOR)")
-    private String segment; // Added for header sections
+    // ✅ Bulk Media Assets
+    private String coverAssetUuid;
+    private List<String> galleryUuids;
+    private String previewVideoUuid;
+    private String downloadTiffUuid;
 
-    private Boolean active;
-    private Boolean draft;
-    private Boolean trending;
-    private Boolean editorsPick;
-    private String imageUuid;
-    private Boolean newArrival;
-    private Boolean premium; // Added for premium section
+    // ✅ Status & Section Flags
+    private Boolean active = true;
+    private Boolean draft = false;
+    private Boolean trending = false;
+    private Boolean editorsPick = false;
+    private Boolean newArrival = true;
+    private Boolean premium = false;
 }
