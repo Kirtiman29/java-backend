@@ -8,6 +8,5 @@ import java.util.List;
 
 public interface AssetService {
     AssetDto uploadAndCreateAsset(MultipartFile file, String title, Long sellerId, AssetType type) throws Exception;
-    InputStream getProtectedStream(String uuid, Long userId) throws Exception;
     List<AssetDto> getAllAssets(); // Ensure this exists
 }

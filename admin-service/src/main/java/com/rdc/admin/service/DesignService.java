@@ -47,15 +47,12 @@ public class DesignService {
         design.setSlug(generateUniqueSlug(request.getTitle()));
         design.setDescription(request.getDescription());
         design.setBasePriceCents(request.getBasePriceCents());
-
-        // ✅ Ensure categoryId is explicitly set
         design.setCategoryId(request.getCategoryId());
 
         if (request.getSegment() != null) {
             design.setSegment(Segment.valueOf(request.getSegment().toUpperCase()));
         }
 
-        // ✅ Set All Flags (Prevent Nulls)
         design.setActive(Boolean.TRUE.equals(request.getActive()));
         design.setDraft(Boolean.TRUE.equals(request.getDraft()));
         design.setTrending(Boolean.TRUE.equals(request.getTrending()));
@@ -63,14 +60,13 @@ public class DesignService {
         design.setNewArrival(Boolean.TRUE.equals(request.getNewArrival()));
         design.setPremium(Boolean.TRUE.equals(request.getPremium()));
 
-        // ✅ Pricing Logic (Prevent Nulls)
         design.setDiscountPercent(request.getDiscountPercent() != null ? request.getDiscountPercent() : 0);
         design.setSpecialOffer(Boolean.TRUE.equals(request.getSpecialOffer()));
         design.setFinalPriceCents(pricingService.calculateFinalPrice(design));
 
         Design savedDesign = repository.save(design);
 
-        // Process Media
+        // ✅ Process Media (TIFF Logic Removed)
         saveMedia(savedDesign.getId(), request.getCoverAssetUuid(), AssetType.IMAGE, MediaRole.COVER, 0);
         if (request.getGalleryUuids() != null) {
             for (int i = 0; i < request.getGalleryUuids().size(); i++) {
@@ -78,9 +74,7 @@ public class DesignService {
             }
         }
         saveMedia(savedDesign.getId(), request.getPreviewVideoUuid(), AssetType.VIDEO, MediaRole.PREVIEW_VIDEO, 0);
-        saveMedia(savedDesign.getId(), request.getDownloadTiffUuid(), AssetType.TIFF, MediaRole.DOWNLOAD, 0);
 
-        // Refresh and map
         return mapper.toResponse(savedDesign, mediaRepository.findByDesignId(savedDesign.getId()));
     }
 
@@ -102,7 +96,6 @@ public class DesignService {
 
         design.setFinalPriceCents(pricingService.calculateFinalPrice(design));
 
-        // Update Flags
         if (request.getActive() != null) design.setActive(request.getActive());
         if (request.getDraft() != null) design.setDraft(request.getDraft());
         if (request.getTrending() != null) design.setTrending(request.getTrending());
@@ -119,7 +112,6 @@ public class DesignService {
         if (request.getCoverAssetUuid() != null) replaceMediaRole(designId, MediaRole.COVER, List.of(request.getCoverAssetUuid()), AssetType.IMAGE);
         if (request.getGalleryUuids() != null) replaceMediaRole(designId, MediaRole.GALLERY, request.getGalleryUuids(), AssetType.IMAGE);
         if (request.getPreviewVideoUuid() != null) replaceMediaRole(designId, MediaRole.PREVIEW_VIDEO, List.of(request.getPreviewVideoUuid()), AssetType.VIDEO);
-        if (request.getDownloadTiffUuid() != null) replaceMediaRole(designId, MediaRole.DOWNLOAD, List.of(request.getDownloadTiffUuid()), AssetType.TIFF);
     }
 
     private void replaceMediaRole(Long designId, MediaRole role, List<String> uuids, AssetType type) {

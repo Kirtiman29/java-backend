@@ -64,7 +64,6 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
                         // 2. PUBLIC STOREFRONT (PRIORITY)
-                        // This allows guests to see the feed and detail pages without a token
                         .requestMatchers(HttpMethod.GET, "/api/designs/feed").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/designs/slug/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/designs/{id}").permitAll()
@@ -75,7 +74,6 @@ public class SecurityConfig {
                         .requestMatchers("/api/admin/login", "/api/public/**", "/actuator/**").permitAll()
 
                         // 4. ADMIN PROTECTED
-                        // Any path under /api/admin/ requires ROLE_ADMIN
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
 
                         // 5. CATCH-ALL

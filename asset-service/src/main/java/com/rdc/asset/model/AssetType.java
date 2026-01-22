@@ -5,5 +5,5 @@ public enum AssetType {
     VIDEO,
     GIF,
     MOCKUP,
-    TIFF
+    TIFF // Add this back so Hibernate doesn't crash on old data
 }

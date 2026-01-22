@@ -9,11 +9,10 @@ import com.rdc.asset.service.StorageProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.*;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
+
 import java.io.InputStream;
 import java.util.List;
 
@@ -27,7 +26,7 @@ public class AssetController {
     private final StorageProvider storageProvider;
 
     /**
-     * ✅ GET ALL ASSETS: Listing functionality
+     * ✅ GET ALL ASSETS
      * Matches: GET http://localhost:8090/api/assets
      */
     @GetMapping
@@ -36,7 +35,8 @@ public class AssetController {
     }
 
     /**
-     * ✅ UPLOAD ASSET: Admin only upload
+     * ✅ UPLOAD ASSET
+     * Admin-only endpoint for uploading images, videos, etc.
      */
     @PostMapping("/upload")
     public ResponseEntity<AssetDto> uploadAsset(
@@ -50,32 +50,16 @@ public class AssetController {
     }
 
     /**
-     * ✅ DOWNLOAD ASSET: Handles Public Previews vs Paid TIFFs
+     * ✅ DOWNLOAD ASSET (Public)
+     * All files (IMAGE, VIDEO, etc.) are now served as public previews.
+     * TIFF logic and Order Service verification have been removed.
      */
     @GetMapping("/download/{uuid}")
-    public ResponseEntity<InputStreamResource> downloadProtected(
-            @PathVariable String uuid,
-            @AuthenticationPrincipal(expression = "#this") Object principal) throws Exception {
-
-        // principal is null if the request has no token (permitted by SecurityConfig)
-        Jwt jwt = (principal instanceof Jwt) ? (Jwt) principal : null;
+    public ResponseEntity<InputStreamResource> downloadAsset(@PathVariable String uuid) throws Exception {
 
         Asset asset = assetRepo.findByUuid(uuid)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
 
-        // 🔒 SECURE PATH: TIFF files require login and payment
-        if (asset.getAssetType() == AssetType.TIFF) {
-            if (jwt == null) {
-                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Please login to download master files");
-            }
-
-            Long userId = Long.parseLong(jwt.getSubject());
-            // getProtectedStream verifies entitlement via Order Service
-            InputStream stream = assetService.getProtectedStream(uuid, userId);
-            return serveFile(asset, stream);
-        }
-
-        // 🔓 PUBLIC PATH: IMAGE, VIDEO, etc. are served to guests
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(asset.getContentType()))
                 .body(new InputStreamResource(storageProvider.read(asset.getFilename())));
