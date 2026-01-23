@@ -43,20 +43,24 @@ public class PaymentService {
 
     @Transactional
     public Payment initiatePayment(Long orderId, Long userId) throws Exception {
+        // Idempotency: Avoid creating duplicate gateway orders for the same payment session
         Optional<Payment> existing = paymentRepository.findByUserIdAndOrderId(userId, orderId)
                 .stream().filter(p -> p.getStatus() != PaymentStatus.FAILED).findFirst();
 
         if (existing.isPresent()) {
+            log.info("🛒 Returning existing active payment session for Order ID: {}", orderId);
             return existing.get();
         }
 
+        // Fetch verified total from Order Service via secure internal bridge
         Integer amountCents = fetchAmountFromOrderService(orderId, userId);
 
         JSONObject orderRequest = new JSONObject();
         orderRequest.put("amount", amountCents);
         orderRequest.put("currency", "INR");
-        orderRequest.put("receipt", "order_" + orderId);
+        orderRequest.put("receipt", "order_rcpt_" + orderId);
 
+        // Interact with Razorpay Gateway
         com.razorpay.Order razorpayOrder = razorpayClient.orders.create(orderRequest);
 
         Payment payment = Payment.builder()
@@ -74,6 +78,8 @@ public class PaymentService {
 
     private Integer fetchAmountFromOrderService(Long orderId, Long userId) {
         String url = orderServiceUrl + "/api/internal/orders/" + orderId;
+        log.info("📡 Fetching verified amount from Order Service: {}", url);
+
         HttpHeaders headers = new HttpHeaders();
         headers.set("X-INTERNAL-KEY", internalServiceKey);
         HttpEntity<Void> entity = new HttpEntity<>(headers);
@@ -81,12 +87,22 @@ public class PaymentService {
         try {
             ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.GET, entity, Map.class);
             Map data = response.getBody();
+
             if (data == null || !data.get("userId").toString().equals(userId.toString())) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+                log.error("❌ Access denied: Order {} does not belong to user {}", orderId, userId);
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied: Order ownership mismatch");
             }
-            return (Integer) data.get("totalPriceCents");
+
+            // ✅ SAFE TYPE CONVERSION: Order service sends Long, Jackson might parse as Integer/Long
+            Object priceObj = data.get("totalPriceCents");
+            if (priceObj instanceof Number) {
+                return ((Number) priceObj).intValue();
+            } else {
+                throw new RuntimeException("Invalid price data format received from Order Service");
+            }
+
         } catch (Exception e) {
-            log.error("Failed to reach Order Service: {}", e.getMessage());
+            log.error("❌ Bridge failure to Order Service at {}: {}", url, e.getMessage());
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Order Service Unreachable");
         }
     }
@@ -95,6 +111,7 @@ public class PaymentService {
     public boolean verifySignatureAndMarkPaid(String orderId, String paymentId, String signature) {
         try {
             if ("SANDBOX_SUCCESS".equals(signature)) return markAsPaid(orderId, paymentId, signature);
+
             JSONObject options = new JSONObject();
             options.put("razorpay_order_id", orderId);
             options.put("razorpay_payment_id", paymentId);
@@ -105,13 +122,15 @@ public class PaymentService {
             }
             return false;
         } catch (Exception e) {
+            log.error("❌ Signature verification failed for Order {}: {}", orderId, e.getMessage());
             return false;
         }
     }
 
     private boolean markAsPaid(String orderId, String paymentId, String signature) {
         Payment p = paymentRepository.findByGatewayOrderId(orderId)
-                .orElseThrow(() -> new RuntimeException("Payment not found"));
+                .orElseThrow(() -> new RuntimeException("Payment record not found for Gateway ID: " + orderId));
+
         if (p.getStatus() == PaymentStatus.PAID) return true;
 
         p.setStatus(PaymentStatus.PAID);
@@ -119,6 +138,7 @@ public class PaymentService {
         p.setGatewaySignature(signature);
         paymentRepository.save(p);
 
+        // Notify Order Service to update its status to PAID and clear the cart
         notifyOrderService(p.getOrderId());
         return true;
     }
@@ -126,12 +146,15 @@ public class PaymentService {
     private void notifyOrderService(Long orderId) {
         try {
             String url = orderServiceUrl + "/api/internal/orders/" + orderId + "/paid";
+            log.info("📣 Notifying Order Service of successful payment: {}", url);
+
             HttpHeaders headers = new HttpHeaders();
             headers.set("X-INTERNAL-KEY", internalServiceKey);
             HttpEntity<Void> entity = new HttpEntity<>(headers);
+
             restTemplate.postForEntity(url, entity, Void.class);
         } catch (Exception e) {
-            log.error("Bridge failure: {}", e.getMessage());
+            log.error("⚠️ Failed to notify Order Service of payment for order {}: {}", orderId, e.getMessage());
         }
     }
 }

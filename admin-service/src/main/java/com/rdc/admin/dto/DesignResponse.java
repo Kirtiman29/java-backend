@@ -9,6 +9,7 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 public class DesignResponse {
+
     private Long id;
     private String title;
     private String slug;
@@ -19,7 +20,7 @@ public class DesignResponse {
     private Boolean specialOffer;
     private Long categoryId;
     private String segment;
-
+    private String assetUuid;
     // Flags
     private Boolean draft;
     private Boolean active;

@@ -27,48 +27,64 @@ public class CartServiceImpl implements CartService {
     @Override
     @Transactional
     public CartItemResponse addToCart(Long userId, CartItemRequest request) {
-        log.info("Adding to cart: userId={}, designId={}", userId, request.getDesignId());
+        log.info("🛒 Attempting to add to cart: userId={}, designId={}", userId, request.getDesignId());
 
-        // 1. Fetch design from Admin Service (validates existence) [cite: 336]
+        // 1. Fetch design from Admin Service
         DesignDto design = adminServiceClient.getDesignById(request.getDesignId());
 
-        // 2. HARD VALIDATION - Prevent sales of drafts, inactive, or unready designs [cite: 173, 174]
-        if (design == null || Boolean.TRUE.equals(design.getDraft()) || !Boolean.TRUE.equals(design.getActive())) {
+        // 2. DEBUG LOGGING: Verify exact contents of the fetched design
+        log.debug("📦 Fetched Design Info: ID={}, Title={}, UUID={}, Active={}, Draft={}",
+                design.getId(), design.getTitle(), design.getAssetUuid(), design.getActive(), design.getDraft());
+
+        // 3. HARD VALIDATION
+        if (design == null) {
+            throw new DesignNotAvailableException("Design information could not be retrieved");
+        }
+
+        if (Boolean.TRUE.equals(design.getDraft()) || !Boolean.TRUE.equals(design.getActive())) {
+            log.warn("⚠️ Design {} is either a draft or inactive. Blocking purchase.", design.getId());
             throw new DesignNotAvailableException("Design is not available for purchase");
         }
 
-        // 3. SECURE SOURCE OF TRUTH: Block if assetUuid is missing to avoid 500 errors [cite: 257]
-        if (design.getAssetUuid() == null) {
-            log.error("Design {} has no assetUuid - blocking purchase", design.getId());
+        // 4. SECURE SOURCE OF TRUTH: Check for assetUuid
+        // If this still fails after updating DTO, the Admin Service isn't sending the field
+        if (design.getAssetUuid() == null || design.getAssetUuid().isBlank()) {
+            log.error("❌ CRITICAL: Design {} has no assetUuid in the API response!", design.getId());
             throw new DesignNotAvailableException("Design asset is not ready for download");
         }
 
-        // 4. Check for existing item to update quantity instead of duplicating [cite: 338]
+        if (design.getFinalPriceCents() == null) {
+            log.error("❌ CRITICAL: Design {} has no price in the API response!", design.getId());
+            throw new DesignNotAvailableException("Design pricing is not configured");
+        }
+
+        // 5. Idempotency Check: Update quantity if item already exists
         Optional<CartItem> existingItem = cartItemRepository
                 .findByUserIdAndDesignIdAndDeletedFalse(userId, request.getDesignId());
 
         if (existingItem.isPresent()) {
             CartItem item = existingItem.get();
+            log.info("🔄 Item exists. Updating quantity for CartID: {}", item.getId());
             item.setQuantity(item.getQuantity() + request.getQuantity());
-            item.setPriceCents(design.getFinalPriceCents()); // Lock latest price at add time [cite: 339]
+            item.setPriceCents(design.getFinalPriceCents());
             item.setDesignTitle(design.getTitle());
             item.setAssetUuid(design.getAssetUuid());
             return toResponse(cartItemRepository.save(item));
         }
 
-        // 5. Create new entry using ONLY sale-safe fields [cite: 341, 342]
-        CartItem item = CartItem.builder()
+        // 6. Create new entry
+        CartItem newItem = CartItem.builder()
                 .userId(userId)
                 .designId(design.getId())
                 .designTitle(design.getTitle())
-                .assetUuid(design.getAssetUuid()) // Only use UUID, never internal IDs [cite: 257]
-                .priceCents(design.getFinalPriceCents()) // Snapshot price [cite: 342]
+                .assetUuid(design.getAssetUuid())
+                .priceCents(design.getFinalPriceCents())
                 .quantity(request.getQuantity())
                 .deleted(false)
                 .build();
 
-        log.debug("Saving cart item with assetUuid: {}", design.getAssetUuid());
-        return toResponse(cartItemRepository.save(item));
+        log.info("✅ Successfully saved new cart item for design: {}", design.getTitle());
+        return toResponse(cartItemRepository.save(newItem));
     }
 
     @Override
@@ -88,7 +104,7 @@ public class CartServiceImpl implements CartService {
 
         if (quantity <= 0) {
             item.setDeleted(true);
-            log.info("Soft deleting item {}", cartItemId);
+            log.info("🗑️ Removed item {} from cart", cartItemId);
         } else {
             item.setQuantity(quantity);
         }
@@ -102,21 +118,20 @@ public class CartServiceImpl implements CartService {
                 .orElseThrow(() -> new CartItemNotFoundException("Cart item not found"));
         item.setDeleted(true);
         cartItemRepository.save(item);
+        log.info("🗑️ Soft deleted cart item: {}", cartItemId);
     }
 
     @Override
     @Transactional
     public void clearCart(Long userId) {
-        cartItemRepository.softDeleteAllByUserId(userId);
+        int deletedCount = cartItemRepository.softDeleteAllByUserId(userId);
+        log.info("🧹 Cleared {} items from cart for user {}", deletedCount, userId);
     }
 
     @Override
     @Transactional(readOnly = true)
     public long getCartItemCount(Long userId) {
-        return cartItemRepository.findByUserIdAndDeletedFalse(userId)
-                .stream()
-                .mapToLong(CartItem::getQuantity)
-                .sum();
+        return cartItemRepository.countByUserIdAndDeletedFalse(userId);
     }
 
     private CartItemResponse toResponse(CartItem item) {

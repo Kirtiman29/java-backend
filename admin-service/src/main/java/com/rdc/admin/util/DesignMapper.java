@@ -25,7 +25,7 @@ public class DesignMapper {
                 .specialOffer(design.getSpecialOffer())
                 .categoryId(design.getCategoryId())
                 .segment(design.getSegment() != null ? design.getSegment().name() : null)
-                // ✅ Added missing flags mapping
+                .assetUuid(design.getAssetUuid())
                 .active(design.getActive())
                 .draft(design.getDraft())
                 .trending(design.getTrending())

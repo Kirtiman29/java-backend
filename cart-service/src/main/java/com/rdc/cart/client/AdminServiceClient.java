@@ -6,17 +6,14 @@ import com.rdc.cart.exception.DesignNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpStatus;
+import org.springframework.http.*;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
+import jakarta.servlet.http.HttpServletRequest;
 
-/**
- * Client for communicating with Admin Service.
- * Fetches design information including price.
- *
- * Uses the PUBLIC endpoint (no auth required)
- */
 @Component
 @RequiredArgsConstructor
 @Slf4j
@@ -27,49 +24,48 @@ public class AdminServiceClient {
     @Value("${service.admin.url:http://localhost:8080}")
     private String adminServiceUrl;
 
-    /**
-     * Fetch design by ID from Admin Service.
-     * Uses PUBLIC endpoint - no authentication required.
-     *
-     * @param designId Design ID to fetch
-     * @return DesignDto with all design information including price
-     * @throws DesignNotFoundException if design doesn't exist
-     * @throws DesignNotAvailableException if design is draft or inactive
-     */
     public DesignDto getDesignById(Long designId) {
-        // Using PUBLIC endpoint - no auth needed
-        String url = adminServiceUrl + "/api/public/designs/" + designId;
-
-        log.info("Fetching design from Admin Service: {}", url);
+        String url = adminServiceUrl + "/api/designs/" + designId; // ✅ Match Admin Controller path
+        log.info("Fetching design from Admin Service with token forwarding: {}", url);
 
         try {
-            DesignDto design = restTemplate.getForObject(url, DesignDto.class);
+            // ✅ FORWARD THE TOKEN
+            HttpHeaders headers = new HttpHeaders();
+            String token = getAuthorizationHeader();
+            if (token != null) {
+                headers.set("Authorization", token);
+            }
+            HttpEntity<Void> entity = new HttpEntity<>(headers);
 
+            // ✅ Use exchange to send headers
+            ResponseEntity<DesignDto> response = restTemplate.exchange(
+                    url, HttpMethod.GET, entity, DesignDto.class);
+
+            DesignDto design = response.getBody();
             if (design == null) {
                 throw new DesignNotFoundException("Design not found: " + designId);
             }
 
-            // Validate design is available for purchase
             validateDesignAvailability(design);
-
             return design;
 
         } catch (HttpClientErrorException e) {
-            if (e.getStatusCode() == HttpStatus.NOT_FOUND) {
-                throw new DesignNotFoundException("Design not found: " + designId);
+            if (e.getStatusCode() == HttpStatus.UNAUTHORIZED) {
+                log.error("❌ Admin Service rejected request. Path might be protected or token invalid.");
             }
-            log.error("Error fetching design from Admin Service: {}", e.getMessage());
             throw new RuntimeException("Failed to fetch design from Admin Service", e);
         }
     }
 
-    /**
-     * Validate that design can be added to cart.
-     * Design must be:
-     * - Not a draft
-     * - Active
-     * - Have a valid price
-     */
+    private String getAuthorizationHeader() {
+        ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+        if (attributes != null) {
+            HttpServletRequest request = attributes.getRequest();
+            return request.getHeader("Authorization");
+        }
+        return null;
+    }
+
     private void validateDesignAvailability(DesignDto design) {
         if (Boolean.TRUE.equals(design.getDraft())) {
             throw new DesignNotAvailableException(
