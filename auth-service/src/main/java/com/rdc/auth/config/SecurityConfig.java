@@ -12,7 +12,6 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.web.cors.CorsConfigurationSource;
-
 import java.util.List;
 
 @Configuration
@@ -24,11 +23,11 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .authorizeHttpRequests(auth -> auth
-                        // Publicly accessible endpoints
+                        // 1. Public endpoints for login/signup
                         .requestMatchers("/auth/**", "/error", "/actuator/**").permitAll()
-                        // Mandatory Production Rule: Admin-only protection
+                        // 2. Admin protected routes
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
-                        // All other endpoints require generic authentication
+                        // 3. Global authentication for everything else
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(sess -> sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
@@ -38,14 +37,13 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        // Frontend Origin
+        // ✅ FIXED: Comprehensive list of allowed origins for industrial frontend
         config.setAllowedOrigins(List.of(
-                "http://localhost:3000",   // User Storefront (Standard Port)
-                "http://localhost:3001",   // New Admin Panel (Standalone Port)
-                "http://localhost:5173",   // Vite Default Port (Development)
-                "http://127.0.0.1:5173",
+                "http://localhost:3000",
+                "http://localhost:3001",
+                "http://localhost:5173",
                 "http://127.0.0.1:3000",
-                "http://127.0.0.1:3001"
+                "http://127.0.0.1:5173"
         ));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         config.setAllowedHeaders(List.of("*"));

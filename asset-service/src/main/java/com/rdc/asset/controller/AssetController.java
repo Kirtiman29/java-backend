@@ -12,8 +12,6 @@ import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
-
-import java.io.InputStream;
 import java.util.List;
 
 @RestController
@@ -25,19 +23,11 @@ public class AssetController {
     private final AssetRepository assetRepo;
     private final StorageProvider storageProvider;
 
-    /**
-     * ✅ GET ALL ASSETS
-     * Matches: GET http://localhost:8090/api/assets
-     */
     @GetMapping
     public ResponseEntity<List<AssetDto>> getAllAssets() {
         return ResponseEntity.ok(assetService.getAllAssets());
     }
 
-    /**
-     * ✅ UPLOAD ASSET
-     * Admin-only endpoint for uploading images, videos, etc.
-     */
     @PostMapping("/upload")
     public ResponseEntity<AssetDto> uploadAsset(
             @RequestParam("file") MultipartFile file,
@@ -51,24 +41,21 @@ public class AssetController {
 
     /**
      * ✅ DOWNLOAD ASSET (Public)
-     * All files (IMAGE, VIDEO, etc.) are now served as public previews.
-     * TIFF logic and Order Service verification have been removed.
+     * Matches SecurityConfig: .requestMatchers(HttpMethod.GET, "/api/assets/download/**").permitAll()
      */
     @GetMapping("/download/{uuid}")
     public ResponseEntity<InputStreamResource> downloadAsset(@PathVariable String uuid) throws Exception {
 
+        // 🚨 Validation: Prevent "null" strings or empty paths from triggering internal errors
+        if (uuid == null || uuid.trim().isEmpty() || uuid.equalsIgnoreCase("null")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid Asset UUID provided");
+        }
+
         Asset asset = assetRepo.findByUuid(uuid)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Asset not found"));
 
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(asset.getContentType()))
                 .body(new InputStreamResource(storageProvider.read(asset.getFilename())));
-    }
-
-    private ResponseEntity<InputStreamResource> serveFile(Asset asset, InputStream stream) {
-        return ResponseEntity.ok()
-                .contentType(MediaType.parseMediaType(asset.getContentType()))
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + asset.getOriginalFilename() + "\"")
-                .body(new InputStreamResource(stream));
     }
 }
