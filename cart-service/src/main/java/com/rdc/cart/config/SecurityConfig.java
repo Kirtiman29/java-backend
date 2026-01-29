@@ -32,7 +32,8 @@ public class SecurityConfig {
                 "http://localhost:3001",   // Admin Panel
                 "http://localhost:5173",   // Vite Dev Server
                 "http://127.0.0.1:3000",
-                "http://127.0.0.1:3001"
+                "http://127.0.0.1:3001",
+                "https://localhost:3000"
         ));
         config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         config.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "Accept", "X-Requested-With"));

@@ -26,18 +26,13 @@ public class DesignClientService {
     private String designServiceUrl;
 
     /**
-     * Fetch design by ID from Design Service.
-     * Uses PUBLIC endpoint - no authentication required.
-     *
-     * @param designId Design ID to fetch
-     * @return DesignDto with design information
-     * @throws DesignNotFoundException if design doesn't exist
+     * ✅ Fetch design by ID from Admin Service.
+     * Uses PUBLIC endpoint: /api/public/designs/{id}
      */
     public DesignDto getDesignById(Long designId) {
-        // Using PUBLIC endpoint - /api/public/designs/{id}
         String url = designServiceUrl + "/api/public/designs/" + designId;
 
-        log.debug("Fetching design from service: {}", url);
+        log.debug("📡 Requesting metadata from Admin Service: {}", url);
 
         try {
             DesignDto design = restTemplate.getForObject(url, DesignDto.class);
@@ -50,34 +45,33 @@ public class DesignClientService {
 
         } catch (HttpClientErrorException e) {
             if (e.getStatusCode() == HttpStatus.NOT_FOUND) {
-                throw new DesignNotFoundException("Design not found: " + designId);
+                throw new DesignNotFoundException("Design metadata not found for ID: " + designId);
             }
-            log.error("Error fetching design: {}", e.getMessage());
-            throw new RuntimeException("Failed to fetch design", e);
+            log.error("❌ Admin Service error ({}): {}", e.getStatusCode(), e.getResponseBodyAsString());
+            throw new RuntimeException("Communication failure with Admin Service");
+        } catch (Exception e) {
+            log.error("❌ Critical fetch failure: {}", e.getMessage());
+            throw new RuntimeException("Internal Service Communication Error");
         }
     }
 
     /**
-     * Validate that design exists and is available for wishlist.
-     * Design must be:
-     * - Not a draft
-     * - Active
-     *
-     * @param designId Design ID to validate
-     * @throws DesignNotFoundException if design doesn't exist
-     * @throws DesignNotAvailableException if design is draft or inactive
+     * ✅ Validate that design is live and active before wishlisting.
      */
     public void validateDesignForWishlist(Long designId) {
         DesignDto design = getDesignById(designId);
 
+        // ✅ FIXED: Null-safe check for Title to prevent crashes
+        String designTitle = design.getTitle() != null ? design.getTitle() : "ID: " + designId;
+
         if (Boolean.TRUE.equals(design.getDraft())) {
             throw new DesignNotAvailableException(
-                    "Design '" + design.getTitle() + "' is a draft and cannot be added to wishlist");
+                    "Design '" + designTitle + "' is a draft and cannot be saved.");
         }
 
         if (Boolean.FALSE.equals(design.getActive())) {
             throw new DesignNotAvailableException(
-                    "Design '" + design.getTitle() + "' is not active and cannot be added to wishlist");
+                    "Design '" + designTitle + "' is currently inactive.");
         }
     }
 }

@@ -33,11 +33,33 @@ public class DesignService {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * ✅ FIXED: Specific method for Trending section to strictly filter and limit
+     */
+    @Transactional(readOnly = true)
+    public List<DesignResponse> getTrendingRecent(int limit) {
+        return repository.findByDraftFalseAndActiveTrue().stream()
+                .filter(d -> Boolean.TRUE.equals(d.getTrending())) // Filter only trending
+                .sorted((d1, d2) -> d2.getId().compareTo(d1.getId())) // Recent first by ID
+                .limit(limit) // Strictly apply limit of 8
+                .map(design -> mapper.toResponse(design, mediaRepository.findByDesignId(design.getId())))
+                .collect(Collectors.toList());
+    }
+
     @Transactional(readOnly = true)
     public DesignResponse getDesignBySlug(String slug) {
         Design design = repository.findBySlug(slug)
                 .orElseThrow(() -> new ResourceNotFoundException("Design not found with slug: " + slug));
         return mapper.toResponse(design, mediaRepository.findByDesignId(design.getId()));
+    }
+
+    @Transactional(readOnly = true)
+    public List<DesignResponse> getEditorsPicks(int limit) {
+        return repository.findByDraftFalseAndActiveTrue().stream()
+                .filter(d -> Boolean.TRUE.equals(d.getEditorsPick()))
+                .limit(limit)
+                .map(design -> mapper.toResponse(design, mediaRepository.findByDesignId(design.getId())))
+                .collect(Collectors.toList());
     }
 
     @Transactional
@@ -48,6 +70,7 @@ public class DesignService {
         design.setDescription(request.getDescription());
         design.setBasePriceCents(request.getBasePriceCents());
         design.setCategoryId(request.getCategoryId());
+        design.setAssetUuid(request.getCoverAssetUuid());
 
         if (request.getSegment() != null) {
             design.setSegment(Segment.valueOf(request.getSegment().toUpperCase()));
@@ -66,7 +89,6 @@ public class DesignService {
 
         Design savedDesign = repository.save(design);
 
-        // ✅ Process Media (TIFF Logic Removed)
         saveMedia(savedDesign.getId(), request.getCoverAssetUuid(), AssetType.IMAGE, MediaRole.COVER, 0);
         if (request.getGalleryUuids() != null) {
             for (int i = 0; i < request.getGalleryUuids().size(); i++) {
@@ -86,6 +108,11 @@ public class DesignService {
             design.setTitle(request.getTitle());
             design.setSlug(generateUniqueSlug(request.getTitle()));
         }
+
+        if (request.getCoverAssetUuid() != null) {
+            design.setAssetUuid(request.getCoverAssetUuid());
+        }
+
         if (request.getDescription() != null) design.setDescription(request.getDescription());
         if (request.getCategoryId() != null) design.setCategoryId(request.getCategoryId());
         if (request.getSegment() != null) design.setSegment(Segment.valueOf(request.getSegment().toUpperCase()));
@@ -126,7 +153,13 @@ public class DesignService {
     private void saveMedia(Long designId, String uuid, AssetType type, MediaRole role, int order) {
         if (uuid == null || uuid.isBlank()) return;
         assetClientService.validateAsset(uuid);
-        mediaRepository.save(DesignMedia.builder().designId(designId).assetUuid(uuid).assetType(type).mediaRole(role).sortOrder(order).build());
+        mediaRepository.save(DesignMedia.builder()
+                .designId(designId)
+                .assetUuid(uuid)
+                .assetType(type)
+                .mediaRole(role)
+                .sortOrder(order)
+                .build());
     }
 
     @Transactional(readOnly = true)

@@ -2,6 +2,7 @@ package com.rdc.order.service;
 
 import com.rdc.order.client.CartServiceClient;
 import com.rdc.order.dto.CartItemDto;
+import com.rdc.order.dto.OrderItemResponse; // ✅ Ensure this is imported
 import com.rdc.order.dto.OrderResponse;
 import com.rdc.order.entity.Order;
 import com.rdc.order.entity.OrderItem;
@@ -28,7 +29,7 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     public OrderResponse createOrder(Long userId) {
-        // 1. Fetch items from Cart Service [cite: 46-48]
+        // 1. Fetch items from Cart Service [cite: 137]
         List<CartItemDto> cartItems = cartServiceClient.getCartItems(userId);
         if (cartItems == null || cartItems.isEmpty()) {
             throw new EmptyCartException("Cart is empty.");
@@ -55,15 +56,11 @@ public class OrderServiceImpl implements OrderService {
         order.setTotalPriceCents(total);
         Order saved = orderRepository.save(order);
 
-        // 2. Clear cart after successful order creation [cite: 49-51]
+        // 2. Clear cart after successful order creation
         cartServiceClient.clearCart(userId);
         return mapToResponse(saved);
     }
 
-    /**
-     * SECURE ENTITLEMENT CHECK
-     * Required by Asset Service to verify payment before streaming MASTER_TIFF files.
-     */
     @Override
     @Transactional(readOnly = true)
     public boolean hasUserPaidForAsset(Long userId, String assetUuid) {
@@ -124,6 +121,10 @@ public class OrderServiceImpl implements OrderService {
         orderRepository.save(order);
     }
 
+    /**
+     * ✅ FIXED: Added mapping for OrderItems
+     * This ensures the frontend receives the list of designs/assets purchased.
+     */
     private OrderResponse mapToResponse(Order order) {
         return OrderResponse.builder()
                 .id(order.getId())
@@ -132,6 +133,18 @@ public class OrderServiceImpl implements OrderService {
                 .status(order.getStatus())
                 .createdAt(order.getCreatedAt())
                 .updatedAt(order.getUpdatedAt())
+                // ✅ Added Item Mapping logic here
+                .items(order.getItems().stream()
+                        .map(item -> OrderItemResponse.builder()
+                                .id(item.getId())
+                                .designId(item.getDesignId())
+                                .assetUuid(item.getAssetUuid())
+                                .designTitle(item.getDesignTitle())
+                                .quantity(item.getQuantity())
+                                .priceCents(item.getPriceCents())
+                                .totalPriceCents(item.getTotalPriceCents())
+                                .build())
+                        .collect(Collectors.toList()))
                 .build();
     }
 }

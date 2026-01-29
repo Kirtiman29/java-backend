@@ -26,19 +26,23 @@ public class WishlistServiceImpl implements WishlistService {
     public void addToWishlist(Long userId, Long designId) {
         log.info("Adding design {} to wishlist for user {}", designId, userId);
 
-        // Validate design exists and is available (not draft, is active)
-        designClientService.validateDesignForWishlist(designId);
+        try {
+            // 1. Validate design exists and is active via Admin Service (Port 8080)
+            designClientService.validateDesignForWishlist(designId);
 
-        // Check if already in wishlist
-        if (!repository.existsByUserIdAndDesignId(userId, designId)) {
-            Wishlist item = Wishlist.builder()
-                    .userId(userId)
-                    .designId(designId)
-                    .build();
-            repository.save(item);
-            log.info("Design {} added to wishlist for user {}", designId, userId);
-        } else {
-            log.info("Design {} already in wishlist for user {}", designId, userId);
+            // 2. Check if already in wishlist to prevent duplicates
+            if (!repository.existsByUserIdAndDesignId(userId, designId)) {
+                Wishlist item = Wishlist.builder()
+                        .userId(userId)
+                        .designId(designId)
+                        .build();
+                repository.save(item);
+                log.info("✅ Design {} successfully added to wishlist for user {}", designId, userId);
+            }
+        } catch (Exception e) {
+            log.error("❌ Error adding to wishlist: {}", e.getMessage());
+            // Re-throw to let GlobalExceptionHandler return appropriate status code
+            throw e;
         }
     }
 
@@ -46,30 +50,31 @@ public class WishlistServiceImpl implements WishlistService {
     @Transactional(readOnly = true)
     public List<WishlistResponse> getUserWishlist(Long userId) {
         log.info("Fetching wishlist for user {}", userId);
-
         List<Wishlist> items = repository.findByUserId(userId);
 
         return items.stream().map(item -> {
             try {
-                // Fetch design from PUBLIC endpoint
+                // Fetch design metadata from Admin Service
                 DesignDto design = designClientService.getDesignById(item.getDesignId());
 
+                // ✅ FIX: Use fallbacks for NULL database columns to prevent 500 errors
                 return WishlistResponse.builder()
                         .designId(item.getDesignId())
-                        .title(design.getTitle())
+                        .title(design.getTitle() != null ? design.getTitle() : "Unknown Design")
                         .slug(design.getSlug())
-                        .assetUuid(design.getAssetUuid())
-                        .basePriceCents(design.getBasePriceCents())
-                        .finalPriceCents(design.getFinalPriceCents())
-                        .discountPercent(design.getDiscountPercent())
-                        .specialOffer(design.getSpecialOffer())
+                        .assetUuid(design.getAssetUuid() != null ? design.getAssetUuid() : "placeholder-uuid")
+                        .basePriceCents(design.getBasePriceCents() != null ? design.getBasePriceCents() : 0L)
+                        .finalPriceCents(design.getFinalPriceCents() != null ? design.getFinalPriceCents() : 0L)
+                        .discountPercent(design.getDiscountPercent() != null ? design.getDiscountPercent() : 0)
+                        .specialOffer(Boolean.TRUE.equals(design.getSpecialOffer()))
                         .build();
 
             } catch (Exception e) {
-                log.warn("Failed to fetch design {}: {}", item.getDesignId(), e.getMessage());
-                // Fallback if design service is down
+                log.warn("⚠️ Data mismatch: Could not map design {}: {}", item.getDesignId(), e.getMessage());
+                // ✅ RESILIENCE: Return a placeholder so the entire list doesn't fail
                 return WishlistResponse.builder()
                         .designId(item.getDesignId())
+                        .title("Item Unavailable")
                         .build();
             }
         }).collect(Collectors.toList());

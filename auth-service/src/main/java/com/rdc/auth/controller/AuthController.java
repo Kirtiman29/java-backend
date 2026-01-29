@@ -17,6 +17,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
+import java.security.Principal;
 import java.util.Collections;
 import java.util.Map;
 
@@ -40,6 +41,55 @@ public class AuthController {
             "Check your Spam folder and mark the email as 'Not Spam'.";
 
     /**
+     * ✅ NEW: Get Current User Profile
+     * Used by the Profile page to show name and email
+     */
+    @GetMapping("/me")
+    public ResponseEntity<?> getCurrentUser(Principal principal) {
+        try {
+            // principal.getName() returns the 'sub' (numeric userId) from the JWT
+            Long userId = Long.parseLong(principal.getName());
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new RuntimeException("USER_NOT_FOUND"));
+
+            return ResponseEntity.ok(Map.of(
+                    "name", user.getDisplayName() != null ? user.getDisplayName() : "User",
+                    "email", user.getEmail()
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+    }
+
+    /**
+     * ✅ NEW: Refresh Access Token
+     * Uses the 1-week refresh token to generate a new 15-min access token
+     */
+    @PostMapping("/refresh")
+    public ResponseEntity<?> refreshToken(@RequestBody RefreshTokenRequest req) {
+        try {
+            String refreshToken = req.getRefreshToken();
+
+            // Validate token and extract userId
+            if (jwtUtil.isTokenExpired(refreshToken)) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "REFRESH_TOKEN_EXPIRED"));
+            }
+
+            Long userId = Long.parseLong(jwtUtil.getSubjectFromToken(refreshToken));
+            User user = userRepository.findById(userId).orElseThrow();
+
+            // Generate new pair
+            return ResponseEntity.ok(new TokenResponse(
+                    jwtUtil.generateToken(user),
+                    jwtUtil.generateRefreshToken(user),
+                    jwtUtil.getAccessTokenExpirationSeconds()
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "INVALID_REFRESH_TOKEN"));
+        }
+    }
+
+    /**
      * Google OAuth Authentication Endpoint
      * Verifies ID Token from Frontend and creates/logs in user
      */
@@ -48,7 +98,6 @@ public class AuthController {
         String idTokenString = request.get("idToken");
 
         try {
-            // 1. Verify the token with Google's servers
             GoogleIdTokenVerifier verifier = new GoogleIdTokenVerifier.Builder(new NetHttpTransport(), new GsonFactory())
                     .setAudience(Collections.singletonList(googleClientId))
                     .build();
@@ -63,10 +112,8 @@ public class AuthController {
             String name = (String) payload.get("name");
             String pictureUrl = (String) payload.get("picture");
 
-            // 2. Use existing Service logic to create or fetch user [cite: 91-93]
+            // Create or fetch user and return tokens
             String accessToken = userService.authenticateOrCreateGoogleUser(email, name, pictureUrl);
-
-            // 3. Retrieve user to generate Refresh Token [cite: 29]
             User user = userRepository.findByEmail(email).orElseThrow();
 
             return ResponseEntity.ok(new TokenResponse(

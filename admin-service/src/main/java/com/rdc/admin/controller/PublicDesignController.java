@@ -8,7 +8,8 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/designs") // ✅ Matched to SecurityConfig .permitAll()
+// ✅ FIXED: Added "/public" to match Wishlist Service expectation
+@RequestMapping("/api/public/designs")
 @RequiredArgsConstructor
 public class PublicDesignController {
 
@@ -17,14 +18,12 @@ public class PublicDesignController {
     // Card Gallery / Storefront Feed
     @GetMapping("/feed")
     public ResponseEntity<List<DesignResponse>> getPublicFeed() {
-        // Returns designs where role = COVER
         return ResponseEntity.ok(designService.getAllDesigns());
     }
 
     // Detail Page using SEO Slugs
     @GetMapping("/slug/{slug}")
     public ResponseEntity<DesignResponse> getPublicDesignBySlug(@PathVariable String slug) {
-        // Returns full gallery where MediaRole is GALLERY or PREVIEW_VIDEO
         return ResponseEntity.ok(designService.getDesignBySlug(slug));
     }
 
@@ -37,8 +36,9 @@ public class PublicDesignController {
     @GetMapping("/{id}")
     public ResponseEntity<DesignResponse> getDesignById(@PathVariable Long id) {
         DesignResponse response = designService.getDesignById(id);
-        // Security check: Never show drafts to the public [cite: 159, 160]
-        if (Boolean.TRUE.equals(response.getDraft())) {
+
+        // ✅ Safety Check: Prevent public from seeing drafts
+        if (response == null || Boolean.TRUE.equals(response.getDraft())) {
             return ResponseEntity.notFound().build();
         }
         return ResponseEntity.ok(response);

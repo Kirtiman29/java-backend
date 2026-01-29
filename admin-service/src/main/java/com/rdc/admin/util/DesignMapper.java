@@ -11,6 +11,10 @@ import java.util.stream.Collectors;
 @Component
 public class DesignMapper {
 
+    /**
+     * ✅ Maps Design Entity to DesignResponse DTO.
+     * Includes the primary assetUuid and resolved media URLs[cite: 410, 415].
+     */
     public DesignResponse toResponse(Design design, List<DesignMedia> mediaList) {
         if (design == null) return null;
 
@@ -25,13 +29,18 @@ public class DesignMapper {
                 .specialOffer(design.getSpecialOffer())
                 .categoryId(design.getCategoryId())
                 .segment(design.getSegment() != null ? design.getSegment().name() : null)
+
+                // ✅ This field will now be populated correctly from the DB column
                 .assetUuid(design.getAssetUuid())
+
                 .active(design.getActive())
                 .draft(design.getDraft())
                 .trending(design.getTrending())
                 .editorsPick(design.getEditorsPick())
                 .newArrival(design.getNewArrival())
                 .premium(design.getPremium())
+
+                // Maps individual roles (COVER, GALLERY, etc.) to full URLs [cite: 413, 415]
                 .media(mediaList != null ? mediaList.stream().map(this::mapMedia).collect(Collectors.toList()) : List.of())
                 .createdAt(design.getCreatedAt())
                 .updatedAt(design.getUpdatedAt())
@@ -40,6 +49,7 @@ public class DesignMapper {
 
     private DesignMediaDto mapMedia(DesignMedia media) {
         return DesignMediaDto.builder()
+                // ✅ Resolved via the Asset Service on Port 8090
                 .url("http://localhost:8090/api/assets/download/" + media.getAssetUuid())
                 .type(media.getAssetType() != null ? media.getAssetType().name() : "IMAGE")
                 .role(media.getMediaRole() != null ? media.getMediaRole().name() : "GALLERY")

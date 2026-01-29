@@ -34,18 +34,18 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        // 1. Allow Pre-flight OPTIONS requests (Crucial for CORS)
+                        // 1. Allow Pre-flight OPTIONS requests for CORS [cite: 461]
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
-                        // 2. PUBLIC: Allow anyone to view/download assets (Images/Videos)
+                        // 2. ✅ FIXED: Permit both /api/assets/download/{uuid} AND /api/assets/{uuid}/download
+                        // This allows browser <img> tags to load images publicly
                         .requestMatchers(HttpMethod.GET, "/api/assets/download/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/assets/*/download").permitAll()
 
                         // 3. PUBLIC: Internal health and metrics
                         .requestMatchers("/actuator/**", "/api/assets/public/**").permitAll()
 
-                        // 4. PROTECTED UPLOAD:
-                        // If you still get 401, change .hasRole("ADMIN") to .permitAll()
-                        // to verify if the issue is the Token or the Network.
+                        // 4. ADMIN ONLY: Management and Uploads [cite: 463]
                         .requestMatchers(HttpMethod.POST, "/api/assets/upload").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/assets").hasRole("ADMIN")
 
@@ -59,47 +59,37 @@ public class SecurityConfig {
         return http.build();
     }
 
-    /**
-     * Converts the "role" claim from the Admin Service JWT into Spring's ROLE_ADMIN.
-     */
     @Bean
     public JwtAuthenticationConverter jwtAuthenticationConverter() {
         JwtGrantedAuthoritiesConverter converter = new JwtGrantedAuthoritiesConverter();
-        // This adds "ROLE_" prefix to the claim found in the JWT
-        converter.setAuthorityPrefix("ROLE_");
-        // This must match the key used in your Admin Service's JwtUtils (usually "role")
-        converter.setAuthoritiesClaimName("role");
+        converter.setAuthorityPrefix("ROLE_"); // [cite: 467]
+        converter.setAuthoritiesClaimName("role"); // [cite: 467]
 
         JwtAuthenticationConverter jwtConverter = new JwtAuthenticationConverter();
         jwtConverter.setJwtGrantedAuthoritiesConverter(converter);
         return jwtConverter;
     }
 
-    /**
-     * Configures the decoder to use the shared secret key.
-     * Ensure your application.properties has the exact same jwt.secret as Admin Service.
-     */
     @Bean
     public JwtDecoder jwtDecoder() {
-        SecretKeySpec secretKey = new SecretKeySpec(jwtSecret.getBytes(), "HmacSHA256");
-        return NimbusJwtDecoder.withSecretKey(secretKey).build();
+        SecretKeySpec secretKey = new SecretKeySpec(jwtSecret.getBytes(), "HmacSHA256"); // [cite: 469]
+        return NimbusJwtDecoder.withSecretKey(secretKey).build(); // [cite: 470]
     }
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        // Allow the frontend dev server
         config.setAllowedOrigins(List.of(
-                "http://localhost:3000",   // User Storefront (Standard Port)
-                "http://localhost:3001",   // New Admin Panel (Standalone Port)
-                "http://localhost:5173",   // Vite Default Port (Development)
-                "http://127.0.0.1:5173",
+                "http://localhost:3000",
+                "http://localhost:3001",
+                "http://localhost:5173",
                 "http://127.0.0.1:3000",
-                "http://127.0.0.1:3001"
-        ));
-        config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
-        config.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "Accept", "X-Requested-With"));
-        config.setAllowCredentials(true);
+                "http://127.0.0.1:3001",
+                "https://localhost:3000"
+        )); // [cite: 472]
+        config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH")); // [cite: 473]
+        config.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "Accept", "X-Requested-With")); // [cite: 473]
+        config.setAllowCredentials(true); // [cite: 473]
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
