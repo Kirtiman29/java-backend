@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<body style="font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: auto; border: 1px solid #eee; padding: 20px;">
+<h2 style="color: #2A2623; border-bottom: 2px solid #2A2623; padding-bottom: 10px;">Payment Successful ✅</h2>
+
+<p>Hello <strong th:text="${name}">User</strong>,</p>
+<p>Thank you for your purchase from <strong>RDC Industrial Archive</strong>. Your payment has been verified.</p>
+
+<div style="background-color: #f9f9f9; padding: 15px; border-radius: 8px; margin: 20px 0;">
+    <h3 style="margin-top: 0; color: #2A2623;">Order Summary</h3>
+    <p><strong>Order Reference:</strong> ORD-<span th:text="${orderId}"></span></p>
+    <p><strong>Amount Paid:</strong> ₹<span th:text="${#numbers.formatDecimal(amount, 1, 2)}"></span></p>
+</div>
+
+<h4 style="color: #2A2623;">Purchased Designs:</h4>
+<ul>
+    <li th:each="item : ${items}" style="margin-bottom: 5px;">
+        <span th:text="${item.designTitle}">Design Name</span> (Qty: <span th:text="${item.quantity}">1</span>)
+    </li>
+</ul>
+
+<div style="border-left: 4px solid #2A2623; padding: 10px 15px; background-color: #fff9f9; margin: 25px 0;">
+    <p style="margin: 0; font-weight: bold;">📩 TIFF File Delivery Notice:</p>
+    <p style="margin: 5px 0 0 0; font-size: 0.9em;">
+        Your high-resolution <strong>TIFF files</strong> will be delivered to this email address within <strong>24 hours</strong>.
+        Initial orders are manually shared by our admin team for quality assurance.
+    </p>
+</div>
+
+<p style="font-size: 0.8em; color: #777; margin-top: 30px; text-align: center;">
+    &copy; 2026 RDC Industrial Archive. This is a secure automated transaction receipt.
+</p>
+</body>
+</html>

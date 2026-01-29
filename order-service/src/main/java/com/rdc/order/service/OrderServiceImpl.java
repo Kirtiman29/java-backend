@@ -1,8 +1,9 @@
 package com.rdc.order.service;
 
+import com.rdc.order.client.AuthServiceClient; // ✅ Added
 import com.rdc.order.client.CartServiceClient;
 import com.rdc.order.dto.CartItemDto;
-import com.rdc.order.dto.OrderItemResponse; // ✅ Ensure this is imported
+import com.rdc.order.dto.OrderItemResponse;
 import com.rdc.order.dto.OrderResponse;
 import com.rdc.order.entity.Order;
 import com.rdc.order.entity.OrderItem;
@@ -16,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -26,10 +28,11 @@ public class OrderServiceImpl implements OrderService {
 
     private final OrderRepository orderRepository;
     private final CartServiceClient cartServiceClient;
+    private final OrderEmailService orderEmailService;
+    private final AuthServiceClient authServiceClient; // ✅ Injected
 
     @Override
     public OrderResponse createOrder(Long userId) {
-        // 1. Fetch items from Cart Service [cite: 137]
         List<CartItemDto> cartItems = cartServiceClient.getCartItems(userId);
         if (cartItems == null || cartItems.isEmpty()) {
             throw new EmptyCartException("Cart is empty.");
@@ -56,7 +59,6 @@ public class OrderServiceImpl implements OrderService {
         order.setTotalPriceCents(total);
         Order saved = orderRepository.save(order);
 
-        // 2. Clear cart after successful order creation
         cartServiceClient.clearCart(userId);
         return mapToResponse(saved);
     }
@@ -65,10 +67,7 @@ public class OrderServiceImpl implements OrderService {
     @Transactional(readOnly = true)
     public boolean hasUserPaidForAsset(Long userId, String assetUuid) {
         log.info("Verifying purchase for userId: {} and asset: {}", userId, assetUuid);
-
-        // Fetch PAID orders for this numeric userId
         List<Order> paidOrders = orderRepository.findByUserIdAndStatus(userId, OrderStatus.PAID.name());
-
         return paidOrders.stream()
                 .flatMap(order -> order.getItems().stream())
                 .anyMatch(item -> assetUuid.equals(item.getAssetUuid()));
@@ -85,7 +84,29 @@ public class OrderServiceImpl implements OrderService {
         }
 
         order.setStatus(status);
-        orderRepository.save(order);
+        Order updatedOrder = orderRepository.save(order);
+
+        // ✅ DYNAMIC EMAIL TRIGGER
+        if (OrderStatus.PAID.name().equals(status)) {
+            log.info("📣 Payment confirmed for Order {}. Fetching user info for email.", orderId);
+
+            try {
+                // Fetch real user data from Auth Service
+                Map<String, Object> userMeta = authServiceClient.getUserMetadata(order.getUserId());
+
+                if (userMeta != null) {
+                    String realEmail = (String) userMeta.get("email");
+                    String realName = (String) userMeta.get("name");
+
+                    log.info("📧 Sending confirmation to: {}", realEmail);
+                    orderEmailService.sendOrderConfirmation(updatedOrder, realEmail, realName);
+                } else {
+                    log.error("⚠️ Could not send email: User metadata not found for ID {}", order.getUserId());
+                }
+            } catch (Exception e) {
+                log.error("❌ Email trigger failed: {}", e.getMessage());
+            }
+        }
     }
 
     @Override @Transactional(readOnly = true)
@@ -112,19 +133,13 @@ public class OrderServiceImpl implements OrderService {
     public void cancelOrder(Long orderId, Long userId) {
         Order order = orderRepository.findByIdAndUserId(orderId, userId)
                 .orElseThrow(() -> new OrderNotFoundException("Order not found"));
-
         if (!OrderStatus.CREATED.name().equals(order.getStatus())) {
             throw new IllegalStateException("Only CREATED orders can be cancelled.");
         }
-
         order.setStatus(OrderStatus.CANCELLED.name());
         orderRepository.save(order);
     }
 
-    /**
-     * ✅ FIXED: Added mapping for OrderItems
-     * This ensures the frontend receives the list of designs/assets purchased.
-     */
     private OrderResponse mapToResponse(Order order) {
         return OrderResponse.builder()
                 .id(order.getId())
@@ -133,7 +148,6 @@ public class OrderServiceImpl implements OrderService {
                 .status(order.getStatus())
                 .createdAt(order.getCreatedAt())
                 .updatedAt(order.getUpdatedAt())
-                // ✅ Added Item Mapping logic here
                 .items(order.getItems().stream()
                         .map(item -> OrderItemResponse.builder()
                                 .id(item.getId())

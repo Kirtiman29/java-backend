@@ -1,134 +1,37 @@
 <!DOCTYPE html>
-<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<html xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8">
-    <title>Verify your RDC account</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
+<body style="font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: auto; border: 1px solid #eee; padding: 20px;">
 
-<body style="margin:0;padding:0;background-color:#f8fafc;
-             font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;
-             color:#111827;">
+<h2 style="color: #2A2623; border-bottom: 2px solid #2A2623; padding-bottom: 10px;">Verify Your Account ✅</h2>
 
-<table width="100%" cellpadding="0" cellspacing="0" role="presentation">
-    <tr>
-        <td align="center" style="padding:48px 16px;">
+<p>Welcome to <strong>RDC Industrial Archive</strong>.</p>
+<p>To activate your professional textile design account and access our high-resolution archive, please confirm your email address by clicking the button below.</p>
 
-            <!-- Email Container -->
-            <table width="600" cellpadding="0" cellspacing="0" role="presentation"
-                   style="max-width:600px;background:#ffffff;
-                    border-radius:16px;border:1px solid #e5e7eb;">
+<div style="text-align: center; margin: 30px 0;">
+    <a th:href="${verificationLink}"
+       style="background-color: #2A2623; color: #ffffff; padding: 15px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
+        Verify Email Address
+    </a>
+</div>
 
-                <!-- Header -->
-                <tr>
-                    <td style="padding:32px 40px;border-bottom:1px solid #e5e7eb;text-align:center;">
-                        <h1 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.3px;">
-                            RDC · Ruchita Design Studio
-                        </h1>
-                    </td>
-                </tr>
+<div style="border-left: 4px solid #2A2623; padding: 10px 15px; background-color: #f0f4f8; margin: 25px 0;">
+    <p style="margin: 0; font-size: 0.9em; color: #2A2623;">
+        This activation link is valid for <strong>24 hours</strong>. After verification, you can immediately begin acquiring digital assets.
+    </p>
+</div>
 
-                <!-- Body -->
-                <tr>
-                    <td style="padding:40px;">
+<p style="font-size: 0.8em; color: #888;">
+    Trouble clicking? Copy and paste this URL:<br>
+    <span th:text="${verificationLink}" style="word-break: break-all; color: #2A2623;"></span>
+</p>
 
-                        <h2 style="margin:0 0 12px;font-size:20px;font-weight:700;">
-                            Verify your email address
-                        </h2>
-
-                        <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#374151;">
-                            Thank you for creating an account with <strong>Ruchita Design Company</strong>.
-                        </p>
-
-                        <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#374151;">
-                            To activate your account and access our professional textile design archive,
-                            please confirm your email address by clicking the button below.
-                        </p>
-
-                        <!-- CTA Button -->
-                        <table cellpadding="0" cellspacing="0" role="presentation" style="margin:24px 0;">
-                            <tr>
-                                <td>
-                                    <a th:href="${verificationLink}"
-                                       target="_blank"
-                                       style="display:inline-block;
-                            background:#CC000E;color:#ffffff;
-                            padding:14px 28px;
-                            border-radius:10px;
-                            font-size:13px;
-                            font-weight:700;
-                            letter-spacing:0.08em;
-                            text-transform:uppercase;
-                            text-decoration:none;">
-                                        Verify Email
-                                    </a>
-                                </td>
-                            </tr>
-                        </table>
-
-                        <!-- Expiry Info -->
-                        <p style="margin:0 0 20px;font-size:13px;color:#6b7280;">
-                            This verification link will expire in <strong>24 hours</strong>.
-                        </p>
-
-                        <!-- Fallback Link -->
-                        <p style="margin:24px 0 8px;font-size:13px;color:#6b7280;">
-                            If the button does not work, copy and paste this link into your browser:
-                        </p>
-
-                        <p style="margin:0;
-                      padding:12px;
-                      background:#f9fafb;
-                      border:1px dashed #e5e7eb;
-                      border-radius:8px;
-                      font-size:12px;
-                      word-break:break-all;">
-                            <a th:href="${verificationLink}"
-                               th:text="${verificationLink}"
-                               target="_blank"
-                               style="color:#CC000E;text-decoration:none;"></a>
-                        </p>
-
-                        <!-- Security Note -->
-                        <p style="margin:24px 0 0;font-size:13px;line-height:1.6;color:#6b7280;">
-                            If you did not create an RDC account, you can safely ignore this email.
-                            The account will not be activated without verification.
-                        </p>
-
-                    </td>
-                </tr>
-
-                <!-- Footer -->
-                <tr>
-                    <td style="padding:32px 40px;
-                     border-top:1px solid #e5e7eb;
-                     background:#f9fafb;">
-                        <p style="margin:0 0 6px;font-size:13px;color:#374151;">
-                            Regards,<br>
-                            <strong>The RDC Team</strong>
-                        </p>
-
-                        <p style="margin:0;font-size:12px;color:#9ca3af;">
-                            © 2020 Ruchita Design Company
-                        </p>
-                    </td>
-                </tr>
-
-            </table>
-
-            <!-- Footer Note -->
-            <p style="margin-top:24px;font-size:12px;color:#9ca3af;text-align:center;">
-                This is an automated verification email.<br>
-                Need assistance?
-                <a href="mailto:support@ruchitadesigncompany.com"
-                   style="color:#CC000E;text-decoration:none;">
-                    support@ruchitadesigncompany.com
-                </a>
-            </p>
-
-        </td>
-    </tr>
-</table>
-
+<hr style="border: 0; border-top: 1px solid #eee; margin-top: 30px;">
+<p style="font-size: 0.8em; color: #777; text-align: center;">
+    &copy; 2026 RDC Industrial Archive. Secure Automated System.
+</p>
 </body>
 </html>

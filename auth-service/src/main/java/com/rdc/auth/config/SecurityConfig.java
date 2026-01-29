@@ -25,9 +25,15 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // 1. Public endpoints for login/signup
                         .requestMatchers("/auth/**", "/error", "/actuator/**").permitAll()
-                        // 2. Admin protected routes
+
+                        // ✅ 2. NEW: Permit internal user metadata fetching
+                        // Security is handled at the Controller level via X-INTERNAL-KEY
+                        .requestMatchers("/api/users/**").permitAll()
+
+                        // 3. Admin protected routes [cite: 250]
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
-                        // 3. Global authentication for everything else
+
+                        // 4. Global authentication for everything else [cite: 251]
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(sess -> sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
@@ -37,7 +43,6 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        // ✅ FIXED: Comprehensive list of allowed origins for industrial frontend
         config.setAllowedOrigins(List.of(
                 "http://localhost:3000",
                 "http://localhost:3001",
