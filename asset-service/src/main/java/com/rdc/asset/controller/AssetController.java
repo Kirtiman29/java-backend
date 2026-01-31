@@ -26,9 +26,12 @@ public class AssetController {
 
     @GetMapping
     public ResponseEntity<List<AssetDto>> getAllAssets() {
-        return ResponseEntity.ok(assetService.getAllAssets()); // [cite: 477]
+        return ResponseEntity.ok(assetService.getAllAssets());
     }
 
+    /**
+     * 🔒 ADMIN UPLOAD: Standard design uploads
+     */
     @PostMapping("/upload")
     public ResponseEntity<AssetDto> uploadAsset(
             @RequestParam("file") MultipartFile file,
@@ -36,35 +39,46 @@ public class AssetController {
             @RequestParam("sellerId") Long sellerId,
             @RequestParam("type") AssetType type) throws Exception {
 
-        AssetDto result = assetService.uploadAndCreateAsset(file, title, sellerId, type); // [cite: 479]
-        return new ResponseEntity<>(result, HttpStatus.CREATED); // [cite: 480]
+        AssetDto result = assetService.uploadAndCreateAsset(file, title, sellerId, type);
+        return new ResponseEntity<>(result, HttpStatus.CREATED);
     }
 
     /**
-     * ✅ DOWNLOAD ASSET (Public)
-     * Matches SecurityConfig: /api/assets/download/{uuid} OR /api/assets/{uuid}/download
+     * 🌍 PUBLIC RESUME UPLOAD: Used by Careers Page
+     * Fixed: Uses AssetType.DOCUMENT
      */
+    @PostMapping("/resume-upload")
+    public ResponseEntity<AssetDto> uploadResume(@RequestParam("file") MultipartFile file) throws Exception {
+        if (!"application/pdf".equals(file.getContentType())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only PDF resumes are accepted");
+        }
+
+        // We use sellerId 0L for system-generated/public uploads
+        AssetDto result = assetService.uploadAndCreateAsset(
+                file,
+                "CANDIDATE_RESUME",
+                0L,
+                AssetType.DOCUMENT // ✅ Ensure this exists in your AssetType enum
+        );
+        return new ResponseEntity<>(result, HttpStatus.CREATED);
+    }
+
     @GetMapping({"/download/{uuid}", "/{uuid}/download"})
     public ResponseEntity<InputStreamResource> downloadAsset(@PathVariable String uuid) throws Exception {
-
-        // Guard against null strings from frontend [cite: 482]
         if (uuid == null || uuid.trim().isEmpty() || uuid.equalsIgnoreCase("null")) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid Asset UUID");
         }
 
-        // Fetch metadata from DB [cite: 482]
         Asset asset = assetRepo.findByUuid(uuid)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Asset UUID not found in database"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Asset UUID not found"));
 
-        // Attempt to stream physical file from local storage [cite: 483, 524]
         try {
             InputStream stream = storageProvider.read(asset.getFilename());
             return ResponseEntity.ok()
-                    .contentType(MediaType.parseMediaType(asset.getContentType())) // [cite: 483]
-                    .body(new InputStreamResource(stream)); // [cite: 483]
+                    .contentType(MediaType.parseMediaType(asset.getContentType()))
+                    .body(new InputStreamResource(stream));
         } catch (Exception e) {
-            // This is likely where your 404 occurs if the file is missing from ./data/uploads
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Physical file missing on server disk at: " + asset.getFilename());
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Physical file missing on server");
         }
     }
 }

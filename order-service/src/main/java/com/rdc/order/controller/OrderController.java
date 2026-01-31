@@ -29,17 +29,36 @@ public class OrderController {
         return ResponseEntity.status(HttpStatus.CREATED).body(orderService.createOrder(userId));
     }
 
+    /**
+     * ✅ HYBRID ACCESS:
+     * ADMIN: Fetches ALL orders for the transaction dashboard.
+     * USER: Fetches only their personal acquisitions.
+     */
     @GetMapping
     public ResponseEntity<List<OrderResponse>> getOrders(@AuthenticationPrincipal Jwt jwt) {
+        if (isAdmin(jwt)) {
+            log.info("Administrative access: Fetching global ledger");
+            return ResponseEntity.ok(orderService.getAllOrders());
+        }
+
         Long userId = getUserIdFromJwt(jwt);
         log.info("Fetching orders for userId: {}", userId);
         return ResponseEntity.ok(orderService.getOrdersByUser(userId));
     }
 
+    /**
+     * ✅ HYBRID ACCESS:
+     * ADMIN: Can view any order details by ID.
+     * USER: Restricted to their own order via Service Layer check.
+     */
     @GetMapping("/{orderId}")
     public ResponseEntity<OrderResponse> getOrder(@PathVariable Long orderId, @AuthenticationPrincipal Jwt jwt) {
+        if (isAdmin(jwt)) {
+            log.info("Administrative detail view for orderId: {}", orderId);
+            return ResponseEntity.ok(orderService.getOrderByIdAdmin(orderId));
+        }
+
         Long userId = getUserIdFromJwt(jwt);
-        // Ownership check is handled in the service layer [cite: 153, 154]
         return ResponseEntity.ok(orderService.getOrderById(orderId, userId));
     }
 
@@ -49,21 +68,27 @@ public class OrderController {
         OrderResponse order = orderService.getOrderById(orderId, userId);
 
         if (!"PAID".equals(order.getStatus())) {
-            throw new ResponseStatusException(HttpStatus.PAYMENT_REQUIRED, "Order must be PAID to download.");
+            throw new ResponseStatusException(HttpStatus.PAYMENT_REQUIRED, "Order must be PAID to download assets.");
         }
 
-        // Industrial Placeholder for temporary download link [cite: 75]
-        return ResponseEntity.ok(Map.of("downloadUrl", "https://assets.rdc.com/temp-access-link"));
+        // Bridge to Asset Service for the temporary industrial design link
+        return ResponseEntity.ok(Map.of("downloadUrl", "http://localhost:8090/api/assets/download/" + orderId));
+    }
+
+    // ✅ HELPER: Check for ADMIN role in the JWT
+    private boolean isAdmin(Jwt jwt) {
+        List<String> roles = jwt.getClaimAsStringList("role");
+        return roles != null && roles.contains("ADMIN");
     }
 
     private Long getUserIdFromJwt(Jwt jwt) {
         String subject = jwt.getSubject();
         try {
-            // Extracts the numeric ID from the JWT "sub" claim [cite: 76, 77]
+            // Numeric subject mapping from Auth Service
             return Long.parseLong(subject);
         } catch (NumberFormatException e) {
-            log.error("Critical Auth Error: Non-numeric sub in JWT: {}", subject);
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid User ID in Token");
+            log.error("Critical Identity Error: Non-numeric sub in JWT: {}", subject);
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid Industrial User ID");
         }
     }
 }

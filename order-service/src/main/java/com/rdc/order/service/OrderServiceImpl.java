@@ -1,6 +1,6 @@
 package com.rdc.order.service;
 
-import com.rdc.order.client.AuthServiceClient; // ✅ Added
+import com.rdc.order.client.AuthServiceClient;
 import com.rdc.order.client.CartServiceClient;
 import com.rdc.order.dto.CartItemDto;
 import com.rdc.order.dto.OrderItemResponse;
@@ -29,7 +29,26 @@ public class OrderServiceImpl implements OrderService {
     private final OrderRepository orderRepository;
     private final CartServiceClient cartServiceClient;
     private final OrderEmailService orderEmailService;
-    private final AuthServiceClient authServiceClient; // ✅ Injected
+    private final AuthServiceClient authServiceClient;
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<OrderResponse> getAllOrders() {
+        log.info("Fetching all industrial orders for administrative review");
+        // Fetches every order from the database [cite: 224, 332]
+        return orderRepository.findAll().stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public OrderResponse getOrderByIdAdmin(Long orderId) {
+        // Bypasses userId check for global administrative view
+        return orderRepository.findById(orderId)
+                .map(this::mapToResponse)
+                .orElseThrow(() -> new OrderNotFoundException("Order not found"));
+    }
 
     @Override
     public OrderResponse createOrder(Long userId) {
@@ -86,22 +105,14 @@ public class OrderServiceImpl implements OrderService {
         order.setStatus(status);
         Order updatedOrder = orderRepository.save(order);
 
-        // ✅ DYNAMIC EMAIL TRIGGER
         if (OrderStatus.PAID.name().equals(status)) {
             log.info("📣 Payment confirmed for Order {}. Fetching user info for email.", orderId);
-
             try {
-                // Fetch real user data from Auth Service
                 Map<String, Object> userMeta = authServiceClient.getUserMetadata(order.getUserId());
-
                 if (userMeta != null) {
                     String realEmail = (String) userMeta.get("email");
                     String realName = (String) userMeta.get("name");
-
-                    log.info("📧 Sending confirmation to: {}", realEmail);
                     orderEmailService.sendOrderConfirmation(updatedOrder, realEmail, realName);
-                } else {
-                    log.error("⚠️ Could not send email: User metadata not found for ID {}", order.getUserId());
                 }
             } catch (Exception e) {
                 log.error("❌ Email trigger failed: {}", e.getMessage());

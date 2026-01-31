@@ -60,28 +60,29 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                // 1. Always allow Pre-flight OPTIONS
-                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        // 1. Always allow Pre-flight OPTIONS
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
-        // 2. CRITICAL: Explicit Public Storefront Access
-        // Must come BEFORE authenticated rules to avoid 401 on categories
+                        // 2. PUBLIC STOREFRONT & CAREERS ACCESS
+                        // Permitting /api/public/** allows candidates to view and apply for jobs
                         .requestMatchers("/api/categories/public").permitAll()
-                .requestMatchers("/api/public/**").permitAll()
+                        .requestMatchers("/api/public/**").permitAll()
 
-        // 3. Fallback permits for general GET requests
+                        // 3. Fallback permits for general GET requests
                         .requestMatchers(HttpMethod.GET, "/api/designs/**", "/api/categories/**", "/api/banners/**").permitAll()
 
-        // 4. Admin Authentication & System endpoints
+                        // 4. Admin Authentication & System endpoints
                         .requestMatchers("/api/admin/login", "/actuator/**").permitAll()
 
-        // 5. Admin Management Actions
+                        // 5. ADMIN MANAGEMENT ACTIONS
+                        // Lock all admin actions, including career management, behind ROLE_ADMIN
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
 
-        // 6. Secure everything else
+                        // 6. Secure everything else
                         .anyRequest().authenticated()
                 )
                 .oauth2ResourceServer(oauth -> oauth
-                .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()))
+                        .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()))
                 );
 
         return http.build();
@@ -96,11 +97,11 @@ public class SecurityConfig {
     public UserDetailsService userDetailsService(AdminRepository adminRepository) {
         return username -> adminRepository.findByUsername(username)
                 .map(admin -> new org.springframework.security.core.userdetails.User(
-                admin.getUsername(),
-                admin.getPassword(),
-                admin.isEnabled(),
-        true, true, true,
-                Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + admin.getRole()))
+                        admin.getUsername(),
+                        admin.getPassword(),
+                        admin.isEnabled(),
+                        true, true, true,
+                        Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + admin.getRole()))
                 ))
                 .orElseThrow(() -> new UsernameNotFoundException("Admin not found: " + username));
     }
@@ -114,9 +115,9 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(List.of(
-                "http://localhost:3000",
-                "http://localhost:3001",
-                "http://localhost:5173",
+                "http://localhost:3000",   // User Storefront
+                "http://localhost:3001",   // Admin Panel
+                "http://localhost:5173",   // Vite Dev Server
                 "http://127.0.0.1:3000",
                 "http://127.0.0.1:3001",
                 "https://localhost:3000"

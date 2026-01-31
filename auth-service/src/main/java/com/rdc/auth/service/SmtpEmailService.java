@@ -21,16 +21,34 @@ public class SmtpEmailService {
     @Value("${app.email.sender}")
     private String fromEmail;
 
+    /**
+     * ✅ NEW: Generic method for Career Alerts and HR Notifications
+     */
+    public void sendSimpleEmail(String to, String subject, String text) {
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+
+            helper.setFrom(fromEmail);
+            helper.setTo(to);
+            helper.setSubject(subject);
+            helper.setText(text);
+
+            mailSender.send(message);
+            log.info("Recruitment email sent to: {}", to);
+        } catch (Exception e) {
+            log.error("Failed to send recruitment email: {}", e.getMessage());
+        }
+    }
+
     public boolean sendVerificationEmail(String toEmail, String verificationUrl) {
         try {
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
 
-            // Prepare the variables for the HTML template
             Context context = new Context();
             context.setVariable("verificationLink", verificationUrl);
 
-            // Looks for src/main/resources/templates/verification-email.html
             String htmlContent = templateEngine.process("verification-email", context);
 
             helper.setFrom(fromEmail);
@@ -55,7 +73,6 @@ public class SmtpEmailService {
             Context context = new Context();
             context.setVariable("resetLink", resetUrl);
 
-            // Looks for src/main/resources/templates/password-reset-email.html
             String htmlContent = templateEngine.process("password-reset-email", context);
 
             helper.setFrom(fromEmail);
