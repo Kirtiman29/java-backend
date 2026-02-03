@@ -25,6 +25,7 @@ public class User {
     @Column(nullable = false)
     private String role;
 
+    @Column(nullable = false)
     private String displayName;
 
     @Builder.Default
@@ -39,6 +40,10 @@ public class User {
 
     @Column(name = "reset_token")
     private String resetToken;
+
+    @Column(name = "reset_count", nullable = false)
+    @Builder.Default
+    private int resetCount = 0;
 
     @Column(name = "token_expiry_date")
     private Instant resetTokenExpiryDate;

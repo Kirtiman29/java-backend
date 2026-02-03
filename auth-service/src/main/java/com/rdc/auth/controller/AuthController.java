@@ -21,6 +21,10 @@ import java.security.Principal;
 import java.util.Collections;
 import java.util.Map;
 
+/**
+ * Authentication Controller for RDC Studio.
+ * Handles JWT Lifecycle, Local Signups, and Google OAuth2 integration.
+ */
 @RestController
 @RequestMapping("/auth")
 @RequiredArgsConstructor
@@ -47,13 +51,13 @@ public class AuthController {
     @GetMapping("/me")
     public ResponseEntity<?> getCurrentUser(Principal principal) {
         try {
-            // principal.getName() returns the 'sub' (numeric userId) from the JWT
+            // principal.getName() returns the numeric 'sub' (userId) from the JWT
             Long userId = Long.parseLong(principal.getName());
             User user = userRepository.findById(userId)
                     .orElseThrow(() -> new RuntimeException("USER_NOT_FOUND"));
 
             return ResponseEntity.ok(Map.of(
-                    "name", user.getDisplayName() != null ? user.getDisplayName() : "User",
+                    "name", user.getDisplayName() != null ? user.getDisplayName() : "Industrial User",
                     "email", user.getEmail()
             ));
         } catch (Exception e) {
@@ -63,14 +67,13 @@ public class AuthController {
 
     /**
      * ✅ NEW: Refresh Access Token
-     * Uses the 1-week refresh token to generate a new 15-min access token
+     * Generates a new access token using a valid refresh token
      */
     @PostMapping("/refresh")
     public ResponseEntity<?> refreshToken(@RequestBody RefreshTokenRequest req) {
         try {
             String refreshToken = req.getRefreshToken();
 
-            // Validate token and extract userId
             if (jwtUtil.isTokenExpired(refreshToken)) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "REFRESH_TOKEN_EXPIRED"));
             }
@@ -78,7 +81,6 @@ public class AuthController {
             Long userId = Long.parseLong(jwtUtil.getSubjectFromToken(refreshToken));
             User user = userRepository.findById(userId).orElseThrow();
 
-            // Generate new pair
             return ResponseEntity.ok(new TokenResponse(
                     jwtUtil.generateToken(user),
                     jwtUtil.generateRefreshToken(user),
@@ -90,8 +92,8 @@ public class AuthController {
     }
 
     /**
-     * Google OAuth Authentication Endpoint
-     * Verifies ID Token from Frontend and creates/logs in user
+     * Google OAuth Authentication
+     * Verifies ID Token from Frontend and creates or logs in the user
      */
     @PostMapping("/google")
     public ResponseEntity<?> googleLogin(@RequestBody Map<String, String> request) {
@@ -112,7 +114,7 @@ public class AuthController {
             String name = (String) payload.get("name");
             String pictureUrl = (String) payload.get("picture");
 
-            // Create or fetch user and return tokens
+            // Service handles creation or mapping to existing account
             String accessToken = userService.authenticateOrCreateGoogleUser(email, name, pictureUrl);
             User user = userRepository.findByEmail(email).orElseThrow();
 
@@ -121,18 +123,19 @@ public class AuthController {
                     jwtUtil.generateRefreshToken(user),
                     jwtUtil.getAccessTokenExpirationSeconds()
             ));
-
         } catch (Exception e) {
-            log.error("Google login verification failed: {}", e.getMessage());
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(Map.of("error", "GOOGLE_AUTH_FAILED"));
+            log.error("Google auth failed: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "GOOGLE_AUTH_FAILED"));
         }
     }
 
+    /**
+     * ✅ UPDATED: Signup now supports SignupRequest DTO for mandatory displayName
+     */
     @PostMapping("/signup")
-    public ResponseEntity<?> signup(@RequestBody LoginRequest req) {
+    public ResponseEntity<?> signup(@RequestBody SignupRequest req) {
         try {
-            return ResponseEntity.ok(userService.createUser(req.getEmail(), req.getPassword()));
+            return ResponseEntity.ok(userService.createUser(req));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
@@ -148,6 +151,9 @@ public class AuthController {
         return processLogin(req.getEmail(), req.getPassword(), "ADMIN");
     }
 
+    /**
+     * ✅ UPDATED: Handles 3-reset security limit loophole
+     */
     @PostMapping("/password/request-reset")
     public ResponseEntity<?> requestReset(@RequestBody Map<String, String> req) {
         String email = req.get("email");
@@ -157,6 +163,11 @@ public class AuthController {
             }
         } catch (Exception e) {
             log.warn("Reset email failed for {}: {}", email, e.getMessage());
+            // We return 200 regardless to prevent user enumeration, unless limit is hit
+            if ("RESET_LIMIT_EXCEEDED".equals(e.getMessage())) {
+                return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                        .body(Map.of("error", "RESET_LIMIT_EXCEEDED"));
+            }
         }
         return ResponseEntity.ok(Map.of(
                 "message", "If an account exists, a reset link has been sent.",
@@ -186,6 +197,9 @@ public class AuthController {
         return ResponseEntity.status(HttpStatus.FOUND).location(URI.create(redirectUrl)).build();
     }
 
+    /**
+     * ✅ UPDATED: Block unverified users from accessing the Archive
+     */
     private ResponseEntity<?> processLogin(String email, String password, String role) {
         try {
             String accessToken = userService.authenticate(email, password, role);
@@ -197,7 +211,13 @@ public class AuthController {
                     jwtUtil.getAccessTokenExpirationSeconds()
             ));
         } catch (Exception e) {
-            log.error("Login failed for role {}: {}", role, e.getMessage());
+            log.error("Login attempt failed for {}: {}", email, e.getMessage());
+
+            if ("EMAIL_NOT_VERIFIED".equals(e.getMessage())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body(Map.of("error", "EMAIL_NOT_VERIFIED"));
+            }
+
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of("error", "INVALID_CREDENTIALS"));
         }

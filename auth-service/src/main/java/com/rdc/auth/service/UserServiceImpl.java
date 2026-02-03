@@ -1,5 +1,6 @@
 package com.rdc.auth.service;
 
+import com.rdc.auth.dto.SignupRequest;
 import com.rdc.auth.entity.User;
 import com.rdc.auth.entity.VerificationToken;
 import com.rdc.auth.repository.UserRepository;
@@ -34,20 +35,22 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional
-    public Map<String, String> createUser(String email, String password) {
-        log.info("Attempting to create user: {}", email);
+    public Map<String, String> createUser(SignupRequest req) {
+        log.info("Attempting to create RDC user account: {}", req.getEmail());
 
-        if (userRepository.findByEmail(email).isPresent()) {
+        if (userRepository.findByEmail(req.getEmail()).isPresent()) {
             throw new RuntimeException("USER_EXISTS");
         }
 
         User newUser = User.builder()
-                .email(email)
-                .passwordHash(passwordEncoder.encode(password))
+                .email(req.getEmail())
+                .displayName(req.getDisplayName())
+                .passwordHash(passwordEncoder.encode(req.getPassword()))
                 .role("USER")
                 .isVerified(false)
                 .enabled(true)
                 .createdAt(Instant.now())
+                .resetCount(0) // Security: Init reset limit counter
                 .build();
 
         newUser = userRepository.save(newUser);
@@ -58,9 +61,9 @@ public class UserServiceImpl implements UserService {
         boolean emailSent = false;
         try {
             String verificationUrl = "http://localhost:" + serverPort + "/auth/verify-email?token=" + token;
-            emailSent = emailService.sendVerificationEmail(email, verificationUrl);
+            emailSent = emailService.sendVerificationEmail(req.getEmail(), verificationUrl);
         } catch (Exception e) {
-            log.error("NON-BLOCKING ERROR: Verification email failed for {}: {}", email, e.getMessage());
+            log.error("NON-BLOCKING ERROR: Verification email failed for {}: {}", req.getEmail(), e.getMessage());
         }
 
         Map<String, String> response = new HashMap<>();
@@ -78,6 +81,10 @@ public class UserServiceImpl implements UserService {
             throw new IllegalArgumentException("USER_DISABLED");
         }
 
+        if (!user.isVerified()) {
+            throw new IllegalArgumentException("EMAIL_NOT_VERIFIED");
+        }
+
         if (!passwordEncoder.matches(password, user.getPasswordHash())) {
             throw new IllegalArgumentException("INVALID_CREDENTIALS");
         }
@@ -89,41 +96,32 @@ public class UserServiceImpl implements UserService {
         return jwtUtil.generateToken(user);
     }
 
-    /**
-     * Google OAuth Authentication
-     * Handles both Registration and Login via Google [cite: 91-93]
-     */
     @Override
     @Transactional
     public String authenticateOrCreateGoogleUser(String email, String name, String pictureUrl) {
-        log.info("Authenticating Google user: {}", email);
+        log.info("Authenticating RDC Google user: {}", email);
         return processSocialLogin(email, name);
     }
 
-    /**
-     * Placeholder for Facebook OAuth
-     */
+    @Override
     @Transactional
     public String authenticateOrCreateFacebookUser(String email, String name) {
-        log.info("Authenticating Facebook user: {}", email);
+        log.info("Authenticating RDC Facebook user: {}", email);
         return processSocialLogin(email, name);
     }
 
-    /**
-     * Shared Internal logic for Social Auth
-     * Ensures consistent user creation and JWT generation
-     */
     private String processSocialLogin(String email, String name) {
         User user = userRepository.findByEmail(email).orElseGet(() -> {
+            log.info("Creating new RDC social user profile: {}", email);
             User newUser = User.builder()
                     .email(email)
-                    // Use a random UUID for password as social users don't have local passwords
-                    .passwordHash(UUID.randomUUID().toString())
-                    .displayName(name)
+                    .passwordHash(UUID.randomUUID().toString()) // Social users have no local pass [cite: 120]
+                    .displayName((name != null && !name.isBlank()) ? name : "RDC User")
                     .role("USER")
                     .createdAt(Instant.now())
-                    .isVerified(true) // Social users are auto-verified
+                    .isVerified(true) // Social accounts are trusted [cite: 121]
                     .enabled(true)
+                    .resetCount(0)
                     .build();
             return userRepository.save(newUser);
         });
@@ -133,7 +131,6 @@ public class UserServiceImpl implements UserService {
             user = userRepository.save(user);
         }
 
-        // Return platform JWT with numeric user ID as 'sub'
         return jwtUtil.generateToken(user);
     }
 
@@ -177,9 +174,17 @@ public class UserServiceImpl implements UserService {
     @Transactional
     public void createPasswordResetToken(String email) {
         userRepository.findByEmail(email).ifPresent(user -> {
+            // SECURITY: Reset Limit (Prevents spam/brute force on email)
+            if (user.getResetCount() >= 3) {
+                log.warn("Password reset limit reached for user: {}", email);
+                throw new RuntimeException("RESET_LIMIT_EXCEEDED");
+            }
+
             String token = UUID.randomUUID().toString();
             user.setResetToken(token);
             user.setResetTokenExpiryDate(Instant.now().plusSeconds(600));
+
+            user.setResetCount(user.getResetCount() + 1);
             userRepository.save(user);
 
             String resetLink = frontendUrl + "/reset-password?token=" + token;
@@ -200,6 +205,7 @@ public class UserServiceImpl implements UserService {
         user.setPasswordHash(passwordEncoder.encode(newPassword));
         user.setResetToken(null);
         user.setResetTokenExpiryDate(null);
+        user.setResetCount(0); // Clear counter on success
         userRepository.save(user);
     }
 }
