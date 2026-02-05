@@ -19,7 +19,10 @@ public class Order {
     @Column(name = "user_id", nullable = false)
     private Long userId;
 
-    // Fixed: Now matches SQL schema total_amount_cents
+    /**
+     * Existing field used for base price calculation.
+     * Maps to existing physical column 'total_amount_cents'.
+     */
     @Column(name = "total_amount_cents", nullable = false)
     private Long totalPriceCents;
 
@@ -42,4 +45,30 @@ public class Order {
         items.add(item);
         item.setOrder(this);
     }
+
+    // ✅ INVOICE FIELDS - Explicitly named columns to prevent Hibernate DuplicateMappingException
+    @Column(name = "invoice_subtotal_cents")
+    private Long subTotalCents;
+
+    @Column(name = "invoice_cgst_cents")
+    private Long cgstCents;
+
+    @Column(name = "invoice_sgst_cents")
+    private Long sgstCents;
+
+    /**
+     * The grand total including taxes.
+     * Mapped to 'grand_total_cents' to avoid collision with 'total_amount_cents'.
+     */
+    @Column(name = "grand_total_cents")
+    private Long totalAmountCents;
+
+    @Column(name = "amount_in_words")
+    private String amountInWords;
+
+    @Column(name = "customer_name")
+    private String customerName;
+
+    @Column(name = "customer_gstin")
+    private String customerGstin;
 }

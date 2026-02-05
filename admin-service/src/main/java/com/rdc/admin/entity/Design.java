@@ -1,9 +1,9 @@
-// src/main/java/com/rdc/admin/entity/Design.java
 package com.rdc.admin.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 @Entity
@@ -15,13 +15,15 @@ public class Design {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(unique = true, nullable = false)
     private String slug;
+
     private String title;
 
     @Column(columnDefinition = "TEXT")
     private String description;
 
-    // Pricing
+    // Pricing (Stored in Cents for precision)
     private Long basePriceCents;
     private Long finalPriceCents;
 
@@ -36,22 +38,33 @@ public class Design {
     private Boolean trending = false;
     private Boolean editorsPick = false;
     private Boolean newArrival = true;
-    private Boolean premium = false; // NEW: Premium section flag
+    private Boolean premium = false;
 
-    // Relations
+    // Relations & External IDs
     private Long categoryId;
     private Long assetId;
+
+    @Column(name = "asset_uuid")
     private String assetUuid;
 
-    @ElementCollection
-    private List<String> tags;
+    // ✅ TAGS MAPPING (FIXED)
+    // Using EAGER fetch to ensure tags are loaded with the design
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(
+            name = "design_tags",
+            joinColumns = @JoinColumn(name = "design_id")
+    )
+    @Column(name = "tag_name") // The column name in the design_tags table
+    private List<String> tags = new ArrayList<>();
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private Segment segment; // Represents primary usage category: MENSWEAR, etc.
+    private Segment segment;
 
     // Timestamps
+    @Column(updatable = false)
     private LocalDateTime createdAt;
+
     private LocalDateTime updatedAt;
 
     @PrePersist

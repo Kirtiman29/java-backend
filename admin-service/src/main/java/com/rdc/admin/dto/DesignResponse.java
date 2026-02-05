@@ -21,6 +21,10 @@ public class DesignResponse {
     private Long categoryId;
     private String segment;
     private String assetUuid;
+
+    // ✅ FIXED: Added tags to the response so the frontend can display them
+    private List<String> tags;
+
     // Flags
     private Boolean draft;
     private Boolean active;

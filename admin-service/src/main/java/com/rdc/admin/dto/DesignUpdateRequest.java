@@ -2,6 +2,7 @@ package com.rdc.admin.dto;
 
 import lombok.Data;
 import java.util.List;
+import java.util.ArrayList;
 
 @Data
 public class DesignUpdateRequest {
@@ -16,7 +17,7 @@ public class DesignUpdateRequest {
     private Integer discountPercent;
     private Boolean specialOffer;
 
-    // Media Assets (UUIDs from Asset Service)
+    // Media Assets
     private String coverAssetUuid;
     private List<String> galleryUuids;
     private String previewVideoUuid;
@@ -30,5 +31,6 @@ public class DesignUpdateRequest {
     private Boolean newArrival;
     private Boolean premium;
 
-    private List<String> tags;
+    // ✅ FIXED: Tags list for updating the design_tags table
+    private List<String> tags = new ArrayList<>();
 }

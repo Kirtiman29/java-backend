@@ -26,6 +26,7 @@ public class DesignService {
     private final DesignPricingService pricingService;
     private final AssetClientService assetClientService;
 
+    // ✅ FIXED: Added missing method for Public Feed
     @Transactional(readOnly = true)
     public List<DesignResponse> getAllDesigns() {
         return repository.findByDraftFalseAndActiveTrue().stream()
@@ -33,19 +34,7 @@ public class DesignService {
                 .collect(Collectors.toList());
     }
 
-    /**
-     * ✅ FIXED: Specific method for Trending section to strictly filter and limit
-     */
-    @Transactional(readOnly = true)
-    public List<DesignResponse> getTrendingRecent(int limit) {
-        return repository.findByDraftFalseAndActiveTrue().stream()
-                .filter(d -> Boolean.TRUE.equals(d.getTrending())) // Filter only trending
-                .sorted((d1, d2) -> d2.getId().compareTo(d1.getId())) // Recent first by ID
-                .limit(limit) // Strictly apply limit of 8
-                .map(design -> mapper.toResponse(design, mediaRepository.findByDesignId(design.getId())))
-                .collect(Collectors.toList());
-    }
-
+    // ✅ FIXED: Added missing method for SEO Slugs
     @Transactional(readOnly = true)
     public DesignResponse getDesignBySlug(String slug) {
         Design design = repository.findBySlug(slug)
@@ -54,12 +43,23 @@ public class DesignService {
     }
 
     @Transactional(readOnly = true)
-    public List<DesignResponse> getEditorsPicks(int limit) {
-        return repository.findByDraftFalseAndActiveTrue().stream()
-                .filter(d -> Boolean.TRUE.equals(d.getEditorsPick()))
-                .limit(limit)
-                .map(design -> mapper.toResponse(design, mediaRepository.findByDesignId(design.getId())))
-                .collect(Collectors.toList());
+    public DesignResponse getDesignById(Long id) {
+        Design design = repository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Design", id));
+        return mapper.toResponse(design, mediaRepository.findByDesignId(design.getId()));
+    }
+
+    @Transactional(readOnly = true)
+    public List<DesignResponse> getBySegment(String segment) {
+        try {
+            Segment seg = Segment.valueOf(segment.toUpperCase());
+            return repository.findBySegmentAndActiveTrue(seg).stream()
+                    .filter(d -> !Boolean.TRUE.equals(d.getDraft()))
+                    .map(d -> mapper.toResponse(d, mediaRepository.findByDesignId(d.getId())))
+                    .collect(Collectors.toList());
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid segment");
+        }
     }
 
     @Transactional
@@ -71,6 +71,12 @@ public class DesignService {
         design.setBasePriceCents(request.getBasePriceCents());
         design.setCategoryId(request.getCategoryId());
         design.setAssetUuid(request.getCoverAssetUuid());
+
+        // Safe Collection Handling for Tags
+        if (request.getTags() != null) {
+            design.getTags().clear();
+            design.getTags().addAll(request.getTags());
+        }
 
         if (request.getSegment() != null) {
             design.setSegment(Segment.valueOf(request.getSegment().toUpperCase()));
@@ -89,6 +95,7 @@ public class DesignService {
 
         Design savedDesign = repository.save(design);
 
+        // Media Setup
         saveMedia(savedDesign.getId(), request.getCoverAssetUuid(), AssetType.IMAGE, MediaRole.COVER, 0);
         if (request.getGalleryUuids() != null) {
             for (int i = 0; i < request.getGalleryUuids().size(); i++) {
@@ -104,19 +111,20 @@ public class DesignService {
     public DesignResponse updateDesign(Long id, DesignUpdateRequest request) {
         Design design = repository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Design", id));
 
+        if (request.getTags() != null) {
+            design.getTags().clear();
+            design.getTags().addAll(request.getTags());
+        }
+
         if (request.getTitle() != null) {
             design.setTitle(request.getTitle());
             design.setSlug(generateUniqueSlug(request.getTitle()));
         }
 
-        if (request.getCoverAssetUuid() != null) {
-            design.setAssetUuid(request.getCoverAssetUuid());
-        }
-
+        if (request.getCoverAssetUuid() != null) design.setAssetUuid(request.getCoverAssetUuid());
         if (request.getDescription() != null) design.setDescription(request.getDescription());
         if (request.getCategoryId() != null) design.setCategoryId(request.getCategoryId());
         if (request.getSegment() != null) design.setSegment(Segment.valueOf(request.getSegment().toUpperCase()));
-
         if (request.getBasePriceCents() != null) design.setBasePriceCents(request.getBasePriceCents());
         if (request.getDiscountPercent() != null) design.setDiscountPercent(request.getDiscountPercent());
         if (request.getSpecialOffer() != null) design.setSpecialOffer(request.getSpecialOffer());
@@ -131,8 +139,13 @@ public class DesignService {
         if (request.getPremium() != null) design.setPremium(request.getPremium());
 
         updateDesignMedia(design.getId(), request);
-
         return mapper.toResponse(repository.save(design), mediaRepository.findByDesignId(id));
+    }
+
+    @Transactional
+    public void deleteDesign(Long id) {
+        if (!repository.existsById(id)) throw new ResourceNotFoundException("Design", id);
+        repository.deleteById(id);
     }
 
     private void updateDesignMedia(Long designId, DesignUpdateRequest request) {
@@ -160,31 +173,6 @@ public class DesignService {
                 .mediaRole(role)
                 .sortOrder(order)
                 .build());
-    }
-
-    @Transactional(readOnly = true)
-    public List<DesignResponse> getBySegment(String segment) {
-        try {
-            Segment seg = Segment.valueOf(segment.toUpperCase());
-            return repository.findBySegmentAndActiveTrue(seg).stream()
-                    .filter(d -> !Boolean.TRUE.equals(d.getDraft()))
-                    .map(d -> mapper.toResponse(d, mediaRepository.findByDesignId(d.getId())))
-                    .collect(Collectors.toList());
-        } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid segment");
-        }
-    }
-
-    @Transactional(readOnly = true)
-    public DesignResponse getDesignById(Long id) {
-        Design design = repository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Design", id));
-        return mapper.toResponse(design, mediaRepository.findByDesignId(design.getId()));
-    }
-
-    @Transactional
-    public void deleteDesign(Long id) {
-        if (!repository.existsById(id)) throw new ResourceNotFoundException("Design", id);
-        repository.deleteById(id);
     }
 
     private String generateUniqueSlug(String title) {

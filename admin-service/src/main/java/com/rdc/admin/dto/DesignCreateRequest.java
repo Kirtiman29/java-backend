@@ -2,6 +2,7 @@ package com.rdc.admin.dto;
 
 import lombok.Data;
 import java.util.List;
+import java.util.ArrayList;
 
 @Data
 public class DesignCreateRequest {
@@ -13,7 +14,10 @@ public class DesignCreateRequest {
     private Long categoryId;
     private String segment;
 
-    // ✅ Bulk Media Assets
+    // ✅ FIXED: Tags must be a List for @ElementCollection mapping
+    private List<String> tags = new ArrayList<>();
+
+    // ✅ Bulk Media Assets (UUIDs from Asset Service)
     private String coverAssetUuid;
     private List<String> galleryUuids;
     private String previewVideoUuid;

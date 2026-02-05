@@ -1,8 +1,10 @@
 package com.rdc.auth.service;
 
 import com.rdc.auth.dto.SignupRequest;
+import com.rdc.auth.entity.RefreshToken;
 import com.rdc.auth.entity.User;
 import com.rdc.auth.entity.VerificationToken;
+import com.rdc.auth.repository.RefreshTokenRepository;
 import com.rdc.auth.repository.UserRepository;
 import com.rdc.auth.repository.VerificationTokenRepository;
 import com.rdc.auth.util.JwtUtil;
@@ -23,6 +25,7 @@ public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
     private final VerificationTokenRepository verificationTokenRepository;
+    private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final SmtpEmailService emailService;
     private final JwtUtil jwtUtil;
@@ -32,6 +35,83 @@ public class UserServiceImpl implements UserService {
 
     @Value("${server.port:8081}")
     private String serverPort;
+
+    /* =========================
+       REFRESH TOKEN METHODS
+       ========================= */
+
+    /**
+     * ✅ NEW: Persists new refresh token and revokes old ones (Token Rotation)
+     */
+    @Override
+    @Transactional
+    public void saveRefreshToken(User user, String refreshToken) {
+        log.info("Rotating refresh token for user: {}", user.getEmail());
+
+        // 🔐 Security: Revoke all existing non-revoked tokens for this user
+        // Optimization: Use a custom repository method if available (findByUserAndRevokedFalse)
+        refreshTokenRepository.findAll().stream()
+                .filter(t -> t.getUser().getId().equals(user.getId()) && !t.isRevoked())
+                .forEach(t -> {
+                    t.setRevoked(true);
+                    refreshTokenRepository.save(t);
+                });
+
+        RefreshToken tokenEntity = RefreshToken.builder()
+                .user(user)
+                .token(refreshToken)
+                .expiryDate(Instant.now().plusSeconds(60L * 60 * 24 * 7)) // 7 Days
+                .revoked(false)
+                .build();
+
+        refreshTokenRepository.save(tokenEntity);
+    }
+
+    /**
+     * ✅ NEW: Global Logout / Security Reset
+     */
+    @Override
+    @Transactional
+    public void revokeAllRefreshTokens(User user) {
+        log.info("Revoking all tokens for user: {}", user.getEmail());
+        refreshTokenRepository.findAll().stream()
+                .filter(t -> t.getUser().getId().equals(user.getId()) && !t.isRevoked())
+                .forEach(t -> {
+                    t.setRevoked(true);
+                    refreshTokenRepository.save(t);
+                });
+    }
+
+    /**
+     * ✅ UPDATED: Persisted Refresh Logic
+     */
+    @Override
+    @Transactional
+    public String refreshAccessToken(String token) {
+        if (!"refresh".equals(jwtUtil.getClaim(token, "type"))) {
+            throw new RuntimeException("INVALID_TOKEN_TYPE");
+        }
+
+        RefreshToken storedToken = refreshTokenRepository.findByToken(token)
+                .orElseThrow(() -> new RuntimeException("REFRESH_TOKEN_NOT_FOUND"));
+
+        if (storedToken.isRevoked()) {
+            // Security: Potential Token Reuse detected
+            revokeAllRefreshTokens(storedToken.getUser());
+            throw new RuntimeException("TOKEN_REVOKED");
+        }
+
+        if (storedToken.getExpiryDate().isBefore(Instant.now())) {
+            refreshTokenRepository.delete(storedToken);
+            throw new RuntimeException("TOKEN_EXPIRED");
+        }
+
+        return jwtUtil.generateToken(storedToken.getUser());
+    }
+
+    /* =========================
+       STANDARD USER METHODS
+       ========================= */
 
     @Override
     @Transactional
@@ -50,7 +130,7 @@ public class UserServiceImpl implements UserService {
                 .isVerified(false)
                 .enabled(true)
                 .createdAt(Instant.now())
-                .resetCount(0) // Security: Init reset limit counter
+                .resetCount(0)
                 .build();
 
         newUser = userRepository.save(newUser);
@@ -115,11 +195,11 @@ public class UserServiceImpl implements UserService {
             log.info("Creating new RDC social user profile: {}", email);
             User newUser = User.builder()
                     .email(email)
-                    .passwordHash(UUID.randomUUID().toString()) // Social users have no local pass [cite: 120]
+                    .passwordHash(UUID.randomUUID().toString())
                     .displayName((name != null && !name.isBlank()) ? name : "RDC User")
                     .role("USER")
                     .createdAt(Instant.now())
-                    .isVerified(true) // Social accounts are trusted [cite: 121]
+                    .isVerified(true)
                     .enabled(true)
                     .resetCount(0)
                     .build();
@@ -174,7 +254,6 @@ public class UserServiceImpl implements UserService {
     @Transactional
     public void createPasswordResetToken(String email) {
         userRepository.findByEmail(email).ifPresent(user -> {
-            // SECURITY: Reset Limit (Prevents spam/brute force on email)
             if (user.getResetCount() >= 3) {
                 log.warn("Password reset limit reached for user: {}", email);
                 throw new RuntimeException("RESET_LIMIT_EXCEEDED");
@@ -205,7 +284,7 @@ public class UserServiceImpl implements UserService {
         user.setPasswordHash(passwordEncoder.encode(newPassword));
         user.setResetToken(null);
         user.setResetTokenExpiryDate(null);
-        user.setResetCount(0); // Clear counter on success
+        user.setResetCount(0);
         userRepository.save(user);
     }
 }

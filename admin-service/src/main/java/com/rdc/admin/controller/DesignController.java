@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
 import java.util.List;
 
 @RestController
@@ -17,17 +18,28 @@ public class DesignController {
 
     private final DesignService designService;
 
+    /**
+     * Creates a new design.
+     * The tags in DesignCreateRequest will be persisted via @ElementCollection.
+     */
     @PostMapping
     public ResponseEntity<DesignResponse> createDesign(@RequestBody DesignCreateRequest request) {
-        // Implementation logic handles the initial COVER media role [cite: 147]
         return new ResponseEntity<>(designService.createDesign(request), HttpStatus.CREATED);
     }
 
+    /**
+     * Fetches all designs for the admin dashboard.
+     */
     @GetMapping
     public ResponseEntity<List<DesignResponse>> getAllDesignsAdmin() {
+        // Ensure this matches the method name in DesignService.java
         return ResponseEntity.ok(designService.getAllDesigns());
     }
 
+    /**
+     * Updates an existing design.
+     * Ensure DesignUpdateRequest.getTags() is not null to update design_tags table.
+     */
     @PutMapping("/{id}")
     public ResponseEntity<DesignResponse> updateDesign(
             @PathVariable Long id,
@@ -35,6 +47,9 @@ public class DesignController {
         return ResponseEntity.ok(designService.updateDesign(id, request));
     }
 
+    /**
+     * Deletes a design and its associated tags (handled automatically by JPA).
+     */
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteDesign(@PathVariable Long id) {
         designService.deleteDesign(id);

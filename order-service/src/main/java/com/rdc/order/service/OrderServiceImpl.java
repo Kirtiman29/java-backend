@@ -35,7 +35,6 @@ public class OrderServiceImpl implements OrderService {
     @Transactional(readOnly = true)
     public List<OrderResponse> getAllOrders() {
         log.info("Fetching all industrial orders for administrative review");
-        // Fetches every order from the database [cite: 224, 332]
         return orderRepository.findAll().stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
@@ -44,7 +43,6 @@ public class OrderServiceImpl implements OrderService {
     @Override
     @Transactional(readOnly = true)
     public OrderResponse getOrderByIdAdmin(Long orderId) {
-        // Bypasses userId check for global administrative view
         return orderRepository.findById(orderId)
                 .map(this::mapToResponse)
                 .orElseThrow(() -> new OrderNotFoundException("Order not found"));
@@ -106,12 +104,19 @@ public class OrderServiceImpl implements OrderService {
         Order updatedOrder = orderRepository.save(order);
 
         if (OrderStatus.PAID.name().equals(status)) {
+            // ✅ FIX: Initialize lazy collection before calling Async method to prevent LazyInitializationException
+            if (updatedOrder.getItems() != null) {
+                updatedOrder.getItems().size();
+            }
+
             log.info("📣 Payment confirmed for Order {}. Fetching user info for email.", orderId);
             try {
                 Map<String, Object> userMeta = authServiceClient.getUserMetadata(order.getUserId());
                 if (userMeta != null) {
                     String realEmail = (String) userMeta.get("email");
                     String realName = (String) userMeta.get("name");
+                    // Explicitly pass customer details for the invoice
+                    updatedOrder.setCustomerName(realName);
                     orderEmailService.sendOrderConfirmation(updatedOrder, realEmail, realName);
                 }
             } catch (Exception e) {
