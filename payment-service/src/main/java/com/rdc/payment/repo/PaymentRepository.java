@@ -9,14 +9,8 @@ import java.util.Optional;
 
 @Repository
 public interface PaymentRepository extends JpaRepository<Payment, Long> {
-
     Optional<Payment> findByGatewayOrderId(String gatewayOrderId);
-
     List<Payment> findByUserIdOrderByCreatedAtDesc(Long userId);
-
-    /**
-     * Required for Idempotency Check:
-     * Finds existing payments for a specific user and order to prevent duplicate gateway orders.
-     */
+    List<Payment> findAllByOrderByCreatedAtDesc();
     List<Payment> findByUserIdAndOrderId(Long userId, Long orderId);
 }

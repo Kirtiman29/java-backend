@@ -11,36 +11,34 @@ public class InvoiceGeneratorService {
 
     private final InvoicePdfService invoicePdfService;
 
-    /**
-     * Orchestrates the enrichment of order data and PDF generation.
-     */
     public byte[] generateInvoicePdf(Order order) {
         enrichOrderForInvoice(order);
         return invoicePdfService.generatePdf(order);
     }
 
     /**
-     * Calculates taxes and totals specifically for the GST Invoice view.
-     * These values are persisted to the unique invoice columns in the database.
+     * ✅ UPDATED: Inclusive GST Calculation
+     * Extracts base price and tax from the final total paid.
      */
     private void enrichOrderForInvoice(Order order) {
-        // Calculate the base subtotal from items
-        long subTotal = order.getItems().stream()
-                .mapToLong(item -> item.getPriceCents() * item.getQuantity())
-                .sum();
+        // The total price already includes GST (e.g., 705000 cents)
+        long grandTotal = order.getTotalPriceCents();
 
-        // Standard GST Calculation: 9% CGST and 9% SGST
-        long cgst = Math.round(subTotal * 0.09);
-        long sgst = Math.round(subTotal * 0.09);
-        long grandTotal = subTotal + cgst + sgst;
+        // 1. Calculate Base Price (Sub-total) = Total / 1.18
+        long subTotal = Math.round(grandTotal / 1.18);
 
-        // Set values to the order entity for Thymeleaf to access
+        // 2. Calculate CGST & SGST (9% each of base)
+        long totalGst = grandTotal - subTotal;
+        long cgst = totalGst / 2;
+        long sgst = totalGst - cgst; // Balance to ensure precision
+
+        // 3. Set values for the PDF template [cite: 165, 166]
         order.setSubTotalCents(subTotal);
         order.setCgstCents(cgst);
         order.setSgstCents(sgst);
         order.setTotalAmountCents(grandTotal);
 
-        // ✅ FIXED: Convert grand total (in Rupees) to professional English words
+        // 4. Convert to words [cite: 166, 167]
         long grandTotalInRupees = grandTotal / 100;
         String words = IndianNumberToWords.convert(grandTotalInRupees);
         order.setAmountInWords(words);

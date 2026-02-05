@@ -26,7 +26,7 @@ public class Payment {
     private String gatewayPaymentId;
     private String gatewaySignature;
 
-    private Integer amountCents;
+    private Long amountCents;
     private String currency = "INR";
 
     @Enumerated(EnumType.STRING)
@@ -37,4 +37,6 @@ public class Payment {
 
     @UpdateTimestamp
     private Instant updatedAt;
+
+    private String paymentMode;
 }

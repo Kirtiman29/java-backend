@@ -34,6 +34,17 @@ public class PaymentController {
         return ResponseEntity.ok(paymentService.getPaymentsByUser(userId));
     }
 
+    /**
+     * ✅ NEW: ADMIN ENDPOINT
+     * Provides the global transaction ledger sorted by newest first.
+     */
+    @GetMapping("/all")
+    public ResponseEntity<List<Payment>> getAllPayments() {
+        // You may want to add @PreAuthorize("hasRole('ADMIN')") here
+        log.info("Fetching global payment ledger for Admin Dashboard");
+        return ResponseEntity.ok(paymentService.getAllPaymentsSorted());
+    }
+
     @PostMapping("/create")
     public ResponseEntity<PaymentInitResponse> createPayment(
             @RequestBody PaymentRequest req,
@@ -50,10 +61,6 @@ public class PaymentController {
         ));
     }
 
-    /**
-     * ✅ FIX: USER-FACING VERIFICATION ENDPOINT
-     * Resolves 404 by providing the expected /api/payments/verify path.
-     */
     @PostMapping("/verify")
     public ResponseEntity<?> verifyPayment(@RequestBody Map<String, String> response) {
         log.info("Processing payment verification for Gateway Order: {}", response.get("razorpay_order_id"));

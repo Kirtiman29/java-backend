@@ -9,8 +9,9 @@ import java.util.Optional;
 @Repository
 public interface OrderRepository extends JpaRepository<Order, Long> {
 
-    // FIX: Add this method to support the entitlement check
+
     List<Order> findByUserIdAndStatus(Long userId, String status);
+
 
     List<Order> findByUserIdOrderByCreatedAtDesc(Long userId);
 

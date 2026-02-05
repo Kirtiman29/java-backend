@@ -1,10 +1,16 @@
 package com.rdc.order.controller;
 
 import com.rdc.order.dto.OrderResponse;
+import com.rdc.order.entity.Order;
+import com.rdc.order.exception.OrderNotFoundException;
+import com.rdc.order.repository.OrderRepository;
+import com.rdc.order.service.InvoiceGeneratorService;
 import com.rdc.order.service.OrderService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -21,6 +27,9 @@ import java.util.Map;
 public class OrderController {
 
     private final OrderService orderService;
+    // ✅ ADDED: Required dependencies for PDF generation
+    private final OrderRepository orderRepository;
+    private final InvoiceGeneratorService invoiceGeneratorService;
 
     @PostMapping
     public ResponseEntity<OrderResponse> createOrder(@AuthenticationPrincipal Jwt jwt) {
@@ -44,6 +53,30 @@ public class OrderController {
         Long userId = getUserIdFromJwt(jwt);
         log.info("Fetching orders for userId: {}", userId);
         return ResponseEntity.ok(orderService.getOrdersByUser(userId));
+    }
+
+    /**
+     * ✅ NEW: Triggered from Frontend for Invoice Download
+     */
+    @GetMapping("/{orderId}/invoice")
+    public ResponseEntity<byte[]> downloadInvoice(@PathVariable Long orderId, @AuthenticationPrincipal Jwt jwt) {
+        Long userId = getUserIdFromJwt(jwt);
+
+        // ✅ SECURITY: Verify the order exists and belongs to the user (or admin)
+        // This ensures users can't download other people's invoices.
+        orderService.getOrderById(orderId, userId);
+
+        // Re-fetch the actual entity to pass to the generator
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new OrderNotFoundException("Order not found"));
+
+        // Generate the PDF bytes using the generator service
+        byte[] pdfBytes = invoiceGeneratorService.generateInvoicePdf(order);
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=Invoice-RDC-" + orderId + ".pdf")
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(pdfBytes);
     }
 
     /**
