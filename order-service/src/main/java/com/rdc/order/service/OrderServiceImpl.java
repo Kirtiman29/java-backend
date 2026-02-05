@@ -90,8 +90,13 @@ public class OrderServiceImpl implements OrderService {
                 .anyMatch(item -> assetUuid.equals(item.getAssetUuid()));
     }
 
+    /**
+     * ✅ UPDATED: Added transactionId and paymentMode parameters
+     * This logic ensures transaction details from Payment DB are moved to Order DB
+     * so they are available for the Tax Invoice PDF.
+     */
     @Override
-    public void updateStatus(Long orderId, String status) {
+    public void updateStatus(Long orderId, String status, String transactionId, String paymentMode) {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new OrderNotFoundException("Order not found"));
 
@@ -101,10 +106,15 @@ public class OrderServiceImpl implements OrderService {
         }
 
         order.setStatus(status);
+
+        // ✅ Persist transaction details for the invoice
+        order.setTransactionId(transactionId);
+        order.setPaymentMode(paymentMode);
+
         Order updatedOrder = orderRepository.save(order);
 
         if (OrderStatus.PAID.name().equals(status)) {
-            // ✅ FIX: Initialize lazy collection before calling Async method to prevent LazyInitializationException
+            // ✅ FIX: Initialize lazy collection before calling Async method
             if (updatedOrder.getItems() != null) {
                 updatedOrder.getItems().size();
             }
@@ -115,8 +125,10 @@ public class OrderServiceImpl implements OrderService {
                 if (userMeta != null) {
                     String realEmail = (String) userMeta.get("email");
                     String realName = (String) userMeta.get("name");
-                    // Explicitly pass customer details for the invoice
+
+                    // ✅ Enrich order with customer name for the invoice PDF
                     updatedOrder.setCustomerName(realName);
+
                     orderEmailService.sendOrderConfirmation(updatedOrder, realEmail, realName);
                 }
             } catch (Exception e) {
@@ -135,14 +147,14 @@ public class OrderServiceImpl implements OrderService {
     public OrderResponse getOrderByIdInternal(Long orderId) {
         return orderRepository.findById(orderId)
                 .map(this::mapToResponse)
-                .orElseThrow(() -> new OrderNotFoundException("Order not found"));
+                .orElseThrow(() -> new OrderNotFoundException("Order not found "));
     }
 
     @Override @Transactional(readOnly = true)
     public OrderResponse getOrderById(Long orderId, Long userId) {
         return orderRepository.findByIdAndUserId(orderId, userId)
                 .map(this::mapToResponse)
-                .orElseThrow(() -> new OrderNotFoundException("Order not found"));
+                .orElseThrow(() -> new OrderNotFoundException("Order not found "));
     }
 
     @Override

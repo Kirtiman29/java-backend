@@ -29,6 +29,15 @@
             font-weight: normal;
             color: #333;
         }
+
+        /* NEW: Transaction Details Styling */
+        .txn-details {
+            margin-top: 10px;
+            font-size: 10px;
+            color: #444;
+            line-height: 1.5;
+        }
+
         .balance-due-box {
             background: #f5f5f5;
             padding: 10px;
@@ -114,8 +123,16 @@
         </td>
         <td class="invoice-title-box">
             <h1>TAX INVOICE</h1>
+
+            <div class="txn-details">
+                <strong>Invoice No:</strong> <span th:text="${invoiceNumber}"></span><br/>
+                <strong>Transaction ID:</strong> <span th:text="${order.transactionId}"></span><br/>
+                <strong>Payment Mode:</strong> <span th:text="${order.paymentMode}"></span><br/>
+                <strong>Payment Date:</strong> <span th:text="${orderDate}"></span>
+            </div>
+
             <div class="balance-due-box">
-                <span style="font-size:10px;color:#666;">Balance Due</span><br/>
+                <span style="font-size:10px;color:#666;">Invoice Value</span><br/>
                 <strong style="font-size:16px;">
                     ₹ <span th:text="${#numbers.formatDecimal(order.totalAmountCents / 100.0, 1, 'COMMA', 2, 'POINT')}"></span>
                 </strong>
@@ -134,12 +151,12 @@
         <td style="text-align:right;">
             <table style="margin-left:auto;">
                 <tr>
-                    <td style="color:#666;padding-right:15px;">Invoice Date:</td>
+                    <td style="color:#666;padding-right:15px;">Order Date:</td>
                     <td th:text="${orderDate}"></td>
                 </tr>
                 <tr>
-                    <td style="color:#666;padding-right:15px;">Due Date:</td>
-                    <td th:text="${orderDate}"></td>
+                    <td style="color:#666;padding-right:15px;">Status:</td>
+                    <td th:text="${order.status}">PAID</td>
                 </tr>
             </table>
         </td>
@@ -155,7 +172,6 @@
     <tr>
         <th>#</th>
         <th>Item &amp; Description</th>
-        <th>HSN</th>
         <th>Qty</th>
         <th>Rate</th>
         <th>CGST</th>
@@ -167,7 +183,7 @@
     <tr th:each="item, i : ${items}">
         <td th:text="${i.index + 1}"></td>
         <td class="left" th:text="${item.designTitle}"></td>
-        <td>49111090</td>
+
         <td><span th:text="${item.quantity}"></span> pcs</td>
         <td th:text="${#numbers.formatDecimal(item.priceCents / 100.0, 1, 'COMMA', 2, 'POINT')}"></td>
         <td>
@@ -212,10 +228,6 @@
 <div class="footer">
     <strong>Notes</strong><br/>
     Thanks for your business.
-    <div style="margin-top:40px;">
-        <div class="signature-line"></div>
-        <div>Authorized Signatory</div>
-    </div>
 </div>
 
 </body>

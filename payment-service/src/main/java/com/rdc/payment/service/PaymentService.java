@@ -93,7 +93,6 @@ public class PaymentService {
                 throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied: Order ownership mismatch");
             }
 
-            // ✅ SAFE TYPE CONVERSION: Order service sends Long, Jackson might parse as Integer/Long
             Object priceObj = data.get("totalPriceCents");
             if (priceObj instanceof Number) {
                 return ((Number) priceObj).intValue();
@@ -127,25 +126,41 @@ public class PaymentService {
         }
     }
 
-    private boolean markAsPaid(String orderId, String paymentId, String signature) {
-        Payment p = paymentRepository.findByGatewayOrderId(orderId)
-                .orElseThrow(() -> new RuntimeException("Payment record not found for Gateway ID: " + orderId));
+    private boolean markAsPaid(String gatewayOrderId, String paymentId, String signature) {
+        Payment p = paymentRepository.findByGatewayOrderId(gatewayOrderId)
+                .orElseThrow(() -> new RuntimeException("Payment record not found for Gateway ID: " + gatewayOrderId));
 
         if (p.getStatus() == PaymentStatus.PAID) return true;
+
+        // ✅ NEW: Fetch Payment Details from Razorpay to get the "Method" (Mode of Payment)
+        String paymentMode = "N/A";
+        try {
+            com.razorpay.Payment razorpayPayment = razorpayClient.payments.fetch(paymentId);
+            paymentMode = razorpayPayment.get("method").toString().toUpperCase(); // e.g., CARD, UPI, NETBANKING
+        } catch (Exception e) {
+            log.error("⚠️ Failed to fetch payment method from Razorpay for ID {}: {}", paymentId, e.getMessage());
+        }
 
         p.setStatus(PaymentStatus.PAID);
         p.setGatewayPaymentId(paymentId);
         p.setGatewaySignature(signature);
         paymentRepository.save(p);
 
-        // Notify Order Service to update its status to PAID and clear the cart
-        notifyOrderService(p.getOrderId());
+        // ✅ Updated: Notify Order Service with Transaction ID and Payment Mode
+        notifyOrderService(p.getOrderId(), paymentId, paymentMode);
         return true;
     }
 
-    private void notifyOrderService(Long orderId) {
+    /**
+     * ✅ UPDATED: Sends transactionId and paymentMode as query parameters
+     * to the Order Service for invoice generation.
+     */
+    private void notifyOrderService(Long orderId, String transactionId, String paymentMode) {
         try {
-            String url = orderServiceUrl + "/api/internal/orders/" + orderId + "/paid";
+            String url = orderServiceUrl + "/api/internal/orders/" + orderId + "/paid"
+                    + "?transactionId=" + transactionId
+                    + "&paymentMode=" + paymentMode;
+
             log.info("📣 Notifying Order Service of successful payment: {}", url);
 
             HttpHeaders headers = new HttpHeaders();

@@ -32,14 +32,23 @@ public class InternalOrderController {
         return ResponseEntity.ok(orderService.getOrderByIdInternal(orderId));
     }
 
+    /**
+     * ✅ UPDATED: Captures Transaction ID and Payment Mode from Payment Service.
+     * These details are essential for generating a GST-compliant Tax Invoice.
+     */
     @PostMapping("/{orderId}/paid")
     public ResponseEntity<Void> markOrderAsPaid(
             @PathVariable Long orderId,
+            @RequestParam String transactionId, // ✅ Captured from Razorpay
+            @RequestParam String paymentMode,   // ✅ e.g., CARD, UPI, NETBANKING
             @RequestHeader(value = "X-INTERNAL-KEY", required = false) String key) {
 
         validateKey(key);
-        log.info("Internal bridge: Authorized request to mark order {} as PAID", orderId);
-        orderService.updateStatus(orderId, "PAID");
+        log.info("Internal bridge: Marking order {} as PAID. Txn: {}, Mode: {}", orderId, transactionId, paymentMode);
+
+        // Pass the new transaction details to the service layer for persistence
+        orderService.updateStatus(orderId, "PAID", transactionId, paymentMode);
+
         return ResponseEntity.ok().build();
     }
 

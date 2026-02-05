@@ -7,10 +7,10 @@ public interface OrderService {
     OrderResponse createOrder(Long userId);
     OrderResponse getOrderById(Long orderId, Long userId);
     OrderResponse getOrderByIdInternal(Long orderId);
-    OrderResponse getOrderByIdAdmin(Long orderId); // ✅ Added for Admin Detail
+    OrderResponse getOrderByIdAdmin(Long orderId);
     List<OrderResponse> getOrdersByUser(Long userId);
-    List<OrderResponse> getAllOrders(); // ✅ Added for Admin Dashboard
-    void updateStatus(Long orderId, String status);
+    List<OrderResponse> getAllOrders();
+    void updateStatus(Long orderId, String status, String transactionId, String paymentMode);
     void cancelOrder(Long orderId, Long userId);
     boolean hasUserPaidForAsset(Long userId, String assetUuid);
 }
