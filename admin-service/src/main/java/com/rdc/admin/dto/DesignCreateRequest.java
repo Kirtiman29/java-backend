@@ -1,5 +1,6 @@
 package com.rdc.admin.dto;
 
+import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 import java.util.List;
 import java.util.ArrayList;
@@ -30,4 +31,8 @@ public class DesignCreateRequest {
     private Boolean editorsPick = false;
     private Boolean newArrival = true;
     private Boolean premium = false;
+
+    @NotBlank
+    private String designIdentifier;
+
 }

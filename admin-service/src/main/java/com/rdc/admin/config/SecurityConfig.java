@@ -60,25 +60,20 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        // 1. Always allow Pre-flight OPTIONS
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
-                        // 2. PUBLIC STOREFRONT & CAREERS ACCESS
-                        // Permitting /api/public/** allows candidates to view and apply for jobs
+                        // ✅ INTERNAL BRIDGE (Moved up to prevent 401/403)
+                        .requestMatchers("/api/internal/**").permitAll()
+
                         .requestMatchers("/api/categories/public").permitAll()
                         .requestMatchers("/api/public/**").permitAll()
-
-                        // 3. Fallback permits for general GET requests
                         .requestMatchers(HttpMethod.GET, "/api/designs/**", "/api/categories/**", "/api/banners/**").permitAll()
-
-                        // 4. Admin Authentication & System endpoints
                         .requestMatchers("/api/admin/login", "/actuator/**").permitAll()
 
-                        // 5. ADMIN MANAGEMENT ACTIONS
-                        // Lock all admin actions, including career management, behind ROLE_ADMIN
+                        // ✅ ADMIN ENDPOINTS
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
 
-                        // 6. Secure everything else
+                        // ❗ MUST BE LAST
                         .anyRequest().authenticated()
                 )
                 .oauth2ResourceServer(oauth -> oauth
@@ -115,15 +110,11 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(List.of(
-                "http://localhost:3000",   // User Storefront
-                "http://localhost:3001",   // Admin Panel
-                "http://localhost:5173",   // Vite Dev Server
-                "http://127.0.0.1:3000",
-                "http://127.0.0.1:3001",
-                "https://localhost:3000"
+                "http://localhost:3000", "http://localhost:3001", "http://localhost:5173",
+                "http://127.0.0.1:3000", "http://127.0.0.1:3001", "https://localhost:3000"
         ));
         config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
-        config.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "Accept", "X-Requested-With"));
+        config.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "Accept", "X-Requested-With", "X-INTERNAL-KEY"));
         config.setAllowCredentials(true);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);

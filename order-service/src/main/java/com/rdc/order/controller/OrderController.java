@@ -2,7 +2,9 @@ package com.rdc.order.controller;
 
 import com.rdc.order.dto.OrderResponse;
 import com.rdc.order.entity.Order;
+import com.rdc.order.entity.OrderItem;
 import com.rdc.order.exception.OrderNotFoundException;
+import com.rdc.order.repository.OrderItemRepository; // ✅ Added
 import com.rdc.order.repository.OrderRepository;
 import com.rdc.order.service.InvoiceGeneratorService;
 import com.rdc.order.service.OrderService;
@@ -27,8 +29,8 @@ import java.util.Map;
 public class OrderController {
 
     private final OrderService orderService;
-    // ✅ ADDED: Required dependencies for PDF generation
     private final OrderRepository orderRepository;
+    private final OrderItemRepository orderItemRepository; // ✅ Added for explicit item fetching
     private final InvoiceGeneratorService invoiceGeneratorService;
 
     @PostMapping
@@ -38,11 +40,6 @@ public class OrderController {
         return ResponseEntity.status(HttpStatus.CREATED).body(orderService.createOrder(userId));
     }
 
-    /**
-     * ✅ HYBRID ACCESS:
-     * ADMIN: Fetches ALL orders for the transaction dashboard.
-     * USER: Fetches only their personal acquisitions.
-     */
     @GetMapping
     public ResponseEntity<List<OrderResponse>> getOrders(@AuthenticationPrincipal Jwt jwt) {
         if (isAdmin(jwt)) {
@@ -56,22 +53,29 @@ public class OrderController {
     }
 
     /**
-     * ✅ NEW: Triggered from Frontend for Invoice Download
+     * ✅ FIXED: Support for dual-argument PDF Generation
+     * Fetches items explicitly to avoid Hibernate session issues and ensure SKU visibility.
      */
     @GetMapping("/{orderId}/invoice")
     public ResponseEntity<byte[]> downloadInvoice(@PathVariable Long orderId, @AuthenticationPrincipal Jwt jwt) {
         Long userId = getUserIdFromJwt(jwt);
 
-        // ✅ SECURITY: Verify the order exists and belongs to the user (or admin)
-        // This ensures users can't download other people's invoices.
+        // 1️⃣ Security Check: Ensure user owns this order
         orderService.getOrderById(orderId, userId);
 
-        // Re-fetch the actual entity to pass to the generator
+        // 2️⃣ Fetch actual Order entity
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new OrderNotFoundException("Order not found"));
 
-        // Generate the PDF bytes using the generator service
-        byte[] pdfBytes = invoiceGeneratorService.generateInvoicePdf(order);
+        // 3️⃣ Fetch Items explicitly (MANDATORY for design identification)
+        // This list contains the designIdentifier (SKU) used in the Thymeleaf template.
+        List<OrderItem> items = orderItemRepository.findByOrderId(orderId);
+
+        // 4️⃣ Generate PDF using the updated 2-argument method
+        //
+        byte[] pdfBytes = invoiceGeneratorService.generateInvoicePdf(order, items);
+
+        log.info("✅ Manual invoice download triggered for Order #{}", orderId);
 
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=Invoice-RDC-" + orderId + ".pdf")
@@ -79,11 +83,6 @@ public class OrderController {
                 .body(pdfBytes);
     }
 
-    /**
-     * ✅ HYBRID ACCESS:
-     * ADMIN: Can view any order details by ID.
-     * USER: Restricted to their own order via Service Layer check.
-     */
     @GetMapping("/{orderId}")
     public ResponseEntity<OrderResponse> getOrder(@PathVariable Long orderId, @AuthenticationPrincipal Jwt jwt) {
         if (isAdmin(jwt)) {
@@ -104,11 +103,9 @@ public class OrderController {
             throw new ResponseStatusException(HttpStatus.PAYMENT_REQUIRED, "Order must be PAID to download assets.");
         }
 
-        // Bridge to Asset Service for the temporary industrial design link
         return ResponseEntity.ok(Map.of("downloadUrl", "http://localhost:8090/api/assets/download/" + orderId));
     }
 
-    // ✅ HELPER: Check for ADMIN role in the JWT
     private boolean isAdmin(Jwt jwt) {
         List<String> roles = jwt.getClaimAsStringList("role");
         return roles != null && roles.contains("ADMIN");
@@ -117,7 +114,6 @@ public class OrderController {
     private Long getUserIdFromJwt(Jwt jwt) {
         String subject = jwt.getSubject();
         try {
-            // Numeric subject mapping from Auth Service
             return Long.parseLong(subject);
         } catch (NumberFormatException e) {
             log.error("Critical Identity Error: Non-numeric sub in JWT: {}", subject);

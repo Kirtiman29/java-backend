@@ -9,6 +9,7 @@ import java.nio.file.*;
 @Service
 public class FileStorageService {
 
+
     @Value("${app.storage.location:./data/uploads}")
     private String storageLocation;
 

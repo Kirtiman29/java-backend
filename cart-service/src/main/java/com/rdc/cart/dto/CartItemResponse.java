@@ -22,6 +22,7 @@ public class CartItemResponse {
     private String assetUuid;      // For preview/download
     private String designTitle;    // Design title for display
     private Integer quantity;
-    private Long priceCents;       // Price fetched from Admin Service (NOT from frontend)
+    private Long priceCents;
+    private String designIdentifier;
     private Long totalPriceCents;  // quantity * priceCents
 }

@@ -3,8 +3,8 @@ package com.rdc.order.service;
 import com.openhtmltopdf.pdfboxout.PdfRendererBuilder;
 import com.rdc.order.entity.Order;
 import com.rdc.order.entity.OrderItem;
-import com.rdc.order.repository.OrderItemRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.thymeleaf.context.Context;
 import org.thymeleaf.spring6.SpringTemplateEngine;
@@ -17,44 +17,46 @@ import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class InvoicePdfService {
 
     private final SpringTemplateEngine templateEngine;
-    private final OrderItemRepository orderItemRepository;
     private final InvoiceAssetService invoiceAssetService;
 
     /**
-     * ✅ UPDATED: Added BaseUri resolution
-     * Even with Base64, openhtmltopdf works best when a baseUri is provided
-     * to prevent security or resolution exceptions.
+     * ✅ UPDATED: Now accepts pre-fetched items list.
+     * Prevents LazyInitializationException and Hibernate collection assignment errors.
      */
-    public byte[] generatePdf(Order order) {
-        String html = generateInvoiceHtml(order);
+    public byte[] generatePdf(Order order, List<OrderItem> items) {
+        log.info("📄 Generating PDF for Order #{} with {} items", order.getId(), items.size());
+
+        String html = generateInvoiceHtml(order, items);
 
         try (ByteArrayOutputStream os = new ByteArrayOutputStream()) {
             PdfRendererBuilder builder = new PdfRendererBuilder();
-
-            // Set BaseUri to an empty string or a valid URL to allow Base64 processing
+            builder.useFastMode(); // Performance boost for high-volume invoice generation
             builder.withHtmlContent(html, "");
             builder.toStream(os);
             builder.run();
-
             return os.toByteArray();
         } catch (Exception e) {
+            log.error("❌ PDF Engine Error: {}", e.getMessage());
             throw new RuntimeException("Invoice PDF generation failed", e);
         }
     }
 
-    public String generateInvoiceHtml(Order order) {
-        List<OrderItem> items = orderItemRepository.findByOrderId(order.getId());
-
+    /**
+     * ✅ UPDATED: Processes the HTML template using the explicit items list.
+     * Direct variable passing ensures designIdentifier is visible to Thymeleaf.
+     */
+    public String generateInvoiceHtml(Order order, List<OrderItem> items) {
         Context context = new Context();
+
+        // Pass essential data to the Thymeleaf template [cite: 368]
         context.setVariable("order", order);
-        context.setVariable("items", items);
+        context.setVariable("items", items); // Direct list usage [cite: 368, 484]
         context.setVariable("invoiceNumber", "RDC-" + order.getId());
         context.setVariable("orderDate", formatInstant(order.getCreatedAt()));
-
-        // ✅ Ensure this returns the raw Base64 string from src/main/resources/static/logo.png
         context.setVariable("logoBase64", invoiceAssetService.getLogoBase64());
 
         return templateEngine.process("invoice", context);
@@ -63,7 +65,7 @@ public class InvoicePdfService {
     private String formatInstant(Instant instant) {
         if (instant == null) return "N/A";
         return DateTimeFormatter.ofPattern("dd/MM/yyyy")
-                .withZone(ZoneId.of("Asia/Kolkata"))
+                .withZone(ZoneId.of("Asia/Kolkata")) // Standardized for RDC Mumbai headquarters
                 .format(instant);
     }
 }

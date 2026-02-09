@@ -32,9 +32,9 @@ public class CartServiceImpl implements CartService {
         // 1. Fetch design from Admin Service
         DesignDto design = adminServiceClient.getDesignById(request.getDesignId());
 
-        // 2. DEBUG LOGGING: Verify exact contents of the fetched design
-        log.debug("📦 Fetched Design Info: ID={}, Title={}, UUID={}, Active={}, Draft={}",
-                design.getId(), design.getTitle(), design.getAssetUuid(), design.getActive(), design.getDraft());
+        // 2. DEBUG LOGGING: Verify SKU/Identifier exists
+        log.debug("📦 Fetched Design Info: ID={}, SKU={}, Title={}, UUID={}",
+                design.getId(), design.getDesignIdentifier(), design.getTitle(), design.getAssetUuid());
 
         // 3. HARD VALIDATION
         if (design == null) {
@@ -46,19 +46,12 @@ public class CartServiceImpl implements CartService {
             throw new DesignNotAvailableException("Design is not available for purchase");
         }
 
-        // 4. SECURE SOURCE OF TRUTH: Check for assetUuid
-        // If this still fails after updating DTO, the Admin Service isn't sending the field
         if (design.getAssetUuid() == null || design.getAssetUuid().isBlank()) {
-            log.error("❌ CRITICAL: Design {} has no assetUuid in the API response!", design.getId());
+            log.error("❌ CRITICAL: Design {} has no assetUuid!", design.getId());
             throw new DesignNotAvailableException("Design asset is not ready for download");
         }
 
-        if (design.getFinalPriceCents() == null) {
-            log.error("❌ CRITICAL: Design {} has no price in the API response!", design.getId());
-            throw new DesignNotAvailableException("Design pricing is not configured");
-        }
-
-        // 5. Idempotency Check: Update quantity if item already exists
+        // 4. Idempotency Check: Update quantity if item already exists
         Optional<CartItem> existingItem = cartItemRepository
                 .findByUserIdAndDesignIdAndDeletedFalse(userId, request.getDesignId());
 
@@ -69,13 +62,18 @@ public class CartServiceImpl implements CartService {
             item.setPriceCents(design.getFinalPriceCents());
             item.setDesignTitle(design.getTitle());
             item.setAssetUuid(design.getAssetUuid());
+
+            // ✅ FIX: Ensure Identifier is synchronized even on update
+            item.setDesignIdentifier(design.getDesignIdentifier());
+
             return toResponse(cartItemRepository.save(item));
         }
 
-        // 6. Create new entry
+        // 5. Create new entry with Identifier (SKU)
         CartItem newItem = CartItem.builder()
                 .userId(userId)
                 .designId(design.getId())
+                .designIdentifier(design.getDesignIdentifier()) // 🔥 FIXED: Added SKU persistence
                 .designTitle(design.getTitle())
                 .assetUuid(design.getAssetUuid())
                 .priceCents(design.getFinalPriceCents())
@@ -83,7 +81,7 @@ public class CartServiceImpl implements CartService {
                 .deleted(false)
                 .build();
 
-        log.info("✅ Successfully saved new cart item for design: {}", design.getTitle());
+        log.info("✅ Successfully saved new cart item with SKU: {}", design.getDesignIdentifier());
         return toResponse(cartItemRepository.save(newItem));
     }
 
@@ -118,14 +116,12 @@ public class CartServiceImpl implements CartService {
                 .orElseThrow(() -> new CartItemNotFoundException("Cart item not found"));
         item.setDeleted(true);
         cartItemRepository.save(item);
-        log.info("🗑️ Soft deleted cart item: {}", cartItemId);
     }
 
     @Override
     @Transactional
     public void clearCart(Long userId) {
-        int deletedCount = cartItemRepository.softDeleteAllByUserId(userId);
-        log.info("🧹 Cleared {} items from cart for user {}", deletedCount, userId);
+        cartItemRepository.softDeleteAllByUserId(userId);
     }
 
     @Override
@@ -134,11 +130,15 @@ public class CartServiceImpl implements CartService {
         return cartItemRepository.countByUserIdAndDeletedFalse(userId);
     }
 
+    /**
+     * ✅ UPDATED: Map internal SKU to Response DTO
+     */
     private CartItemResponse toResponse(CartItem item) {
         return CartItemResponse.builder()
                 .id(item.getId())
                 .userId(item.getUserId())
                 .designId(item.getDesignId())
+                .designIdentifier(item.getDesignIdentifier())
                 .assetUuid(item.getAssetUuid())
                 .designTitle(item.getDesignTitle())
                 .quantity(item.getQuantity())

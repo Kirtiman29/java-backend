@@ -22,4 +22,6 @@ public class CartItemDto {
     private Integer quantity;
     private Long priceCents;
     private Long totalPriceCents;
+    private String designIdentifier;
+
 }

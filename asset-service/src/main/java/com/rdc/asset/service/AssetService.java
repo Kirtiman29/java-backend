@@ -9,4 +9,6 @@ import java.util.List;
 public interface AssetService {
     AssetDto uploadAndCreateAsset(MultipartFile file, String title, Long sellerId, AssetType type) throws Exception;
     List<AssetDto> getAllAssets(); // Ensure this exists
+    void deleteAssetByUuid(String uuid);
+    void verifyExists(String uuid);
 }

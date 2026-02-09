@@ -30,7 +30,6 @@
             color: #333;
         }
 
-        /* NEW: Transaction Details Styling */
         .txn-details {
             margin-top: 10px;
             font-size: 10px;
@@ -96,13 +95,9 @@
             padding-top: 20px;
             font-size: 11px;
         }
-        .signature-line {
-            border-top: 1px solid #333;
-            width: 200px;
-            margin-top: 40px;
-        }
     </style>
 </head>
+
 <body>
 
 <table class="full-width header-table">
@@ -121,6 +116,7 @@
                 9th Floor, LBS Road, Bhandup (West)
             </div>
         </td>
+
         <td class="invoice-title-box">
             <h1>TAX INVOICE</h1>
 
@@ -132,7 +128,7 @@
             </div>
 
             <div class="balance-due-box">
-                <span style="font-size:10px;color:#666;">Invoice Value</span><br/>
+                <span style="font-size:10px;color:#666;">Total Value (Incl. Tax)</span><br/>
                 <strong style="font-size:16px;">
                     ₹ <span th:text="${#numbers.formatDecimal(order.totalAmountCents / 100.0, 1, 'COMMA', 2, 'POINT')}"></span>
                 </strong>
@@ -179,41 +175,52 @@
         <th>Amount</th>
     </tr>
     </thead>
+
     <tbody>
     <tr th:each="item, i : ${items}">
         <td th:text="${i.index + 1}"></td>
-        <td class="left" th:text="${item.designTitle}"></td>
+
+        <td class="left">
+            <div style="font-weight: bold;" th:text="${item.designTitle}">Design Name</div>
+            <div style="font-size:10px; color:#666;">
+                Design ID: <span th:text="${item.designIdentifier}">SKU-123</span>
+            </div>
+        </td>
 
         <td><span th:text="${item.quantity}"></span> pcs</td>
-        <td th:text="${#numbers.formatDecimal(item.priceCents / 100.0, 1, 'COMMA', 2, 'POINT')}"></td>
+
+        <td th:text="${#numbers.formatDecimal((item.priceCents / 1.18) / 100.0, 1, 'COMMA', 2, 'POINT')}"></td>
+
         <td>
-            <span th:text="${#numbers.formatDecimal((item.priceCents * item.quantity * 0.09) / 100.0, 1, 'COMMA', 2, 'POINT')}"></span>
-            <br/><span style="font-size:8px;">9%</span>
+            <span th:text="${#numbers.formatDecimal(((item.priceCents * item.quantity) - ((item.priceCents * item.quantity) / 1.18)) / 2 / 100.0, 1, 'COMMA', 2, 'POINT')}"></span><br/>
+            <span style="font-size:8px;">9%</span>
         </td>
+
         <td>
-            <span th:text="${#numbers.formatDecimal((item.priceCents * item.quantity * 0.09) / 100.0, 1, 'COMMA', 2, 'POINT')}"></span>
-            <br/><span style="font-size:8px;">9%</span>
+            <span th:text="${#numbers.formatDecimal(((item.priceCents * item.quantity) - ((item.priceCents * item.quantity) / 1.18)) / 2 / 100.0, 1, 'COMMA', 2, 'POINT')}"></span><br/>
+            <span style="font-size:8px;">9%</span>
         </td>
-        <td th:text="${#numbers.formatDecimal((item.priceCents * item.quantity * 1.18) / 100.0, 1, 'COMMA', 2, 'POINT')}"></td>
+
+        <td th:text="${#numbers.formatDecimal((item.priceCents * item.quantity) / 100.0, 1, 'COMMA', 2, 'POINT')}"></td>
     </tr>
     </tbody>
 </table>
 
 <table class="totals-table">
     <tr>
-        <td style="color:#666;">Sub Total</td>
-        <td th:text="${#numbers.formatDecimal(order.subTotalCents / 100.0, 1, 'COMMA', 2, 'POINT')}"></td>
+        <td style="color:#666;">Taxable Value</td>
+        <td th:text="${#numbers.formatDecimal((order.totalAmountCents / 1.18) / 100.0, 1, 'COMMA', 2, 'POINT')}"></td>
     </tr>
     <tr>
         <td style="color:#666;">CGST (9%)</td>
-        <td th:text="${#numbers.formatDecimal(order.cgstCents / 100.0, 1, 'COMMA', 2, 'POINT')}"></td>
+        <td th:text="${#numbers.formatDecimal((order.totalAmountCents - (order.totalAmountCents / 1.18)) / 2 / 100.0, 1, 'COMMA', 2, 'POINT')}"></td>
     </tr>
     <tr>
         <td style="color:#666;">SGST (9%)</td>
-        <td th:text="${#numbers.formatDecimal(order.sgstCents / 100.0, 1, 'COMMA', 2, 'POINT')}"></td>
+        <td th:text="${#numbers.formatDecimal((order.totalAmountCents - (order.totalAmountCents / 1.18)) / 2 / 100.0, 1, 'COMMA', 2, 'POINT')}"></td>
     </tr>
     <tr class="total-row">
-        <td>Total</td>
+        <td>Grand Total</td>
         <td>
             ₹ <span th:text="${#numbers.formatDecimal(order.totalAmountCents / 100.0, 1, 'COMMA', 2, 'POINT')}"></span>
         </td>
@@ -227,7 +234,7 @@
 
 <div class="footer">
     <strong>Notes</strong><br/>
-    Thanks for your business.
+    Exclusivity Guaranteed. This design has been permanently removed from our catalog upon your purchase.
 </div>
 
 </body>

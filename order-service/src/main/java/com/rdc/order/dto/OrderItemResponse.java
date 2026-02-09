@@ -21,5 +21,7 @@ public class OrderItemResponse {
     private String designTitle;
     private Integer quantity;
     private Long priceCents;        // Price per unit
-    private Long totalPriceCents;   // quantity * priceCents
+    private Long totalPriceCents; // quantity * priceCents
+    private String designIdentifier;
+
 }

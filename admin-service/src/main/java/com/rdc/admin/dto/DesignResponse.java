@@ -36,4 +36,7 @@ public class DesignResponse {
     private List<DesignMediaDto> media;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+
+    private String designIdentifier;
+
 }

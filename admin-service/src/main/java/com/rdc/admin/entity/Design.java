@@ -47,14 +47,12 @@ public class Design {
     @Column(name = "asset_uuid")
     private String assetUuid;
 
-    // ✅ TAGS MAPPING (FIXED)
-    // Using EAGER fetch to ensure tags are loaded with the design
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(
             name = "design_tags",
             joinColumns = @JoinColumn(name = "design_id")
     )
-    @Column(name = "tag_name") // The column name in the design_tags table
+    @Column(name = "tag_name")
     private List<String> tags = new ArrayList<>();
 
     @Enumerated(EnumType.STRING)
@@ -77,4 +75,9 @@ public class Design {
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
     }
+
+
+    @Column(name = "design_identifier", nullable = false, unique = true)
+    private String designIdentifier;
+
 }

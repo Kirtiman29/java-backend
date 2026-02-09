@@ -13,4 +13,6 @@ public interface OrderService {
     void updateStatus(Long orderId, String status, String transactionId, String paymentMode);
     void cancelOrder(Long orderId, Long userId);
     boolean hasUserPaidForAsset(Long userId, String assetUuid);
+    void markDesignAsSoldInternal(Long designId);
+    void purgeDesignInternal(Long designId, Long orderId);
 }

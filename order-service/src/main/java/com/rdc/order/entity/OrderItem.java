@@ -34,6 +34,10 @@ public class OrderItem {
     @Column(name = "design_id", nullable = false)
     private Long designId;
 
+
+    @Column(name = "design_identifier")
+    private String designIdentifier;
+
     /**
      * Asset UUID for download purposes.
      * Copied from cart at order creation.

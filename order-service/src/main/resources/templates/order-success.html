@@ -9,7 +9,7 @@
 <p>Hello <strong th:text="${name}">User</strong>,</p>
 
 <p>
-    Thank you for your purchase from <strong>Ruchita Design Company </strong>.
+    Thank you for your purchase from <strong>Ruchita Design Company</strong>.
     Your payment has been successfully verified.
 </p>
 
@@ -23,19 +23,37 @@
 
     <p>
         <strong>Amount Paid:</strong>
-        ₹<span th:text="${#numbers.formatDecimal(amount, 1, 2)}"></span>
+        ₹<span th:text="${#numbers.formatDecimal(totalAmount, 1, 'COMMA', 2, 'POINT')}"></span>
     </p>
 </div>
 
 <h4 style="color: #2A2623;">Purchased Designs:</h4>
-<ul>
-    <li th:each="item : ${items}" style="margin-bottom: 5px;">
-        <span th:text="${item.designTitle}">Design Name</span>
-        (Qty: <span th:text="${item.quantity}">1</span>)
+<ul style="padding-left: 20px;">
+    <li th:each="item : ${items}" style="margin-bottom: 10px;">
+        <strong th:text="${item.designTitle}">Design Name</strong><br/>
+        <span style="font-size: 0.85em; color: #666;">
+            Design ID: <span th:text="${item.designIdentifier}">SKU-123</span>
+        </span>
+        <span style="font-size: 0.85em; color: #666;">
+            | Qty: <span th:text="${item.quantity}">1</span>
+        </span>
     </li>
 </ul>
 
-<!-- ✅ INVOICE NOTICE -->
+
+
+<div style="border-left: 4px solid #2A2623; padding: 10px 15px; background-color: #f8f8f8; margin: 25px 0;">
+    <p style="margin: 0; font-weight: bold;">🔒 Design Exclusivity Notice</p>
+    <p style="margin: 5px 0 0 0; font-size: 0.9em;">
+        To maintain the exclusivity of your purchase and prevent duplicate resale,
+        the design you have purchased is permanently removed from our marketplace
+        after successful payment.
+        <br/><br/>
+        This ensures that the design remains <strong>unique to you</strong>
+        and is never sold to another customer.
+    </p>
+</div>
+
 <div style="border-left: 4px solid #2A2623; padding: 10px 15px; background-color: #f4f6ff; margin: 25px 0;">
     <p style="margin: 0; font-weight: bold;">🧾 Tax Invoice Attached</p>
     <p style="margin: 5px 0 0 0; font-size: 0.9em;">
@@ -44,7 +62,6 @@
     </p>
 </div>
 
-<!-- TIFF DELIVERY NOTICE -->
 <div style="border-left: 4px solid #2A2623; padding: 10px 15px; background-color: #fff9f9; margin: 25px 0;">
     <p style="margin: 0; font-weight: bold;">📩 TIFF File Delivery Notice</p>
     <p style="margin: 5px 0 0 0; font-size: 0.9em;">
@@ -60,7 +77,7 @@
 </p>
 
 <p style="font-size: 0.8em; color: #777; margin-top: 30px; text-align: center;">
-    &copy; 2026 Ruchita Design Company .
+    &copy; 2026 Ruchita Design Company.
     This is a secure, automated transaction confirmation.
 </p>
 

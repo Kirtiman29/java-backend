@@ -29,4 +29,5 @@ public class DesignDto {
 
     private Boolean draft;
     private Boolean active;
+    private String designIdentifier;
 }

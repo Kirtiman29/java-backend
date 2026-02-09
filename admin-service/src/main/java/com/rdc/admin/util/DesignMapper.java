@@ -14,13 +14,14 @@ public class DesignMapper {
 
     /**
      * ✅ Maps Design Entity to DesignResponse DTO.
-     * Includes the primary assetUuid, resolved media URLs, and Tags.
+     * Updated to include the designIdentifier.
      */
     public DesignResponse toResponse(Design design, List<DesignMedia> mediaList) {
         if (design == null) return null;
 
         return DesignResponse.builder()
                 .id(design.getId())
+                .designIdentifier(design.getDesignIdentifier()) // ⭐ FIXED: Added missing identifier mapping
                 .title(design.getTitle())
                 .slug(design.getSlug())
                 .description(design.getDescription())
@@ -32,8 +33,7 @@ public class DesignMapper {
                 .segment(design.getSegment() != null ? design.getSegment().name() : null)
                 .assetUuid(design.getAssetUuid())
 
-                // ✅ FIX: Map tags from Entity to Response DTO
-                // Ensures frontend gets ["tag1", "tag2"] instead of null
+                // ✅ Map tags from Entity to Response DTO
                 .tags(design.getTags() != null ? new ArrayList<>(design.getTags()) : new ArrayList<>())
 
                 .active(design.getActive())

@@ -87,4 +87,8 @@ public class CartItem {
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
     }
+
+    @Column(name = "design_identifier")
+    private String designIdentifier;
+
 }

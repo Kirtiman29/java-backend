@@ -21,6 +21,8 @@ public interface DesignRepository extends JpaRepository<Design, Long> {
 
     List<Design> findByDraftFalseAndActiveTrue();
 
+    boolean existsByDesignIdentifier(String designIdentifier);
+
 
     @Query("""
    SELECT DISTINCT d FROM Design d
