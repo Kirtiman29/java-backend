@@ -56,28 +56,39 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable())
-                .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .sessionManagement(session ->
+                        session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+                )
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
-                        // ✅ INTERNAL BRIDGE (Moved up to prevent 401/403)
+                        // 🔒 INTERNAL BRIDGE
                         .requestMatchers("/api/internal/**").permitAll()
 
+                        // 🌍 PUBLIC APIs (MUST come before ADMIN filters)
+                        .requestMatchers(HttpMethod.POST, "/api/contact").permitAll() // ✅ Fix for 401
                         .requestMatchers("/api/categories/public").permitAll()
                         .requestMatchers("/api/public/**").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/designs/**", "/api/categories/**", "/api/banners/**").permitAll()
+                        .requestMatchers(HttpMethod.GET,
+                                "/api/designs/**",
+                                "/api/categories/**",
+                                "/api/banners/**"
+                        ).permitAll()
+
+                        // 🔓 AUTH
                         .requestMatchers("/api/admin/login", "/actuator/**").permitAll()
 
-                        // ✅ ADMIN ENDPOINTS
+                        // 🔐 ADMIN ENDPOINTS
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
 
-                        // ❗ MUST BE LAST
                         .anyRequest().authenticated()
                 )
-                .oauth2ResourceServer(oauth -> oauth
-                        .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()))
+                .oauth2ResourceServer(oauth ->
+                        oauth.jwt(jwt ->
+                                jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())
+                        )
                 );
 
         return http.build();
@@ -96,9 +107,13 @@ public class SecurityConfig {
                         admin.getPassword(),
                         admin.isEnabled(),
                         true, true, true,
-                        Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + admin.getRole()))
+                        Collections.singletonList(
+                                new SimpleGrantedAuthority("ROLE_" + admin.getRole())
+                        )
                 ))
-                .orElseThrow(() -> new UsernameNotFoundException("Admin not found: " + username));
+                .orElseThrow(() ->
+                        new UsernameNotFoundException("Admin not found: " + username)
+                );
     }
 
     @Bean
@@ -110,12 +125,17 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(List.of(
-                "http://localhost:3000", "http://localhost:3001", "http://localhost:5173",
-                "http://127.0.0.1:3000", "http://127.0.0.1:3001", "https://localhost:3000"
+                "http://localhost:3000",
+                "http://localhost:3001",
+                "http://localhost:5173",
+                "http://127.0.0.1:3000",
+                "http://127.0.0.1:3001",
+                "https://localhost:3000"
         ));
         config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         config.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "Accept", "X-Requested-With", "X-INTERNAL-KEY"));
         config.setAllowCredentials(true);
+
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
         return source;
