@@ -20,10 +20,6 @@ public class JwtUtil {
         return Keys.hmacShaKeyFor(secret.getBytes());
     }
 
-    /**
-     * EXTRACT SUBJECT (NUMERIC USER ID)
-     * Mandatory Fix for Issue #1
-     */
     public String getSubjectFromToken(String token) {
         return getClaimFromToken(token, Claims::getSubject);
     }

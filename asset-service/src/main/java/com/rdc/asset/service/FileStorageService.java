@@ -21,7 +21,6 @@ public class FileStorageService {
         return filename;
     }
 
-    // FIX: Added missing method for vault streaming
     public InputStream getInputStream(String filename) throws IOException {
         Path filePath = Paths.get(storageLocation).resolve(filename);
         return new FileInputStream(filePath.toFile());

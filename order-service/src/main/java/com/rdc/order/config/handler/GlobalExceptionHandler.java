@@ -23,7 +23,6 @@ import java.util.stream.Collectors;
 @Slf4j
 public class GlobalExceptionHandler {
 
-    // 1. Handle validation errors (e.g., @NotNull, @Min) [cite: 186, 187]
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Object> handleValidationException(
             MethodArgumentNotValidException ex, WebRequest request) {
@@ -48,25 +47,25 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(EmptyCartException.class)
     public ResponseEntity<Object> handleEmptyCartException(
             EmptyCartException ex, WebRequest request) {
-        return buildErrorResponse(HttpStatus.BAD_REQUEST, ex.getMessage(), request); // [cite: 388]
+        return buildErrorResponse(HttpStatus.BAD_REQUEST, ex.getMessage(), request);
     }
 
     @ExceptionHandler(OrderNotFoundException.class)
     public ResponseEntity<Object> handleOrderNotFoundException(
             OrderNotFoundException ex, WebRequest request) {
-        return buildErrorResponse(HttpStatus.NOT_FOUND, ex.getMessage(), request); // [cite: 389]
+        return buildErrorResponse(HttpStatus.NOT_FOUND, ex.getMessage(), request);
     }
 
     @ExceptionHandler(OrderCancellationException.class)
     public ResponseEntity<Object> handleOrderCancellationException(
             OrderCancellationException ex, WebRequest request) {
-        return buildErrorResponse(HttpStatus.BAD_REQUEST, ex.getMessage(), request); // [cite: 390]
+        return buildErrorResponse(HttpStatus.BAD_REQUEST, ex.getMessage(), request);
     }
 
     @ExceptionHandler(CartServiceException.class)
     public ResponseEntity<Object> handleCartServiceException(
             CartServiceException ex, WebRequest request) {
-        return buildErrorResponse(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), request); // [cite: 391]
+        return buildErrorResponse(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), request);
     }
 
     @ExceptionHandler(MissingRequestHeaderException.class)
@@ -74,16 +73,15 @@ public class GlobalExceptionHandler {
             MissingRequestHeaderException ex, WebRequest request) {
         String message = "Missing required header: " + ex.getHeaderName();
         if ("X-User-Id".equals(ex.getHeaderName())) {
-            message = "Authentication required. Missing X-User-Id header."; // [cite: 393, 394]
+            message = "Authentication required. Missing X-User-Id header.";
         }
         return buildErrorResponse(HttpStatus.UNAUTHORIZED, message, request);
     }
 
-    // 2. Updated Generic Exception Handler with Logging
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Object> handleGenericException(
             Exception ex, WebRequest request) {
-        log.error("Unhandled Exception in Order Service: ", ex); // Log stack trace for production debugging
+        log.error("Unhandled Exception in Order Service: ", ex);
         return buildErrorResponse(
                 HttpStatus.INTERNAL_SERVER_ERROR,
                 "An unexpected error occurred. Please try again.",
@@ -95,11 +93,11 @@ public class GlobalExceptionHandler {
             HttpStatus status, String message, WebRequest request) {
 
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("timestamp", LocalDateTime.now()); //
-        body.put("status", status.value()); //
-        body.put("error", status.getReasonPhrase()); //
-        body.put("message", message); //
-        body.put("path", request.getDescription(false).substring(4)); //
+        body.put("timestamp", LocalDateTime.now());
+        body.put("status", status.value());
+        body.put("error", status.getReasonPhrase());
+        body.put("message", message);
+        body.put("path", request.getDescription(false).substring(4));
 
         return new ResponseEntity<>(body, status);
     }

@@ -10,6 +10,5 @@ public class RestTemplateConfig {
     @Bean
     public RestTemplate restTemplate() {
         return new RestTemplate();
-        // This resolves the "required a bean... that could not be found" error [cite: 74-75, 693-694]
     }
 }

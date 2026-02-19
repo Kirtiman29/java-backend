@@ -29,10 +29,8 @@ public class CartServiceImpl implements CartService {
     public CartItemResponse addToCart(Long userId, CartItemRequest request) {
         log.info("🛒 Attempting to add to cart: userId={}, designId={}", userId, request.getDesignId());
 
-        // 1. Fetch design from Admin Service
         DesignDto design = adminServiceClient.getDesignById(request.getDesignId());
 
-        // 2. DEBUG LOGGING: Verify SKU/Identifier exists
         log.debug("📦 Fetched Design Info: ID={}, SKU={}, Title={}, UUID={}",
                 design.getId(), design.getDesignIdentifier(), design.getTitle(), design.getAssetUuid());
 
@@ -63,17 +61,15 @@ public class CartServiceImpl implements CartService {
             item.setDesignTitle(design.getTitle());
             item.setAssetUuid(design.getAssetUuid());
 
-            // ✅ FIX: Ensure Identifier is synchronized even on update
             item.setDesignIdentifier(design.getDesignIdentifier());
 
             return toResponse(cartItemRepository.save(item));
         }
 
-        // 5. Create new entry with Identifier (SKU)
         CartItem newItem = CartItem.builder()
                 .userId(userId)
                 .designId(design.getId())
-                .designIdentifier(design.getDesignIdentifier()) // 🔥 FIXED: Added SKU persistence
+                .designIdentifier(design.getDesignIdentifier())
                 .designTitle(design.getTitle())
                 .assetUuid(design.getAssetUuid())
                 .priceCents(design.getFinalPriceCents())
@@ -130,9 +126,6 @@ public class CartServiceImpl implements CartService {
         return cartItemRepository.countByUserIdAndDeletedFalse(userId);
     }
 
-    /**
-     * ✅ UPDATED: Map internal SKU to Response DTO
-     */
     private CartItemResponse toResponse(CartItem item) {
         return CartItemResponse.builder()
                 .id(item.getId())

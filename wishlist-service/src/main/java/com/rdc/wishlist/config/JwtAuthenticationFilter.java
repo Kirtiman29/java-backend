@@ -42,9 +42,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 return;
             }
 
-            // MANDATORY FIX: Use Numeric Subject (userId) from token
             String subject = jwtUtil.getSubjectFromToken(jwt);
-            Long userId = Long.parseLong(subject); // Fail request if non-numeric [cite: 3247]
+            Long userId = Long.parseLong(subject);
             String role = jwtUtil.getRoleFromToken(jwt);
 
             if (userId != null && SecurityContextHolder.getContext().getAuthentication() == null) {

@@ -17,20 +17,12 @@ public class AdminService {
     private final AdminRepository adminRepository;
     private final PasswordEncoder passwordEncoder;
 
-    /**
-     * Finds an Admin by their numeric ID.
-     * This is used for cross-service identity tracking and audit logs.
-     */
     @Transactional(readOnly = true)
     public Admin findById(Long id) {
         return adminRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Admin not found with id: " + id));
     }
 
-    /**
-     * Change Admin password with secure hashing.
-     * Implements logic for updating administrative credentials[cite: 299, 300].
-     */
     @Transactional
     public void updateAdminPassword(Long adminId, String rawNewPassword) {
         log.info("Updating password for Admin ID: {}", adminId);

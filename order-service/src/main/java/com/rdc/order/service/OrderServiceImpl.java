@@ -41,7 +41,8 @@ public class OrderServiceImpl implements OrderService {
     @Value("${internal.service.key}")
     private String internalServiceKey;
 
-    @Value("${service.admin.url:http://localhost:8080}")
+    // ✅ FIXED: Removed localhost fallback to ensure it uses the industrial IP from .env
+    @Value("${service.admin.url}")
     private String adminServiceUrl;
 
     /* ================= READ METHODS ================= */
@@ -93,7 +94,7 @@ public class OrderServiceImpl implements OrderService {
         for (CartItemDto item : cartItems) {
             order.addItem(OrderItem.builder()
                     .designId(item.getDesignId())
-                    .designIdentifier(item.getDesignIdentifier()) // ✅ SKU persisted from Cart
+                    .designIdentifier(item.getDesignIdentifier())
                     .priceCents(item.getPriceCents())
                     .quantity(item.getQuantity())
                     .assetUuid(item.getAssetUuid())
@@ -108,9 +109,6 @@ public class OrderServiceImpl implements OrderService {
         return mapToResponse(saved);
     }
 
-    /**
-     * ✅ UPDATED: Triggers fulfillment and handles the "orphan deletion" safety logic.
-     */
     @Override
     public void updateStatus(Long orderId, String status, String transactionId, String paymentMode) {
         Order order = orderRepository.findById(orderId)
@@ -124,12 +122,11 @@ public class OrderServiceImpl implements OrderService {
         Order updatedOrder = orderRepository.save(order);
 
         if (OrderStatus.PAID.name().equals(status)) {
-            // Fetch items into a local list to prevent Hibernate session issues in the email service
             List<OrderItem> items = orderItemRepository.findByOrderId(orderId);
 
             items.forEach(item -> {
                 Long designId = item.getDesignId();
-                log.info("🚨 Processing fulfillment for Design {} (Order {})", designId, orderId);
+                log.info("🚨 FULFILLMENT: Locking and Purging Design {} for Order {}", designId, orderId);
                 markDesignAsSoldInternal(designId);
                 purgeDesignInternal(designId, orderId);
             });
@@ -138,8 +135,6 @@ public class OrderServiceImpl implements OrderService {
                 Map<String, Object> userMeta = authServiceClient.getUserMetadata(order.getUserId());
                 if (userMeta != null) {
                     updatedOrder.setCustomerName((String) userMeta.get("name"));
-                    // ✅ FIXED: We pass the pre-fetched 'items' list separately
-                    // This ensures the Email Service has data without calling order.getItems()
                     orderEmailService.sendOrderConfirmation(updatedOrder, (String) userMeta.get("email"), (String) userMeta.get("name"));
                 }
             } catch (Exception e) {
@@ -151,6 +146,7 @@ public class OrderServiceImpl implements OrderService {
     @Override
     public void markDesignAsSoldInternal(Long designId) {
         try {
+            // ✅ Uses dynamic adminServiceUrl
             String url = adminServiceUrl + "/api/internal/designs/" + designId + "/sold";
             HttpHeaders headers = new HttpHeaders();
             headers.set("X-INTERNAL-KEY", internalServiceKey);
@@ -164,6 +160,7 @@ public class OrderServiceImpl implements OrderService {
     @Override
     public void purgeDesignInternal(Long designId, Long orderId) {
         try {
+            // ✅ Uses dynamic adminServiceUrl
             String url = adminServiceUrl + "/api/internal/designs/" + designId + "/purge?orderId=" + orderId;
             HttpHeaders headers = new HttpHeaders();
             headers.set("X-INTERNAL-KEY", internalServiceKey);
@@ -203,7 +200,7 @@ public class OrderServiceImpl implements OrderService {
                         .map(item -> OrderItemResponse.builder()
                                 .id(item.getId())
                                 .designId(item.getDesignId())
-                                .designIdentifier(item.getDesignIdentifier()) // ✅ SKU visibility for UI
+                                .designIdentifier(item.getDesignIdentifier())
                                 .assetUuid(item.getAssetUuid())
                                 .designTitle(item.getDesignTitle())
                                 .quantity(item.getQuantity())

@@ -7,6 +7,7 @@ import com.rdc.admin.entity.HomepageBanner;
 import com.rdc.admin.exception.ResourceNotFoundException;
 import com.rdc.admin.repository.HomepageBannerRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,9 +22,10 @@ public class BannerService {
     private final HomepageBannerRepository repository;
     private final AssetClientService assetClientService;
 
-    /**
-     * Retrieves the currently active banner based on the date and priority[cite: 31].
-     */
+    // ✅ Injected from application.properties or environment variables
+    @Value("${service.asset.url}")
+    private String assetServiceBaseUrl;
+
     @Transactional(readOnly = true)
     public BannerResponse getActiveBanner() {
         LocalDate today = LocalDate.now();
@@ -37,29 +39,23 @@ public class BannerService {
                         .orElse(null));
     }
 
-    /**
-     * Creates a new homepage banner after validating the background asset exists[cite: 76, 77].
-     */
     @Transactional
     public BannerResponse createBanner(BannerRequest request) {
         if (request.getBackgroundImageUuid() != null) {
-            // Bridge to Port 8090 to verify the asset [cite: 65-67]
+            // Bridge to Asset Service (Port 8090) to verify existence
             assetClientService.validateAsset(request.getBackgroundImageUuid());
         }
 
         HomepageBanner banner = new HomepageBanner();
         updateBannerFields(banner, request);
 
-        // ✅ FINAL FIX: Matches Asset Service @GetMapping("/download/{uuid}")
-        String imageUrl = "http://localhost:8090/api/assets/download/" + request.getBackgroundImageUuid();
+        // ✅ Uses injected base URL instead of hardcoded localhost
+        String imageUrl = assetServiceBaseUrl + "/api/assets/download/" + request.getBackgroundImageUuid();
         banner.setBackgroundImageUrl(imageUrl);
 
         return mapToResponse(repository.save(banner));
     }
 
-    /**
-     * Updates an existing banner and its linked asset URL [cite: 79-81].
-     */
     @Transactional
     public BannerResponse updateBanner(Long id, BannerRequest request) {
         HomepageBanner banner = repository.findById(id)
@@ -67,8 +63,8 @@ public class BannerService {
 
         if (request.getBackgroundImageUuid() != null) {
             assetClientService.validateAsset(request.getBackgroundImageUuid());
-            // ✅ FINAL FIX: Matches Asset Service @GetMapping("/download/{uuid}")
-            banner.setBackgroundImageUrl("http://localhost:8090/api/assets/download/" + request.getBackgroundImageUuid());
+            // ✅ Uses injected base URL instead of hardcoded localhost
+            banner.setBackgroundImageUrl(assetServiceBaseUrl + "/api/assets/download/" + request.getBackgroundImageUuid());
         }
 
         updateBannerFields(banner, request);
@@ -96,7 +92,6 @@ public class BannerService {
         banner.setDescription(request.getDescription());
         banner.setCtaText(request.getCtaText());
         banner.setCtaUrl(request.getCtaUrl());
-        // Uses the finalized WINTER, DIWALI, SUMMER, SALE, DEFAULT themes
         banner.setTheme(BannerTheme.valueOf(request.getTheme().toUpperCase()));
         banner.setStartDate(request.getStartDate());
         banner.setEndDate(request.getEndDate());

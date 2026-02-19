@@ -30,26 +30,23 @@ public class UserServiceImpl implements UserService {
     private final SmtpEmailService emailService;
     private final JwtUtil jwtUtil;
 
-    @Value("${frontend.url:http://localhost:5173}")
+    @Value("${frontend.url}")
     private String frontendUrl;
 
-    @Value("${server.port:8081}")
-    private String serverPort;
+    // ✅ Injected from .env (e.g., http://192.168.0.17:8081)
+    @Value("${app.backend.url}")
+    private String backendUrl;
 
     /* =========================
        REFRESH TOKEN METHODS
        ========================= */
 
-    /**
-     * ✅ NEW: Persists new refresh token and revokes old ones (Token Rotation)
-     */
     @Override
     @Transactional
     public void saveRefreshToken(User user, String refreshToken) {
         log.info("Rotating refresh token for user: {}", user.getEmail());
 
-        // 🔐 Security: Revoke all existing non-revoked tokens for this user
-        // Optimization: Use a custom repository method if available (findByUserAndRevokedFalse)
+        // Revoke existing non-revoked tokens to enforce single-session or rotation
         refreshTokenRepository.findAll().stream()
                 .filter(t -> t.getUser().getId().equals(user.getId()) && !t.isRevoked())
                 .forEach(t -> {
@@ -67,9 +64,6 @@ public class UserServiceImpl implements UserService {
         refreshTokenRepository.save(tokenEntity);
     }
 
-    /**
-     * ✅ NEW: Global Logout / Security Reset
-     */
     @Override
     @Transactional
     public void revokeAllRefreshTokens(User user) {
@@ -82,9 +76,6 @@ public class UserServiceImpl implements UserService {
                 });
     }
 
-    /**
-     * ✅ UPDATED: Persisted Refresh Logic
-     */
     @Override
     @Transactional
     public String refreshAccessToken(String token) {
@@ -96,7 +87,6 @@ public class UserServiceImpl implements UserService {
                 .orElseThrow(() -> new RuntimeException("REFRESH_TOKEN_NOT_FOUND"));
 
         if (storedToken.isRevoked()) {
-            // Security: Potential Token Reuse detected
             revokeAllRefreshTokens(storedToken.getUser());
             throw new RuntimeException("TOKEN_REVOKED");
         }
@@ -140,7 +130,8 @@ public class UserServiceImpl implements UserService {
 
         boolean emailSent = false;
         try {
-            String verificationUrl = "http://localhost:" + serverPort + "/auth/verify-email?token=" + token;
+            // ✅ Dynamically construct verification URL using backend IP
+            String verificationUrl = backendUrl + "/auth/verify-email?token=" + token;
             emailSent = emailService.sendVerificationEmail(req.getEmail(), verificationUrl);
         } catch (Exception e) {
             log.error("NON-BLOCKING ERROR: Verification email failed for {}: {}", req.getEmail(), e.getMessage());
@@ -160,19 +151,15 @@ public class UserServiceImpl implements UserService {
         if (!user.isEnabled()) {
             throw new IllegalArgumentException("USER_DISABLED");
         }
-
         if (!user.isVerified()) {
             throw new IllegalArgumentException("EMAIL_NOT_VERIFIED");
         }
-
         if (!passwordEncoder.matches(password, user.getPasswordHash())) {
             throw new IllegalArgumentException("INVALID_CREDENTIALS");
         }
-
         if (!user.getRole().equalsIgnoreCase(requiredRole)) {
             throw new IllegalArgumentException("UNAUTHORIZED_ROLE");
         }
-
         return jwtUtil.generateToken(user);
     }
 
@@ -246,7 +233,8 @@ public class UserServiceImpl implements UserService {
         String token = UUID.randomUUID().toString();
         verificationTokenRepository.save(new VerificationToken(token, user, Instant.now().plusSeconds(86400)));
 
-        String verificationUrl = "http://localhost:" + serverPort + "/auth/verify-email?token=" + token;
+        // ✅ Dynamically construct verification URL using backend IP
+        String verificationUrl = backendUrl + "/auth/verify-email?token=" + token;
         emailService.sendVerificationEmail(email, verificationUrl);
     }
 
@@ -266,6 +254,7 @@ public class UserServiceImpl implements UserService {
             user.setResetCount(user.getResetCount() + 1);
             userRepository.save(user);
 
+            // ✅ Dynamically construct reset link using frontend IP
             String resetLink = frontendUrl + "/reset-password?token=" + token;
             emailService.sendPasswordResetEmail(email, resetLink);
         });

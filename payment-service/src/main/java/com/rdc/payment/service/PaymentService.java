@@ -37,12 +37,10 @@ public class PaymentService {
     @Value("${internal.service.key}")
     private String internalServiceKey;
 
-    // ✅ FIXED: Restored missing method for User History
     public List<Payment> getPaymentsByUser(Long userId) {
         return paymentRepository.findByUserIdOrderByCreatedAtDesc(userId);
     }
 
-    // ✅ FIXED: Restored missing method for Admin Dashboard
     public List<Payment> getAllPaymentsSorted() {
         return paymentRepository.findAllByOrderByCreatedAtDesc();
     }
@@ -56,7 +54,6 @@ public class PaymentService {
             return existing.get();
         }
 
-        // ✅ FIX: Using Long prevents the Razorpay 400 error for high amounts
         Long amountCents = fetchAmountFromOrderService(orderId, userId);
 
         JSONObject orderRequest = new JSONObject();
@@ -69,7 +66,7 @@ public class PaymentService {
         Payment payment = Payment.builder()
                 .orderId(orderId)
                 .userId(userId)
-                .amountCents(amountCents) // ✅ Matches Entity Long type [cite: 362]
+                .amountCents(amountCents)
                 .gatewayOrderId(razorpayOrder.get("id"))
                 .status(PaymentStatus.CREATED)
                 .gateway("RAZORPAY")
@@ -91,7 +88,6 @@ public class PaymentService {
 
             Object priceObj = data.get("totalPriceCents");
             if (priceObj instanceof Number) {
-                // ✅ Essential: Extracts as longValue() to prevent numeric noise
                 return ((Number) priceObj).longValue();
             } else {
                 throw new RuntimeException("Invalid price data format");
@@ -104,43 +100,43 @@ public class PaymentService {
     @Transactional
     public boolean verifySignatureAndMarkPaid(String orderId, String paymentId, String signature) {
         try {
-            if ("SANDBOX_SUCCESS".equals(signature)) return markAsPaid(orderId, paymentId, signature); // [cite: 372]
+            if ("SANDBOX_SUCCESS".equals(signature)) return markAsPaid(orderId, paymentId, signature);
 
             JSONObject options = new JSONObject();
             options.put("razorpay_order_id", orderId);
             options.put("razorpay_payment_id", paymentId);
-            options.put("razorpay_signature", signature); // [cite: 373]
+            options.put("razorpay_signature", signature);
 
             if (Utils.verifyPaymentSignature(options, apiSecret)) {
-                return markAsPaid(orderId, paymentId, signature); // [cite: 374]
+                return markAsPaid(orderId, paymentId, signature);
             }
-            return false; // [cite: 375]
+            return false;
         } catch (Exception e) {
             log.error("❌ Signature verification failed: {}", e.getMessage());
-            return false; // [cite: 376, 377]
+            return false;
         }
     }
 
     private boolean markAsPaid(String gatewayOrderId, String paymentId, String signature) {
         Payment p = paymentRepository.findByGatewayOrderId(gatewayOrderId)
-                .orElseThrow(() -> new RuntimeException("Payment record not found")); // [cite: 377]
+                .orElseThrow(() -> new RuntimeException("Payment record not found"));
 
-        if (p.getStatus() == PaymentStatus.PAID) return true; // [cite: 378]
+        if (p.getStatus() == PaymentStatus.PAID) return true;
 
         String paymentMode = "N/A";
         try {
             com.razorpay.Payment razorpayPayment = razorpayClient.payments.fetch(paymentId);
-            paymentMode = razorpayPayment.get("method").toString().toUpperCase(); // [cite: 379]
+            paymentMode = razorpayPayment.get("method").toString().toUpperCase();
         } catch (Exception e) {
-            log.error("⚠️ Failed to fetch payment method: {}", e.getMessage()); // [cite: 380]
+            log.error("⚠️ Failed to fetch payment method: {}", e.getMessage());
         }
 
         p.setStatus(PaymentStatus.PAID);
         p.setGatewayPaymentId(paymentId);
         p.setGatewaySignature(signature);
-        paymentRepository.save(p); // [cite: 381]
+        paymentRepository.save(p);
 
-        notifyOrderService(p.getOrderId(), paymentId, paymentMode); // [cite: 382]
+        notifyOrderService(p.getOrderId(), paymentId, paymentMode);
         return true;
     }
 
@@ -148,15 +144,15 @@ public class PaymentService {
         try {
             String url = orderServiceUrl + "/api/internal/orders/" + orderId + "/paid"
                     + "?transactionId=" + transactionId
-                    + "&paymentMode=" + paymentMode; // [cite: 384]
+                    + "&paymentMode=" + paymentMode;
 
             HttpHeaders headers = new HttpHeaders();
-            headers.set("X-INTERNAL-KEY", internalServiceKey); // [cite: 385]
+            headers.set("X-INTERNAL-KEY", internalServiceKey);
             HttpEntity<Void> entity = new HttpEntity<>(headers);
 
-            restTemplate.postForEntity(url, entity, Void.class); // [cite: 386]
+            restTemplate.postForEntity(url, entity, Void.class);
         } catch (Exception e) {
-            log.error("⚠️ Failed to notify Order Service: {}", e.getMessage()); // [cite: 386]
+            log.error("⚠️ Failed to notify Order Service: {}", e.getMessage());
         }
     }
 }

@@ -1,5 +1,3 @@
---V1__create_assets.sql
-
 CREATE TABLE IF NOT EXISTS assets (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   uuid VARCHAR(60) NOT NULL UNIQUE,
@@ -8,7 +6,7 @@ CREATE TABLE IF NOT EXISTS assets (
   filename VARCHAR(512) NOT NULL,
   content_type VARCHAR(128),
   size_bytes BIGINT,
-  asset_type VARCHAR(50) NOT NULL, -- ✅ ADDED
+  asset_type VARCHAR(50) NOT NULL,
   seller_id BIGINT NOT NULL,
   is_published BOOLEAN DEFAULT FALSE,
   is_deleted BOOLEAN DEFAULT FALSE,

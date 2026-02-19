@@ -6,6 +6,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -19,30 +20,40 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.web.cors.CorsConfigurationSource;
 
 import javax.crypto.spec.SecretKeySpec;
+import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Configuration
+@EnableWebSecurity
 public class SecurityConfig {
 
     @Value("${jwt.secret}")
     private String jwtSecret;
 
+    @Value("${spring.web.cors.allowed-origins}")
+    private String allowedOrigins;
+
+    /**
+     * Main Security Filter Chain configuration for Auth Service.
+     * Matches the finalized industrial routes in the RDC environment [cite: 827-835].
+     */
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-                // ✅ JWT APIs do not use CSRF
+                // ✅ JWT-based APIs are stateless and do not require CSRF protection
                 .csrf(csrf -> csrf.disable())
 
-                // ✅ FIXED: Proper CORS handling
+                // ✅ Dynamic CORS configuration linked to .env variables [cite: 827]
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
 
-                // ✅ Stateless JWT
+                // ✅ Ensures the session management is stateless for microservice architecture [cite: 827]
                 .sessionManagement(sess ->
                         sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
 
                 .authorizeHttpRequests(auth -> auth
-                        // ✅ Public Auth APIs
+                        // ✅ Public Authentication Endpoints [cite: 828-831]
                         .requestMatchers(
                                 "/auth/login",
                                 "/auth/signup",
@@ -55,17 +66,14 @@ public class SecurityConfig {
                                 "/actuator/**"
                         ).permitAll()
 
-                        // ✅ Internal user metadata (optional public)
                         .requestMatchers("/api/users/**").permitAll()
 
-                        // ✅ Admin-only routes
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
 
-                        // ✅ Everything else requires JWT
                         .anyRequest().authenticated()
                 )
 
-                // ✅ JWT Resource Server
+
                 .oauth2ResourceServer(oauth ->
                         oauth.jwt(jwt ->
                                 jwt.decoder(jwtDecoder())
@@ -76,70 +84,59 @@ public class SecurityConfig {
         return http.build();
     }
 
-    // ✅ JWT Decoder (HMAC SHA256)
     @Bean
     public JwtDecoder jwtDecoder() {
-        SecretKeySpec secretKey =
-                new SecretKeySpec(jwtSecret.getBytes(), "HmacSHA256");
+        SecretKeySpec secretKey = new SecretKeySpec(jwtSecret.getBytes(), "HmacSHA256");
         return NimbusJwtDecoder.withSecretKey(secretKey).build();
     }
 
-    // ✅ Convert "role" claim → ROLE_USER / ROLE_ADMIN
     @Bean
     public JwtAuthenticationConverter jwtAuthenticationConverter() {
-        JwtGrantedAuthoritiesConverter authoritiesConverter =
-                new JwtGrantedAuthoritiesConverter();
-
+        JwtGrantedAuthoritiesConverter authoritiesConverter = new JwtGrantedAuthoritiesConverter();
         authoritiesConverter.setAuthorityPrefix("ROLE_");
         authoritiesConverter.setAuthoritiesClaimName("role");
 
-        JwtAuthenticationConverter converter =
-                new JwtAuthenticationConverter();
+        JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
         converter.setJwtGrantedAuthoritiesConverter(authoritiesConverter);
         return converter;
     }
 
-    // ✅ FIXED CORS CONFIG (THIS IS CRITICAL)
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
 
-        // ✅ MUST use patterns when allowCredentials = true
-        config.setAllowedOriginPatterns(List.of(
-                "http://localhost:*",
-                "https://localhost:*",
-                "http://127.0.0.1:*",
-                "https://127.0.0.1:*"
-        ));
 
-        config.setAllowedMethods(List.of(
-                "GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"
-        ));
+        List<String> origins = Arrays.stream(allowedOrigins.split(","))
+                .map(String::trim)
+                .collect(Collectors.toList());
 
-        config.setAllowedHeaders(List.of(
+        config.setAllowedOrigins(origins);
+
+        config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"));
+
+        config.setAllowedHeaders(Arrays.asList(
                 "Authorization",
                 "Content-Type",
-                "X-Requested-With"
+                "Accept",
+                "X-Requested-With",
+                "X-INTERNAL-KEY"
         ));
 
         config.setAllowCredentials(true);
+        config.setMaxAge(3600L);
 
-        UrlBasedCorsConfigurationSource source =
-                new UrlBasedCorsConfigurationSource();
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
         return source;
     }
 
-    // ✅ Password Encoder
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
 
-    // ✅ Authentication Manager
     @Bean
-    public AuthenticationManager authenticationManager(
-            AuthenticationConfiguration authConfig) throws Exception {
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration authConfig) throws Exception {
         return authConfig.getAuthenticationManager();
     }
 }

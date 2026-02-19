@@ -1,0 +1,38 @@
+# Environments and Secrets
+**/*.env
+**/*.env.local
+**/.env.*.local
+
+# Java Build artifacts
+**/target/
+*.class
+*.jar
+*.war
+*.ear
+
+# Maven
+.mvn/wrapper/maven-wrapper.jar
+!**/src/main/resources/*.jar
+!**/src/test/resources/*.jar
+
+# Frontend Dependencies & Build
+node_modules/
+dist/
+build/
+.eslintcache
+
+# Local Uploads Data
+**/data/uploads/
+**/uploads/**
+
+# IDEs
+.idea/
+.vscode/
+*.iml
+.project
+.classpath
+.settings/
+
+# OS files
+.DS_Store
+Thumbs.db

@@ -28,6 +28,7 @@ import javax.crypto.spec.SecretKeySpec;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Configuration
 @EnableWebSecurity
@@ -35,6 +36,9 @@ public class SecurityConfig {
 
     @Value("${jwt.secret}")
     private String jwtSecret;
+
+    @Value("${spring.web.cors.allowed-origin-patterns}")
+    private String allowedOrigins;
 
     @Bean
     public JwtDecoder jwtDecoder() {
@@ -67,8 +71,8 @@ public class SecurityConfig {
                         // 🔒 INTERNAL BRIDGE
                         .requestMatchers("/api/internal/**").permitAll()
 
-                        // 🌍 PUBLIC APIs (MUST come before ADMIN filters)
-                        .requestMatchers(HttpMethod.POST, "/api/contact").permitAll() // ✅ Fix for 401
+                        // 🌍 PUBLIC APIs
+                        .requestMatchers(HttpMethod.POST, "/api/contact").permitAll()
                         .requestMatchers("/api/categories/public").permitAll()
                         .requestMatchers("/api/public/**").permitAll()
                         .requestMatchers(HttpMethod.GET,
@@ -124,17 +128,17 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(List.of(
-                "http://localhost:3000",
-                "http://localhost:3001",
-                "http://localhost:5173",
-                "http://127.0.0.1:3000",
-                "http://127.0.0.1:3001",
-                "https://localhost:3000"
-        ));
+
+        // Convert the comma-separated string from .env into a List
+        List<String> origins = Arrays.stream(allowedOrigins.split(","))
+                .map(String::trim)
+                .collect(Collectors.toList());
+
+        config.setAllowedOrigins(origins);
         config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         config.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "Accept", "X-Requested-With", "X-INTERNAL-KEY"));
         config.setAllowCredentials(true);
+        config.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);

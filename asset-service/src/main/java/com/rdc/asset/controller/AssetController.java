@@ -35,9 +35,6 @@ public class AssetController {
         return ResponseEntity.ok(assetService.getAllAssets());
     }
 
-    /**
-     * 🔒 ADMIN UPLOAD: Standard design uploads[cite: 7].
-     */
     @PostMapping("/upload")
     public ResponseEntity<AssetDto> uploadAsset(
             @RequestParam("file") MultipartFile file,
@@ -49,9 +46,6 @@ public class AssetController {
         return new ResponseEntity<>(result, HttpStatus.CREATED);
     }
 
-    /**
-     * 🌍 PUBLIC RESUME UPLOAD: Used by Careers Page[cite: 7].
-     */
     @PostMapping("/resume-upload")
     public ResponseEntity<AssetDto> uploadResume(@RequestParam("file") MultipartFile file) throws Exception {
         if (!"application/pdf".equals(file.getContentType())) {
@@ -67,10 +61,6 @@ public class AssetController {
         return new ResponseEntity<>(result, HttpStatus.CREATED);
     }
 
-    /**
-     * ✅ FINALIZED: Secure internal bridge for validation (HEAD) and cleanup (DELETE).
-     * Path matches internal bridge route: http://localhost:8090/api/assets/internal/{uuid} [cite: 198-200].
-     */
     @RequestMapping(value = "/internal/{uuid}", method = {RequestMethod.HEAD, RequestMethod.DELETE})
     public ResponseEntity<Void> handleInternalAssetRequest(
             @PathVariable String uuid,
@@ -81,19 +71,15 @@ public class AssetController {
 
         if (method == HttpMethod.DELETE) {
             log.info("🗑️ Authorized internal delete request for Asset UUID: {}", uuid);
-            assetService.deleteAssetByUuid(uuid); // Purges physical and DB records
+            assetService.deleteAssetByUuid(uuid);
             return ResponseEntity.noContent().build();
         } else {
             log.info("🔍 Authorized internal validation request (HEAD) for Asset UUID: {}", uuid);
-            assetService.verifyExists(uuid); // Efficient existence check [cite: 202]
+            assetService.verifyExists(uuid);
             return ResponseEntity.ok().build();
         }
     }
 
-    /**
-     * 📥 DOWNLOAD: Permitted to all users for design viewing[cite: 7].
-     * ✅ UPDATED: Auto-cleans DB if physical file is missing.
-     */
     @GetMapping({"/download/{uuid}", "/{uuid}/download"})
     public ResponseEntity<InputStreamResource> downloadAsset(@PathVariable String uuid) throws Exception {
         if (uuid == null || uuid.trim().isEmpty() || uuid.equalsIgnoreCase("null")) {
@@ -105,22 +91,21 @@ public class AssetController {
 
         try {
             InputStream stream = storageProvider.read(asset.getFilename());
+
             return ResponseEntity.ok()
                     .contentType(MediaType.parseMediaType(asset.getContentType()))
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + asset.getOriginalFilename() + "\"")
                     .body(new InputStreamResource(stream));
+
         } catch (Exception e) {
-            // ✅ CRITICAL FIX: If physical file is missing, purge the orphaned metadata
+
             log.warn("❌ File missing on disk for asset {}, cleaning DB record", uuid);
             assetService.deleteAssetByUuid(uuid);
 
-            // Return 410 GONE to inform the frontend the resource is permanently removed
             throw new ResponseStatusException(HttpStatus.GONE, "Asset physical file missing and metadata removed");
         }
     }
 
-    /**
-     * ✅ Helper method to validate service-to-service bridge keys[cite: 20].
-     */
     private void validateInternalKey(String key) {
         if (internalServiceKey == null || !internalServiceKey.equals(key)) {
             log.error("❌ Access Denied: Invalid or missing X-INTERNAL-KEY header");

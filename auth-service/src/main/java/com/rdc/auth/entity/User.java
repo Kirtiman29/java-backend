@@ -2,11 +2,17 @@ package com.rdc.auth.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
+
 import java.time.Instant;
 
 @Entity
 @Table(name = "users")
-@Data
+@EntityListeners(AuditingEntityListener.class) // Enables automatic auditing
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
@@ -22,10 +28,10 @@ public class User {
     @Column(name = "password_hash", nullable = false)
     private String passwordHash;
 
-    @Column(nullable = false)
-    private String role;
+    @Column(nullable = false, length = 20)
+    private String role; // Standardized to match V1__Initial_Auth_Schema.sql
 
-    @Column(nullable = false)
+    @Column(name = "display_name", nullable = false)
     private String displayName;
 
     @Builder.Default
@@ -36,19 +42,25 @@ public class User {
     @Column(name = "is_verified", nullable = false)
     private boolean isVerified = false;
 
+    @CreatedDate
+    @Column(name = "created_at", updatable = false, nullable = false)
     private Instant createdAt;
+
+    @LastModifiedDate
+    @Column(name = "updated_at")
+    private Instant updatedAt;
 
     @Column(name = "reset_token")
     private String resetToken;
 
-    @Column(name = "reset_count", nullable = false)
     @Builder.Default
+    @Column(name = "reset_count", nullable = false)
     private int resetCount = 0;
 
     @Column(name = "token_expiry_date")
     private Instant resetTokenExpiryDate;
 
-    // Helper for consistency if Lombok generates setVerified()
+    // Manual setter to ensure consistency with Lombok's boolean generation
     public void setVerified(boolean verified) {
         this.isVerified = verified;
     }

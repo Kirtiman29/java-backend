@@ -17,33 +17,20 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
 
-/**
- * Client for communicating with Cart Service.
- *
- * ✅ FIXED: Uses actual Cart Service API endpoints
- * ✅ FIXED: Forwards Authorization token from incoming request
- */
 @Component
 @RequiredArgsConstructor
 @Slf4j
 public class CartServiceClient {
 
     private final RestTemplate restTemplate;
-
-    @Value("${service.cart.url:http://localhost:8091}")
+    @Value("${service.cart.url}")
     private String cartServiceUrl;
 
-    /**
-     * Get all cart items for a user.
-     * ✅ FIXED: Uses /api/cart/items endpoint with Authorization header
-     */
     public List<CartItemDto> getCartItems(Long userId) {
         String url = cartServiceUrl + "/api/cart/items";
-
-        log.info("Fetching cart items from: {}", url);
+        log.info("📡 Fetching cart items from: {}", url);
 
         try {
-            // ✅ Get Authorization token from current request
             HttpHeaders headers = new HttpHeaders();
             String token = getAuthorizationHeader();
             if (token != null) {
@@ -59,33 +46,26 @@ public class CartServiceClient {
             );
 
             List<CartItemDto> items = response.getBody();
-
             if (items == null || items.isEmpty()) {
                 throw new EmptyCartException("Cart is empty. Add items before checkout.");
             }
 
-            log.info("✅ Fetched {} cart items for user {}", items.size(), userId);
+            log.info("✅ Successfully fetched {} cart items for user {}", items.size(), userId);
             return items;
 
         } catch (EmptyCartException e) {
             throw e;
         } catch (RestClientException e) {
-            log.error("❌ Error fetching cart: {}", e.getMessage());
+            log.error("❌ Cart Service Communication Error: {}", e.getMessage());
             throw new CartServiceException("Failed to fetch cart. Please try again.", e);
         }
     }
 
-    /**
-     * Clear all cart items for a user.
-     * ✅ FIXED: Uses /api/cart/items endpoint with Authorization header
-     */
     public void clearCart(Long userId) {
         String url = cartServiceUrl + "/api/cart/items";
-
-        log.info("Clearing cart via: {}", url);
+        log.info("🗑️ Clearing user cart via: {}", url);
 
         try {
-            // ✅ Get Authorization token from current request
             HttpHeaders headers = new HttpHeaders();
             String token = getAuthorizationHeader();
             if (token != null) {
@@ -100,10 +80,6 @@ public class CartServiceClient {
         }
     }
 
-    /**
-     * Extract Authorization header from current HTTP request.
-     * This forwards the user's JWT token to the Cart Service.
-     */
     private String getAuthorizationHeader() {
         ServletRequestAttributes attributes =
                 (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
@@ -112,7 +88,6 @@ public class CartServiceClient {
             HttpServletRequest request = attributes.getRequest();
             return request.getHeader("Authorization");
         }
-
         return null;
     }
 }

@@ -11,9 +11,6 @@ public class IndianNumberToWords {
             "", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"
     };
 
-    /**
-     * Converts a long number into Indian English words.
-     */
     public static String convert(long number) {
         if (number == 0) return "Zero";
         return convertToWords(number).trim();

@@ -4,12 +4,13 @@ import com.rdc.order.dto.OrderResponse;
 import com.rdc.order.entity.Order;
 import com.rdc.order.entity.OrderItem;
 import com.rdc.order.exception.OrderNotFoundException;
-import com.rdc.order.repository.OrderItemRepository; // ✅ Added
+import com.rdc.order.repository.OrderItemRepository;
 import com.rdc.order.repository.OrderRepository;
 import com.rdc.order.service.InvoiceGeneratorService;
 import com.rdc.order.service.OrderService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -30,8 +31,11 @@ public class OrderController {
 
     private final OrderService orderService;
     private final OrderRepository orderRepository;
-    private final OrderItemRepository orderItemRepository; // ✅ Added for explicit item fetching
+    private final OrderItemRepository orderItemRepository;
     private final InvoiceGeneratorService invoiceGeneratorService;
+
+    @Value("${service.asset.url}")
+    private String assetServiceBaseUrl;
 
     @PostMapping
     public ResponseEntity<OrderResponse> createOrder(@AuthenticationPrincipal Jwt jwt) {
@@ -52,27 +56,17 @@ public class OrderController {
         return ResponseEntity.ok(orderService.getOrdersByUser(userId));
     }
 
-    /**
-     * ✅ FIXED: Support for dual-argument PDF Generation
-     * Fetches items explicitly to avoid Hibernate session issues and ensure SKU visibility.
-     */
     @GetMapping("/{orderId}/invoice")
     public ResponseEntity<byte[]> downloadInvoice(@PathVariable Long orderId, @AuthenticationPrincipal Jwt jwt) {
         Long userId = getUserIdFromJwt(jwt);
 
-        // 1️⃣ Security Check: Ensure user owns this order
         orderService.getOrderById(orderId, userId);
 
-        // 2️⃣ Fetch actual Order entity
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new OrderNotFoundException("Order not found"));
 
-        // 3️⃣ Fetch Items explicitly (MANDATORY for design identification)
-        // This list contains the designIdentifier (SKU) used in the Thymeleaf template.
         List<OrderItem> items = orderItemRepository.findByOrderId(orderId);
 
-        // 4️⃣ Generate PDF using the updated 2-argument method
-        //
         byte[] pdfBytes = invoiceGeneratorService.generateInvoicePdf(order, items);
 
         log.info("✅ Manual invoice download triggered for Order #{}", orderId);
@@ -103,7 +97,10 @@ public class OrderController {
             throw new ResponseStatusException(HttpStatus.PAYMENT_REQUIRED, "Order must be PAID to download assets.");
         }
 
-        return ResponseEntity.ok(Map.of("downloadUrl", "http://localhost:8090/api/assets/download/" + orderId));
+        String secureUrl = assetServiceBaseUrl + "/api/assets/download/" + orderId;
+
+        log.info("📡 Secure asset download link generated for Order #{} via: {}", orderId, assetServiceBaseUrl);
+        return ResponseEntity.ok(Map.of("downloadUrl", secureUrl));
     }
 
     private boolean isAdmin(Jwt jwt) {

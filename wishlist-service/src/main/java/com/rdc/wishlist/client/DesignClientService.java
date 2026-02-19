@@ -11,10 +11,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 
-/**
- * Client for fetching design information from Admin Service.
- * Uses PUBLIC endpoint - no authentication required.
- */
+
 @Component
 @RequiredArgsConstructor
 @Slf4j
@@ -25,10 +22,6 @@ public class DesignClientService {
     @Value("${service.design.url}")
     private String designServiceUrl;
 
-    /**
-     * ✅ Fetch design by ID from Admin Service.
-     * Uses PUBLIC endpoint: /api/public/designs/{id}
-     */
     public DesignDto getDesignById(Long designId) {
         String url = designServiceUrl + "/api/public/designs/" + designId;
 
@@ -55,13 +48,10 @@ public class DesignClientService {
         }
     }
 
-    /**
-     * ✅ Validate that design is live and active before wishlisting.
-     */
     public void validateDesignForWishlist(Long designId) {
         DesignDto design = getDesignById(designId);
 
-        // ✅ FIXED: Null-safe check for Title to prevent crashes
+
         String designTitle = design.getTitle() != null ? design.getTitle() : "ID: " + designId;
 
         if (Boolean.TRUE.equals(design.getDraft())) {

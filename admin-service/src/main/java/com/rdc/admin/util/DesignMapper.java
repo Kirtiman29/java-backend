@@ -4,6 +4,7 @@ import com.rdc.admin.dto.DesignMediaDto;
 import com.rdc.admin.dto.DesignResponse;
 import com.rdc.admin.entity.Design;
 import com.rdc.admin.entity.DesignMedia;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import java.util.List;
 import java.util.ArrayList;
@@ -12,16 +13,15 @@ import java.util.stream.Collectors;
 @Component
 public class DesignMapper {
 
-    /**
-     * ✅ Maps Design Entity to DesignResponse DTO.
-     * Updated to include the designIdentifier.
-     */
+    @Value("${service.asset.url}")
+    private String assetServiceBaseUrl;
+
     public DesignResponse toResponse(Design design, List<DesignMedia> mediaList) {
         if (design == null) return null;
 
         return DesignResponse.builder()
                 .id(design.getId())
-                .designIdentifier(design.getDesignIdentifier()) // ⭐ FIXED: Added missing identifier mapping
+                .designIdentifier(design.getDesignIdentifier())
                 .title(design.getTitle())
                 .slug(design.getSlug())
                 .description(design.getDescription())
@@ -33,7 +33,6 @@ public class DesignMapper {
                 .segment(design.getSegment() != null ? design.getSegment().name() : null)
                 .assetUuid(design.getAssetUuid())
 
-                // ✅ Map tags from Entity to Response DTO
                 .tags(design.getTags() != null ? new ArrayList<>(design.getTags()) : new ArrayList<>())
 
                 .active(design.getActive())
@@ -50,8 +49,11 @@ public class DesignMapper {
     }
 
     private DesignMediaDto mapMedia(DesignMedia media) {
+
+        String dynamicUrl = assetServiceBaseUrl + "/api/assets/download/" + media.getAssetUuid();
+
         return DesignMediaDto.builder()
-                .url("http://localhost:8090/api/assets/download/" + media.getAssetUuid())
+                .url(dynamicUrl)
                 .type(media.getAssetType() != null ? media.getAssetType().name() : "IMAGE")
                 .role(media.getMediaRole() != null ? media.getMediaRole().name() : "GALLERY")
                 .build();

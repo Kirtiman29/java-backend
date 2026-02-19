@@ -29,12 +29,13 @@ public class CareerService {
     private final JobApplicationRepository applicationRepository;
     private final SmtpEmailService emailService;
 
-    @Value("${app.email.sender:mail.ruchitadesigncompany@gmail.com}")
-    private String companyEmail;
 
-    /**
-     * ✅ ADMIN: Create job and generate unique slug
-     */
+    @Value("${service.asset.url}")
+    private String assetServiceBaseUrl;
+
+    @Value("${rdc.hr.email}")
+    private String hrRecipientEmail;
+
     @Transactional
     public JobResponse createJob(JobCreateRequest request) {
         Job job = Job.builder()
@@ -51,9 +52,6 @@ public class CareerService {
         return mapToResponse(savedJob);
     }
 
-    /**
-     * ✅ PUBLIC: Fetch only OPEN jobs
-     */
     @Transactional(readOnly = true)
     public List<JobResponse> getOpenJobs() {
         return jobRepository.findByStatus(JobStatus.OPEN).stream()
@@ -61,9 +59,6 @@ public class CareerService {
                 .collect(Collectors.toList());
     }
 
-    /**
-     * ✅ ADMIN: Fetch ALL jobs regardless of status
-     */
     @Transactional(readOnly = true)
     public List<JobResponse> getAllJobs() {
         return jobRepository.findAll().stream()
@@ -71,9 +66,6 @@ public class CareerService {
                 .collect(Collectors.toList());
     }
 
-    /**
-     * ✅ CANDIDATE: Submit application and trigger dual HTML emails
-     */
     @Transactional
     public void submitApplication(ApplicationRequest req) {
         Job job = jobRepository.findById(req.getJobId())
@@ -93,25 +85,20 @@ public class CareerService {
 
         applicationRepository.save(application);
 
-        // 1. Candidate HTML Confirmation
         Map<String, Object> candidateVars = new HashMap<>();
         candidateVars.put("jobTitle", job.getTitle());
         emailService.sendHtmlEmail(req.getEmail(), "Application Received – RDC Careers", "candidate-confirmation", candidateVars);
 
-        // 2. HR HTML Alert
-        String resumeLink = "http://localhost:8090/api/assets/download/" + req.getResumeAssetUuid();
+        String resumeLink = assetServiceBaseUrl + "/api/assets/download/" + req.getResumeAssetUuid();
         Map<String, Object> hrVars = new HashMap<>();
         hrVars.put("jobTitle", job.getTitle());
         hrVars.put("candidateName", req.getFullName());
         hrVars.put("candidateEmail", req.getEmail());
         hrVars.put("resumeLink", resumeLink);
 
-        emailService.sendHtmlEmail(companyEmail, "RDC ALERT: New Job Applicant", "hr-job-alert", hrVars);
+        emailService.sendHtmlEmail(hrRecipientEmail, "RDC ALERT: New Job Applicant", "hr-job-alert", hrVars);
     }
 
-    /**
-     * ✅ ADMIN: Update Status
-     */
     @Transactional
     public void updateJobStatus(Long jobId, JobStatus status) {
         Job job = jobRepository.findById(jobId).orElseThrow();
@@ -119,10 +106,6 @@ public class CareerService {
         jobRepository.save(job);
     }
 
-    /**
-     * ✅ ADMIN: View applicants for a specific job
-     * FIXED: Explicitly cast to Map<String, Object> to solve type mismatch
-     */
     @Transactional(readOnly = true)
     public List<Map<String, Object>> getApplicationsForJob(Long jobId) {
         return applicationRepository.findByJobIdOrderByAppliedAtDesc(jobId).stream()
@@ -132,7 +115,8 @@ public class CareerService {
                     map.put("name", app.getFullName());
                     map.put("email", app.getEmail());
                     map.put("phone", (app.getPhone() != null ? app.getPhone() : "N/A"));
-                    map.put("resumeUrl", "http://localhost:8090/api/assets/download/" + app.getResumeAssetUuid());
+                    // ✅ FIXED: Uses dynamic base URL instead of hardcoded localhost
+                    map.put("resumeUrl", assetServiceBaseUrl + "/api/assets/download/" + app.getResumeAssetUuid());
                     map.put("appliedAt", app.getAppliedAt());
                     return map;
                 })

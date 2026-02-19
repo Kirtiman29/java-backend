@@ -24,10 +24,6 @@ public class AssetServiceImpl implements AssetService {
     private final AssetRepository assetRepo;
     private final StorageProvider storageProvider;
 
-    /**
-     * Efficiently verifies if an asset exists in the DB.
-     * Prevents physical file locking during HEAD requests used by the Admin Service bridge.
-     */
     @Override
     @Transactional(readOnly = true)
     public void verifyExists(String uuid) {
@@ -38,45 +34,33 @@ public class AssetServiceImpl implements AssetService {
         log.info("✅ Asset existence verified for UUID: {}", uuid);
     }
 
-    /**
-     * ✅ UPDATED: Idempotent Deletion Logic.
-     * If the asset is already deleted, the method exits gracefully instead of failing.
-     * This ensures retries and purges do not break mid-way.
-     */
+
     @Override
     @Transactional
     public void deleteAssetByUuid(String uuid) {
         log.info("🗑️ Processing deletion for Asset UUID: {}", uuid);
 
-        // 1️⃣ Fetch metadata from DB using Optional for idempotency
         Optional<Asset> optionalAsset = assetRepo.findByUuid(uuid);
 
         if (optionalAsset.isEmpty()) {
-            // ✅ Idempotent check: If it's already gone, don't throw an error
+
             log.warn("⚠️ Asset {} already deleted or missing from database. Skipping cleanup.", uuid);
             return;
         }
 
         Asset asset = optionalAsset.get();
 
-        // 2️⃣ Trigger physical file deletion
         try {
-            // storageProvider.delete handles missing files gracefully internally
             storageProvider.delete(asset.getFilename());
         } catch (Exception e) {
-            // Log the failure but continue with DB cleanup to prevent orphaned records
             log.warn("⚠️ Physical file for asset {} was already removed or inaccessible: {}", uuid, e.getMessage());
         }
 
-        // 3️⃣ Always remove record from database
         assetRepo.delete(asset);
 
         log.info("✅ Successfully purged Asset UUID: {} from database and storage", uuid);
     }
 
-    /**
-     * Handles file uploads and metadata persistence.
-     */
     @Override
     @Transactional
     public AssetDto uploadAndCreateAsset(MultipartFile file, String title, Long sellerId, AssetType type) throws Exception {

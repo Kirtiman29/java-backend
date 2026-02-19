@@ -23,10 +23,6 @@ public class InvoicePdfService {
     private final SpringTemplateEngine templateEngine;
     private final InvoiceAssetService invoiceAssetService;
 
-    /**
-     * ✅ UPDATED: Now accepts pre-fetched items list.
-     * Prevents LazyInitializationException and Hibernate collection assignment errors.
-     */
     public byte[] generatePdf(Order order, List<OrderItem> items) {
         log.info("📄 Generating PDF for Order #{} with {} items", order.getId(), items.size());
 
@@ -34,7 +30,7 @@ public class InvoicePdfService {
 
         try (ByteArrayOutputStream os = new ByteArrayOutputStream()) {
             PdfRendererBuilder builder = new PdfRendererBuilder();
-            builder.useFastMode(); // Performance boost for high-volume invoice generation
+            builder.useFastMode();
             builder.withHtmlContent(html, "");
             builder.toStream(os);
             builder.run();
@@ -45,16 +41,11 @@ public class InvoicePdfService {
         }
     }
 
-    /**
-     * ✅ UPDATED: Processes the HTML template using the explicit items list.
-     * Direct variable passing ensures designIdentifier is visible to Thymeleaf.
-     */
     public String generateInvoiceHtml(Order order, List<OrderItem> items) {
         Context context = new Context();
 
-        // Pass essential data to the Thymeleaf template [cite: 368]
         context.setVariable("order", order);
-        context.setVariable("items", items); // Direct list usage [cite: 368, 484]
+        context.setVariable("items", items);
         context.setVariable("invoiceNumber", "RDC-" + order.getId());
         context.setVariable("orderDate", formatInstant(order.getCreatedAt()));
         context.setVariable("logoBase64", invoiceAssetService.getLogoBase64());
@@ -65,7 +56,7 @@ public class InvoicePdfService {
     private String formatInstant(Instant instant) {
         if (instant == null) return "N/A";
         return DateTimeFormatter.ofPattern("dd/MM/yyyy")
-                .withZone(ZoneId.of("Asia/Kolkata")) // Standardized for RDC Mumbai headquarters
+                .withZone(ZoneId.of("Asia/Kolkata"))
                 .format(instant);
     }
 }

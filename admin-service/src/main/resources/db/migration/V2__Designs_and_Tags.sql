@@ -1,0 +1,28 @@
+CREATE TABLE designs (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  title VARCHAR(255) NOT NULL,
+  slug VARCHAR(255) UNIQUE NOT NULL,
+  description TEXT,
+  asset_uuid VARCHAR(128),
+  design_identifier VARCHAR(100) UNIQUE NOT NULL,
+  base_price_cents BIGINT DEFAULT 0,
+  final_price_cents BIGINT DEFAULT 0,
+  category_id BIGINT,
+  segment VARCHAR(50),
+  active BOOLEAN DEFAULT TRUE,
+  draft BOOLEAN DEFAULT FALSE,
+  trending BOOLEAN DEFAULT FALSE,
+  editors_pick BOOLEAN DEFAULT FALSE,
+  new_arrival BOOLEAN DEFAULT FALSE,
+  premium BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT FK_DESIGN_CATEGORY FOREIGN KEY (category_id) REFERENCES categories(id)
+);
+
+CREATE TABLE design_tags (
+    design_id BIGINT NOT NULL,
+    tag_name VARCHAR(100) NOT NULL,
+    PRIMARY KEY (design_id, tag_name),
+    CONSTRAINT FK_TAG_DESIGN FOREIGN KEY (design_id) REFERENCES designs(id) ON DELETE CASCADE
+);

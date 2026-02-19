@@ -19,24 +19,24 @@ public class AuthServiceClient {
 
     private final RestTemplate restTemplate;
 
-    @Value("${service.auth.url:http://localhost:8081}")
+    // ✅ FIXED: Removed localhost fallback to ensure it uses the industrial IP from .env
+    @Value("${service.auth.url}")
     private String authServiceUrl;
 
-    // ✅ Get the key from your application.properties
     @Value("${internal.service.key}")
     private String internalServiceKey;
 
     public Map<String, Object> getUserMetadata(Long userId) {
         String url = authServiceUrl + "/api/users/" + userId;
-        log.info("📡 Fetching user metadata from Auth Service: {}", url);
+        log.info("📡 Internal Bridge: Fetching user metadata from Auth Service: {}", url);
 
         try {
-            // ✅ Prepare Headers with the Bridge Key
+            // Prepare Headers with the Bridge Key
             HttpHeaders headers = new HttpHeaders();
             headers.set("X-INTERNAL-KEY", internalServiceKey);
             HttpEntity<Void> entity = new HttpEntity<>(headers);
 
-            // ✅ Use exchange to send the headers
+            // Use exchange to send the headers securely [cite: 1341-1342]
             ResponseEntity<Map> response = restTemplate.exchange(
                     url,
                     HttpMethod.GET,

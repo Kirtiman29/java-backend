@@ -21,9 +21,6 @@ public class SmtpEmailService {
     @Value("${app.email.sender}")
     private String fromEmail;
 
-    /**
-     * ✅ NEW: Generic method for Career Alerts and HR Notifications
-     */
     public void sendSimpleEmail(String to, String subject, String text) {
         try {
             MimeMessage message = mailSender.createMimeMessage();

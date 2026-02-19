@@ -182,9 +182,6 @@ public class DesignService {
         log.info("🔒 Design {} marked as SOLD (Inactive + Draft)", designId);
     }
 
-    /**
-     * ✅ UPDATED: Captures SKU/designIdentifier before purging.
-     */
     @Transactional
     public void purgeDesignAndRecord(Long designId, Long orderId) {
         Design design = repository.findById(designId)

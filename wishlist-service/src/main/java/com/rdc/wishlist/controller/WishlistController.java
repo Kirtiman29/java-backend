@@ -18,10 +18,6 @@ public class WishlistController {
 
     private final WishlistService wishlistService;
 
-    /**
-     * Add item to wishlist
-     * POST /api/wishlist
-     */
     @PostMapping
     public ResponseEntity<Void> addToWishlist(Authentication auth, @RequestBody Map<String, Long> body) {
         Long userId = getUserIdFromAuth(auth);
@@ -30,30 +26,19 @@ public class WishlistController {
         return ResponseEntity.ok().build();
     }
 
-    /**
-     * Get user's wishlist
-     * GET /api/wishlist
-     */
     @GetMapping
     public ResponseEntity<List<WishlistResponse>> getWishlist(Authentication auth) {
         Long userId = getUserIdFromAuth(auth);
         return ResponseEntity.ok(wishlistService.getUserWishlist(userId));
     }
 
-    /**
-     * Check if design is in wishlist (for heart icon state)
-     * GET /api/wishlist/check/{designId}
-     */
     @GetMapping("/check/{designId}")
     public ResponseEntity<Boolean> isHearted(Authentication auth, @PathVariable Long designId) {
         Long userId = getUserIdFromAuth(auth);
         return ResponseEntity.ok(wishlistService.isWishlisted(userId, designId));
     }
 
-    /**
-     * Remove item from wishlist
-     * DELETE /api/wishlist/{designId}
-     */
+
     @DeleteMapping("/{designId}")
     public ResponseEntity<Void> remove(Authentication auth, @PathVariable Long designId) {
         Long userId = getUserIdFromAuth(auth);
@@ -61,9 +46,6 @@ public class WishlistController {
         return ResponseEntity.noContent().build();
     }
 
-    /**
-     * Extract userId from UserPrincipal in Authentication
-     */
     private Long getUserIdFromAuth(Authentication auth) {
         UserPrincipal principal = (UserPrincipal) auth.getPrincipal();
         return principal.getUserId();

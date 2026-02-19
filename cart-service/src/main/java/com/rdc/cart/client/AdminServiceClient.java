@@ -18,14 +18,9 @@ public class AdminServiceClient {
 
     private final RestTemplate restTemplate;
 
-    @Value("${service.admin.url:http://localhost:8080}")
+    @Value("${service.admin.url}")
     private String adminServiceUrl;
 
-    /**
-     * ✅ FIXED: Internal Sync
-     * Now calls the /api/public namespace to avoid 401/403 errors
-     * during internal design validation.
-     */
     public DesignDto getDesignById(Long designId) {
         String url = adminServiceUrl + "/api/public/designs/" + designId;
         log.info("📡 Internal Fetch: Synchronizing design metadata from Admin Service: {}", url);

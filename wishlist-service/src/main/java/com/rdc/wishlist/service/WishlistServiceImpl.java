@@ -27,10 +27,9 @@ public class WishlistServiceImpl implements WishlistService {
         log.info("Adding design {} to wishlist for user {}", designId, userId);
 
         try {
-            // 1. Validate design exists and is active via Admin Service (Port 8080)
+
             designClientService.validateDesignForWishlist(designId);
 
-            // 2. Check if already in wishlist to prevent duplicates
             if (!repository.existsByUserIdAndDesignId(userId, designId)) {
                 Wishlist item = Wishlist.builder()
                         .userId(userId)
@@ -41,7 +40,6 @@ public class WishlistServiceImpl implements WishlistService {
             }
         } catch (Exception e) {
             log.error("❌ Error adding to wishlist: {}", e.getMessage());
-            // Re-throw to let GlobalExceptionHandler return appropriate status code
             throw e;
         }
     }
@@ -54,10 +52,9 @@ public class WishlistServiceImpl implements WishlistService {
 
         return items.stream().map(item -> {
             try {
-                // Fetch design metadata from Admin Service
+
                 DesignDto design = designClientService.getDesignById(item.getDesignId());
 
-                // ✅ FIX: Use fallbacks for NULL database columns to prevent 500 errors
                 return WishlistResponse.builder()
                         .designId(item.getDesignId())
                         .title(design.getTitle() != null ? design.getTitle() : "Unknown Design")
@@ -71,7 +68,7 @@ public class WishlistServiceImpl implements WishlistService {
 
             } catch (Exception e) {
                 log.warn("⚠️ Data mismatch: Could not map design {}: {}", item.getDesignId(), e.getMessage());
-                // ✅ RESILIENCE: Return a placeholder so the entire list doesn't fail
+
                 return WishlistResponse.builder()
                         .designId(item.getDesignId())
                         .title("Item Unavailable")

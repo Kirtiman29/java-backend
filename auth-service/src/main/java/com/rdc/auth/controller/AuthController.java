@@ -21,10 +21,6 @@ import java.security.Principal;
 import java.util.Collections;
 import java.util.Map;
 
-/**
- * Authentication Controller for RDC Studio.
- * Handles JWT Lifecycle, Local Signups, and Google OAuth2 integration.
- */
 @RestController
 @RequestMapping("/auth")
 @RequiredArgsConstructor
@@ -44,9 +40,6 @@ public class AuthController {
     private static final String EMAIL_SPAM_ALERT =
             "Check your Spam folder and mark the email as 'Not Spam'.";
 
-    /**
-     * ✅ Get Current User Profile
-     */
     @GetMapping("/me")
     public ResponseEntity<?> getCurrentUser(Principal principal) {
         try {
@@ -63,34 +56,25 @@ public class AuthController {
         }
     }
 
-    /**
-     * ✅ UPDATED: Refresh Access Token with Rotation and Revocation
-     * FIXED: Now revokes the old token and persists the new one in DB [cite: 31, 141-143]
-     */
     @PostMapping("/refresh")
     public ResponseEntity<?> refreshToken(@RequestBody RefreshTokenRequest req) {
         try {
             String oldRefreshToken = req.getRefreshToken();
 
-            // 1. Verify type claim
             if (!"refresh".equals(jwtUtil.getClaim(oldRefreshToken, "type"))) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "INVALID_TOKEN_TYPE"));
             }
 
-            // 2. Verify expiration
             if (jwtUtil.isTokenExpired(oldRefreshToken)) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "REFRESH_TOKEN_EXPIRED"));
             }
 
-            // 3. UserServiceImpl: Find in DB, Check Revocation, then REVOKE old token
             String newAccessToken = userService.refreshAccessToken(oldRefreshToken);
 
-            // 4. Generate & Persist NEW Rotate Refresh Token
             Long userId = Long.parseLong(jwtUtil.getSubjectFromToken(oldRefreshToken));
             User user = userRepository.findById(userId).orElseThrow();
             String newRefreshToken = jwtUtil.generateRefreshToken(user);
 
-            // ✅ CRITICAL FIX: Save the new rotated token to the DB
             userService.saveRefreshToken(user, newRefreshToken);
 
             return ResponseEntity.ok(new TokenResponse(
@@ -105,10 +89,6 @@ public class AuthController {
         }
     }
 
-    /**
-     * Google OAuth Authentication
-     * FIXED: Now persists the refresh token on successful login [cite: 40-41]
-     */
     @PostMapping("/google")
     public ResponseEntity<?> googleLogin(@RequestBody Map<String, String> request) {
         String idTokenString = request.get("idToken");
@@ -131,7 +111,6 @@ public class AuthController {
             String accessToken = userService.authenticateOrCreateGoogleUser(email, name, pictureUrl);
             User user = userRepository.findByEmail(email).orElseThrow();
 
-            // ✅ CRITICAL FIX: Generate and PERSIST refresh token
             String refreshToken = jwtUtil.generateRefreshToken(user);
             userService.saveRefreshToken(user, refreshToken);
 
@@ -146,9 +125,6 @@ public class AuthController {
         }
     }
 
-    /**
-     * ✅ Signup supports SignupRequest DTO
-     */
     @PostMapping("/signup")
     public ResponseEntity<?> signup(@RequestBody SignupRequest req) {
         try {
@@ -168,9 +144,6 @@ public class AuthController {
         return processLogin(req.getEmail(), req.getPassword(), "ADMIN");
     }
 
-    /**
-     * ✅ Request Password Reset with Security Limits
-     */
     @PostMapping("/password/request-reset")
     public ResponseEntity<?> requestReset(@RequestBody Map<String, String> req) {
         String email = req.get("email");
@@ -213,16 +186,11 @@ public class AuthController {
         return ResponseEntity.status(HttpStatus.FOUND).location(URI.create(redirectUrl)).build();
     }
 
-    /**
-     * ✅ Login Processor with Database Refresh Token Persistence
-     * FIXED: Generates and saves the refresh token to DB on login [cite: 59-60]
-     */
     private ResponseEntity<?> processLogin(String email, String password, String role) {
         try {
             String accessToken = userService.authenticate(email, password, role);
             User user = userRepository.findByEmail(email).orElseThrow();
 
-            // ✅ CRITICAL FIX: Generate and PERSIST refresh token to DB
             String refreshToken = jwtUtil.generateRefreshToken(user);
             userService.saveRefreshToken(user, refreshToken);
 

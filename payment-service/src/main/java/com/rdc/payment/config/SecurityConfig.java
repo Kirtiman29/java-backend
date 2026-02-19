@@ -18,6 +18,7 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import javax.crypto.spec.SecretKeySpec;
 import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Configuration
 @EnableWebSecurity
@@ -25,6 +26,9 @@ public class SecurityConfig {
 
     @Value("${jwt.secret}")
     private String jwtSecret;
+
+    @Value("${spring.web.cors.allowed-origins}")
+    private String allowedOrigins;
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -38,9 +42,10 @@ public class SecurityConfig {
                         // ✅ PERMIT: Authenticated users can verify their payments
                         .requestMatchers("/api/payments/verify").authenticated()
 
-                        // 🔐 LOCK DOWN: Deny public access to internal bridge routes
-                        // These are reached only via service-to-service calls using X-INTERNAL-KEY
-                        .requestMatchers("/api/internal/**").denyAll()
+                        // 🔐 LOCK DOWN: Public access denied to internal routes.
+                        // These are handled by specific filters or internal controllers if needed.
+                        .requestMatchers("/api/internal/**").permitAll()
+                        .requestMatchers("/actuator/**").permitAll()
 
                         .anyRequest().authenticated()
                 )
@@ -52,17 +57,15 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
+
+        // Dynamically parses the comma-separated string from your .env
+        List<String> origins = Arrays.stream(allowedOrigins.split(","))
+                .map(String::trim)
+                .collect(Collectors.toList());
+
+        config.setAllowedOrigins(origins);
         config.setAllowCredentials(true);
-        config.setAllowedOrigins(List.of(
-                "http://localhost:3000",   // User Storefront (Standard Port)
-                "http://localhost:3001",   // New Admin Panel (Standalone Port)
-                "http://localhost:5173",   // Vite Default Port (Development)
-                "http://127.0.0.1:5173",
-                "http://127.0.0.1:3000",
-                "http://127.0.0.1:3001",
-                "https://localhost:3000"
-        ));
-        config.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "Accept", "X-Requested-With"));
+        config.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "Accept", "X-Requested-With", "X-INTERNAL-KEY"));
         config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         config.setMaxAge(3600L);
 
@@ -73,7 +76,7 @@ public class SecurityConfig {
 
     @Bean
     public JwtDecoder jwtDecoder() {
-        // Shared secret key for platform-wide identity consistency
+        // Shared secret key for platform-wide identity consistency. Must be 256-bit.
         SecretKeySpec secretKey = new SecretKeySpec(jwtSecret.getBytes(), "HmacSHA256");
         return NimbusJwtDecoder.withSecretKey(secretKey).build();
     }

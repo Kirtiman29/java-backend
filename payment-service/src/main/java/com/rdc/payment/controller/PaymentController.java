@@ -34,10 +34,6 @@ public class PaymentController {
         return ResponseEntity.ok(paymentService.getPaymentsByUser(userId));
     }
 
-    /**
-     * ✅ NEW: ADMIN ENDPOINT
-     * Provides the global transaction ledger sorted by newest first.
-     */
     @GetMapping("/all")
     public ResponseEntity<List<Payment>> getAllPayments() {
         // You may want to add @PreAuthorize("hasRole('ADMIN')") here

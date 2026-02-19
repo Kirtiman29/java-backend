@@ -8,6 +8,7 @@ import com.rdc.admin.exception.ResourceNotFoundException;
 import com.rdc.admin.repository.CategoryRepository;
 import com.rdc.admin.util.SlugGenerator;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,9 +22,13 @@ import java.util.stream.Collectors;
 public class CategoryService {
 
     private final CategoryRepository categoryRepository;
-    private final AssetClientService assetClientService; // Injected to validate imageUuid [cite: 228, 231]
+    private final AssetClientService assetClientService;
 
-    // --- Mapper Utility ---
+
+    @Value("${service.asset.url}")
+    private String assetServiceBaseUrl;
+
+
     private CategoryResponse toResponse(Category category) {
         if (category == null) return null;
         return CategoryResponse.builder()
@@ -31,7 +36,7 @@ public class CategoryService {
                 .name(category.getName())
                 .slug(category.getSlug())
                 .description(category.getDescription())
-                .imageUrl(category.getImageUrl()) // Map the URL to the response
+                .imageUrl(category.getImageUrl())
                 .createdAt(category.getCreatedAt())
                 .updatedAt(category.getUpdatedAt())
                 .build();
@@ -42,18 +47,20 @@ public class CategoryService {
                 .orElseThrow(() -> new ResourceNotFoundException("Category", id));
     }
 
-    // --- CRUD Operations ---
+
     @Transactional
     public CategoryResponse createCategory(CategoryCreateRequest request) {
         if (categoryRepository.existsByName(request.getName())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Category name already exists: " + request.getName());
         }
 
-        // 1. Handle Image Logic
+
         String resolvedImageUrl = null;
         if (request.getImageUuid() != null && !request.getImageUuid().isBlank()) {
-            assetClientService.validateAsset(request.getImageUuid()); // Validate via Port 8090
-            resolvedImageUrl = "http://localhost:8090/api/assets/" + request.getImageUuid() + "/download";
+            assetClientService.validateAsset(request.getImageUuid());
+
+
+            resolvedImageUrl = assetServiceBaseUrl + "/api/assets/" + request.getImageUuid() + "/download";
         }
 
         String baseSlug = SlugGenerator.generateSlug(request.getName());
@@ -67,7 +74,7 @@ public class CategoryService {
                 .name(request.getName())
                 .slug(finalSlug)
                 .description(request.getDescription())
-                .imageUrl(resolvedImageUrl) // Save the URL in the DB
+                .imageUrl(resolvedImageUrl)
                 .build();
 
         Category savedCategory = categoryRepository.save(newCategory);
@@ -88,7 +95,6 @@ public class CategoryService {
     public CategoryResponse updateCategory(Long id, CategoryUpdateRequest request) {
         Category existingCategory = getCategoryEntityById(id);
 
-        // Update Name/Slug
         if (request.getName() != null && !request.getName().isBlank()) {
             if (!existingCategory.getName().equalsIgnoreCase(request.getName())) {
                 if (categoryRepository.existsByName(request.getName())) {
@@ -105,10 +111,12 @@ public class CategoryService {
             }
         }
 
-        // 2. Handle Image Update
+
         if (request.getImageUuid() != null) {
             assetClientService.validateAsset(request.getImageUuid());
-            existingCategory.setImageUrl("http://localhost:8090/api/assets/" + request.getImageUuid() + "/download");
+
+
+            existingCategory.setImageUrl(assetServiceBaseUrl + "/api/assets/" + request.getImageUuid() + "/download");
         }
 
         if (request.getDescription() != null) {

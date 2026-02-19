@@ -19,10 +19,6 @@ public class Order {
     @Column(name = "user_id", nullable = false)
     private Long userId;
 
-    /**
-     * Existing field used for base price calculation.
-     * Maps to existing physical column 'total_amount_cents'.
-     */
     @Column(name = "total_amount_cents", nullable = false)
     private Long totalPriceCents;
 
@@ -46,7 +42,7 @@ public class Order {
         item.setOrder(this);
     }
 
-    // ✅ INVOICE FIELDS - Explicitly named columns to prevent Hibernate DuplicateMappingException
+    // ✅ INVOICE FIELDS
     @Column(name = "invoice_subtotal_cents")
     private Long subTotalCents;
 
@@ -56,10 +52,6 @@ public class Order {
     @Column(name = "invoice_sgst_cents")
     private Long sgstCents;
 
-    /**
-     * The grand total including taxes.
-     * Mapped to 'grand_total_cents' to avoid collision with 'total_amount_cents'.
-     */
     @Column(name = "grand_total_cents")
     private Long totalAmountCents;
 

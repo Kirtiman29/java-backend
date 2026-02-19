@@ -23,16 +23,11 @@ public class UserController {
     @Value("${internal.service.key}")
     private String internalServiceKey;
 
-    /**
-     * ✅ INTERNAL BRIDGE ENDPOINT
-     * Allows other services (like Order Service) to fetch user email/name.
-     */
     @GetMapping("/{id}")
     public ResponseEntity<?> getUserMetadata(
             @PathVariable Long id,
             @RequestHeader(value = "X-INTERNAL-KEY", required = false) String key) {
 
-        // Validate Bridge Key
         if (internalServiceKey == null || !internalServiceKey.equals(key)) {
             log.error("Access Denied: Invalid or missing internal service key for User Metadata");
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Invalid internal service key");
@@ -41,7 +36,6 @@ public class UserController {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
 
-        // Return only necessary fields for the email service
         return ResponseEntity.ok(Map.of(
                 "email", user.getEmail(),
                 "name", user.getDisplayName() != null ? user.getDisplayName() : "Industrial User"

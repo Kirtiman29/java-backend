@@ -1,0 +1,141 @@
+version: "3.9"
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: admin
+      # Note: MySQL image only creates the FIRST database automatically.
+      # You must create the others manually or use an init script.
+      MYSQL_DATABASE: asset_db
+    # ports:             <-- ❌ REMOVED FOR SECURITY
+    #   - "3306:3306"    <-- ❌ REMOVED FOR SECURITY
+    volumes:
+      - mysql_data:/var/lib/mysql
+      # Recommended: Place an init.sql in your root to auto-create all DBs
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - rdc-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-padmin"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  auth-service:
+    build: ./auth-service
+    container_name: auth-service
+    env_file:
+      - ./env/auth-service.env
+    ports:
+      - "8081:8081"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - rdc-network
+
+  admin-service:
+    build: ./admin-service
+    container_name: admin-service
+    env_file:
+      - ./env/admin-service.env
+    ports:
+      - "8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - rdc-network
+
+  asset-service:
+    build: ./asset-service
+    container_name: asset-service
+    env_file:
+      - ./env/asset-service.env
+    ports:
+      - "8090:8090"
+    volumes:
+      - ./data/uploads:/app/data/uploads
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - rdc-network
+
+  cart-service:
+    build: ./cart-service
+    container_name: cart-service
+    env_file:
+      - ./env/cart-service.env
+    ports:
+      - "8091:8091"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      admin-service:
+        condition: service_started
+      auth-service:
+        condition: service_started
+    networks:
+      - rdc-network
+
+  order-service:
+    build: ./order-service
+    container_name: order-service
+    env_file:
+      - ./env/order-service.env
+    ports:
+      - "8095:8095"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      cart-service:
+        condition: service_started
+      auth-service:
+        condition: service_started
+      admin-service:
+        condition: service_started
+    networks:
+      - rdc-network
+
+  payment-service:
+    build: ./payment-service
+    container_name: payment-service
+    env_file:
+      - ./env/payment-service.env
+    ports:
+      - "8092:8092"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      order-service:
+        condition: service_started
+    networks:
+      - rdc-network
+
+  wishlist-service:
+    build: ./wishlist-service
+    container_name: wishlist-service
+    env_file:
+      - ./env/wishlist-service.env
+    ports:
+      - "8093:8093"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      admin-service:
+        condition: service_started
+      auth-service:
+        condition: service_started
+    networks:
+      - rdc-network
+
+volumes:
+  mysql_data:
+
+networks:
+  rdc-network:
+    driver: bridge
