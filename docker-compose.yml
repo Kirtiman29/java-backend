@@ -7,14 +7,13 @@ services:
     restart: always
     environment:
       MYSQL_ROOT_PASSWORD: admin
-      # Note: MySQL image only creates the FIRST database automatically.
-      # You must create the others manually or use an init script.
+
       MYSQL_DATABASE: asset_db
-    # ports:             <-- ❌ REMOVED FOR SECURITY
-    #   - "3306:3306"    <-- ❌ REMOVED FOR SECURITY
+    # ports:
+    #   - "3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
-      # Recommended: Place an init.sql in your root to auto-create all DBs
+
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - rdc-network

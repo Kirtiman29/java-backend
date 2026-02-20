@@ -31,23 +31,18 @@ public class SecurityConfig {
     @Value("${jwt.secret}")
     private String jwtSecret;
 
-    @Value("${spring.web.cors.allowed-origins}")
+    @Value("${CORS_ALLOWED_ORIGINS}")
     private String allowedOrigins;
 
-    /**
-     * Main Security Filter Chain configuration for Auth Service.
-     * Matches the finalized industrial routes in the RDC environment [cite: 827-835].
-     */
+
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-                // ✅ JWT-based APIs are stateless and do not require CSRF protection
+
                 .csrf(csrf -> csrf.disable())
 
-                // ✅ Dynamic CORS configuration linked to .env variables [cite: 827]
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
 
-                // ✅ Ensures the session management is stateless for microservice architecture [cite: 827]
                 .sessionManagement(sess ->
                         sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )

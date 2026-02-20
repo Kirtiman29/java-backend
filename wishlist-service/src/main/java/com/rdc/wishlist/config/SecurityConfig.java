@@ -25,7 +25,7 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtFilter;
 
-    @Value("${spring.web.cors.allowed-origins}")
+    @Value("${CORS_ALLOWED_ORIGINS}")
     private String allowedOrigins;
 
     @Bean
@@ -58,9 +58,9 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/actuator/**").permitAll()
-                        // 🔒 Internal Bridge route if needed in the future
-                        .requestMatchers("/api/wishlist/internal/**").permitAll()
-                        // 🔐 Guarded routes for authenticated users
+                        // ✅ Allow public check of wishlist status if needed,
+                        // or ensure USER role is correctly mapped from Auth Service
+                        .requestMatchers("/api/wishlist/check/**").permitAll()
                         .requestMatchers("/api/wishlist/**").hasRole("USER")
                         .anyRequest().authenticated()
                 )

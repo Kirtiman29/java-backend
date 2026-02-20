@@ -28,12 +28,9 @@ public class SecurityConfig {
     @Value("${jwt.secret}")
     private String jwtSecret;
 
-    @Value("${spring.web.cors.allowed-origins}")
+    @Value("${CORS_ALLOWED_ORIGINS}")
     private String allowedOrigins;
 
-    /**
-     * ✅ Main Security Filter Chain: Standardized with RDC microservice architecture.
-     */
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
@@ -41,16 +38,18 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        // 1. Preflight and Health checks
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/actuator/**").permitAll()
 
-                        // ✅ INTERNAL BRIDGE: Permitting maintenance routes for service-to-service calls
-                        .requestMatchers("/api/orders/internal/**").permitAll()
+                        // ✅ FIXED: Standardized Internal Bridge Mapping
+                        // Allows service-to-service calls (like Payment -> Order) without JWT
+                        .requestMatchers("/api/internal/**").permitAll()
 
-                        // ✅ WEBHOOKS: Added permission for Payment Service status updates
-                        // Matches mapping in AdminTransactionController
+                        // ⚡ Webhooks (e.g., external payment provider callbacks)
                         .requestMatchers("/api/webhooks/**").permitAll()
 
+                        // 🔒 Secure all other endpoints
                         .anyRequest().authenticated()
                 )
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt ->
@@ -63,7 +62,6 @@ public class SecurityConfig {
 
     @Bean
     public JwtDecoder jwtDecoder() {
-        // Standardized with Auth-Service logic for consistent token validation across the network
         SecretKeySpec secretKey = new SecretKeySpec(jwtSecret.getBytes(), "HmacSHA256");
         return NimbusJwtDecoder.withSecretKey(secretKey).build();
     }
@@ -71,7 +69,7 @@ public class SecurityConfig {
     @Bean
     public JwtAuthenticationConverter jwtAuthenticationConverter() {
         JwtGrantedAuthoritiesConverter authoritiesConverter = new JwtGrantedAuthoritiesConverter();
-        authoritiesConverter.setAuthoritiesClaimName("role"); // Standardized claim used in Auth Service
+        authoritiesConverter.setAuthoritiesClaimName("role");
         authoritiesConverter.setAuthorityPrefix("ROLE_");
 
         JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
@@ -79,9 +77,6 @@ public class SecurityConfig {
         return converter;
     }
 
-    /**
-     * ✅ DYNAMIC CORS: Parses origins from the .env to maintain IP consistency across the industrial network.
-     */
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();

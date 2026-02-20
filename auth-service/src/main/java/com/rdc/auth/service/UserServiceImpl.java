@@ -33,7 +33,6 @@ public class UserServiceImpl implements UserService {
     @Value("${frontend.url}")
     private String frontendUrl;
 
-    // ✅ Injected from .env (e.g., http://192.168.0.17:8081)
     @Value("${app.backend.url}")
     private String backendUrl;
 
@@ -46,7 +45,6 @@ public class UserServiceImpl implements UserService {
     public void saveRefreshToken(User user, String refreshToken) {
         log.info("Rotating refresh token for user: {}", user.getEmail());
 
-        // Revoke existing non-revoked tokens to enforce single-session or rotation
         refreshTokenRepository.findAll().stream()
                 .filter(t -> t.getUser().getId().equals(user.getId()) && !t.isRevoked())
                 .forEach(t -> {
@@ -108,10 +106,45 @@ public class UserServiceImpl implements UserService {
     public Map<String, String> createUser(SignupRequest req) {
         log.info("Attempting to create RDC user account: {}", req.getEmail());
 
-        if (userRepository.findByEmail(req.getEmail()).isPresent()) {
-            throw new RuntimeException("USER_EXISTS");
+        // ✅ INDUSTRIAL FIX: Smart logic to resend verification if account exists but isn't verified
+        Optional<User> existingUserOpt = userRepository.findByEmail(req.getEmail());
+
+        if (existingUserOpt.isPresent()) {
+            User existingUser = existingUserOpt.get();
+
+            // 🔴 If already verified → block signup to prevent duplicates
+            if (existingUser.isVerified()) {
+                throw new RuntimeException("USER_EXISTS");
+            }
+
+            // 🟡 If NOT verified → Revoke old token and resend verification
+            log.info("Unverified user {} attempting re-signup. Resending verification.", req.getEmail());
+            VerificationToken existingToken =
+                    verificationTokenRepository.findByUser(existingUser)
+                            .orElse(null);
+
+            String newToken = UUID.randomUUID().toString();
+            Instant newExpiry = Instant.now().plusSeconds(300);
+
+            if (existingToken != null) {
+                existingToken.setToken(newToken);
+                existingToken.setExpiryDate(newExpiry);
+                verificationTokenRepository.save(existingToken);
+            } else {
+                verificationTokenRepository.save(
+                        new VerificationToken(newToken, existingUser, newExpiry)
+                );
+            }
+
+            String verificationUrl = backendUrl + "/auth/verify-email?token=" + newToken;
+            emailService.sendVerificationEmail(existingUser.getEmail(), verificationUrl);
+
+            Map<String, String> response = new HashMap<>();
+            response.put("status", "VERIFICATION_RESENT");
+            return response;
         }
 
+        // Standard new user creation flow
         User newUser = User.builder()
                 .email(req.getEmail())
                 .displayName(req.getDisplayName())
@@ -126,11 +159,10 @@ public class UserServiceImpl implements UserService {
         newUser = userRepository.save(newUser);
 
         String token = UUID.randomUUID().toString();
-        verificationTokenRepository.save(new VerificationToken(token, newUser, Instant.now().plusSeconds(86400)));
+        verificationTokenRepository.save(new VerificationToken(token, newUser, Instant.now().plusSeconds(300)));
 
         boolean emailSent = false;
         try {
-            // ✅ Dynamically construct verification URL using backend IP
             String verificationUrl = backendUrl + "/auth/verify-email?token=" + token;
             emailSent = emailService.sendVerificationEmail(req.getEmail(), verificationUrl);
         } catch (Exception e) {
@@ -231,9 +263,8 @@ public class UserServiceImpl implements UserService {
         verificationTokenRepository.deleteByUser(user);
 
         String token = UUID.randomUUID().toString();
-        verificationTokenRepository.save(new VerificationToken(token, user, Instant.now().plusSeconds(86400)));
+        verificationTokenRepository.save(new VerificationToken(token, user, Instant.now().plusSeconds(300)));
 
-        // ✅ Dynamically construct verification URL using backend IP
         String verificationUrl = backendUrl + "/auth/verify-email?token=" + token;
         emailService.sendVerificationEmail(email, verificationUrl);
     }
@@ -254,7 +285,6 @@ public class UserServiceImpl implements UserService {
             user.setResetCount(user.getResetCount() + 1);
             userRepository.save(user);
 
-            // ✅ Dynamically construct reset link using frontend IP
             String resetLink = frontendUrl + "/reset-password?token=" + token;
             emailService.sendPasswordResetEmail(email, resetLink);
         });
