@@ -28,19 +28,27 @@ public class PaymentController {
     @Value("${razorpay.api.key}")
     private String razorpayKey;
 
+    /**
+     * ✅ Get Current User's Payment History
+     */
     @GetMapping("/my")
     public ResponseEntity<List<Payment>> getMyPayments(@AuthenticationPrincipal Jwt jwt) {
         Long userId = getUserIdFromJwt(jwt);
         return ResponseEntity.ok(paymentService.getPaymentsByUser(userId));
     }
 
+    /**
+     * ✅ Admin Only: Fetch Global Payment Ledger
+     */
     @GetMapping("/all")
     public ResponseEntity<List<Payment>> getAllPayments() {
-        // You may want to add @PreAuthorize("hasRole('ADMIN')") here
         log.info("Fetching global payment ledger for Admin Dashboard");
         return ResponseEntity.ok(paymentService.getAllPaymentsSorted());
     }
 
+    /**
+     * ✅ Initiate Razorpay Order
+     */
     @PostMapping("/create")
     public ResponseEntity<PaymentInitResponse> createPayment(
             @RequestBody PaymentRequest req,
@@ -57,9 +65,13 @@ public class PaymentController {
         ));
     }
 
+    /**
+     * ✅ Frontend-Driven Verification
+     * Used for immediate UI feedback after successful checkout.
+     */
     @PostMapping("/verify")
     public ResponseEntity<?> verifyPayment(@RequestBody Map<String, String> response) {
-        log.info("Processing payment verification for Gateway Order: {}", response.get("razorpay_order_id"));
+        log.info("Processing manual payment verification for Gateway Order: {}", response.get("razorpay_order_id"));
 
         boolean isValid = paymentService.verifySignatureAndMarkPaid(
                 response.get("razorpay_order_id"),
@@ -73,6 +85,25 @@ public class PaymentController {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(Map.of("status", "FAILED", "message", "Invalid Signature"));
         }
+    }
+
+    /**
+     * ✅ SECURE WEBHOOK ENDPOINT (New)
+     * Handles automated server-side capture events from Razorpay.
+     * Ensure this endpoint is permitted in SecurityConfig.java.
+     */
+    @PostMapping("/webhook")
+    public ResponseEntity<Void> handleRazorpayWebhook(
+            @RequestHeader("X-Razorpay-Signature") String signature,
+            @RequestBody String payload) {
+
+        log.info("Received Razorpay Webhook Event");
+
+        boolean processed = paymentService.handleWebhook(payload, signature);
+
+        return processed
+                ? ResponseEntity.ok().build()
+                : ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
     }
 
     private Long getUserIdFromJwt(Jwt jwt) {

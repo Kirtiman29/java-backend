@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -30,6 +31,10 @@ public class PaymentService {
 
     @Value("${razorpay.api.secret}")
     private String apiSecret;
+
+    // ✅ Dedicated secret for webhook verification
+    @Value("${razorpay.webhook.secret}")
+    private String webhookSecret;
 
     @Value("${service.order.url}")
     private String orderServiceUrl;
@@ -76,6 +81,53 @@ public class PaymentService {
         return paymentRepository.save(payment);
     }
 
+    /**
+     * ✅ SECURE WEBHOOK HANDLER
+     * Verifies authenticity and processes automated capture events.
+     */
+    @Transactional
+    public boolean handleWebhook(String payload, String razorpaySignature) {
+        try {
+            // 1. Verify webhook signature using the Webhook Secret
+            boolean isValid = Utils.verifyWebhookSignature(
+                    payload,
+                    razorpaySignature,
+                    webhookSecret
+            );
+
+            if (!isValid) {
+                log.error("❌ Invalid Razorpay webhook signature detected!");
+                return false;
+            }
+
+            JSONObject json = new JSONObject(payload);
+            String event = json.getString("event");
+
+            // 2. Only process payment capture events
+            if (!"payment.captured".equals(event)) {
+                log.info("Ignoring webhook event type: {}", event);
+                return true;
+            }
+
+            JSONObject paymentEntity = json
+                    .getJSONObject("payload")
+                    .getJSONObject("payment")
+                    .getJSONObject("entity");
+
+            String gatewayOrderId = paymentEntity.getString("order_id");
+            String paymentId = paymentEntity.getString("id");
+
+            log.info("Webhook verified for Order: {} | Payment: {}", gatewayOrderId, paymentId);
+
+            // 3. Mark as paid and notify Order Service
+            return markAsPaid(gatewayOrderId, paymentId, razorpaySignature);
+
+        } catch (Exception e) {
+            log.error("❌ Webhook processing failed: {}", e.getMessage());
+            return false;
+        }
+    }
+
     private Long fetchAmountFromOrderService(Long orderId, Long userId) {
         String url = orderServiceUrl + "/api/internal/orders/" + orderId;
         HttpHeaders headers = new HttpHeaders();
@@ -119,16 +171,20 @@ public class PaymentService {
 
     private boolean markAsPaid(String gatewayOrderId, String paymentId, String signature) {
         Payment p = paymentRepository.findByGatewayOrderId(gatewayOrderId)
-                .orElseThrow(() -> new RuntimeException("Payment record not found"));
+                .orElseThrow(() -> new RuntimeException("Payment record not found for Order ID: " + gatewayOrderId));
 
-        if (p.getStatus() == PaymentStatus.PAID) return true;
+        // ✅ IDEMPOTENCY: Check if already paid to prevent duplicate processing
+        if (p.getStatus() == PaymentStatus.PAID) {
+            log.info("Payment {} already processed. Skipping.", gatewayOrderId);
+            return true;
+        }
 
         String paymentMode = "N/A";
         try {
             com.razorpay.Payment razorpayPayment = razorpayClient.payments.fetch(paymentId);
             paymentMode = razorpayPayment.get("method").toString().toUpperCase();
         } catch (Exception e) {
-            log.error("⚠️ Failed to fetch payment method: {}", e.getMessage());
+            log.error("⚠️ Could not fetch payment method details: {}", e.getMessage());
         }
 
         p.setStatus(PaymentStatus.PAID);
@@ -136,6 +192,7 @@ public class PaymentService {
         p.setGatewaySignature(signature);
         paymentRepository.save(p);
 
+        log.info("✅ Payment marked PAID. Notifying Order Service for Order #{}", p.getOrderId());
         notifyOrderService(p.getOrderId(), paymentId, paymentMode);
         return true;
     }
@@ -152,7 +209,7 @@ public class PaymentService {
 
             restTemplate.postForEntity(url, entity, Void.class);
         } catch (Exception e) {
-            log.error("⚠️ Failed to notify Order Service: {}", e.getMessage());
+            log.error("⚠️ Failed to notify Order Service for Order {}: {}", orderId, e.getMessage());
         }
     }
 }

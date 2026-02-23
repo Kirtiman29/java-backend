@@ -39,12 +39,12 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
-                        // ✅ PERMIT: Authenticated users can verify their payments
-                        .requestMatchers("/api/payments/verify").authenticated()
+                        // Webhook must be fully public
+                        .requestMatchers(HttpMethod.POST, "/api/payments/webhook").permitAll()
 
-                        // 🔐 LOCK DOWN: Public access denied to internal routes.
-                        // These are handled by specific filters or internal controllers if needed.
-                        .requestMatchers("/api/internal/**").permitAll()
+                        // Frontend verification
+                        .requestMatchers(HttpMethod.POST, "/api/payments/verify").authenticated()
+
                         .requestMatchers("/actuator/**").permitAll()
 
                         .anyRequest().authenticated()
