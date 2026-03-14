@@ -3,11 +3,11 @@ package com.rdc.admin.service;
 import com.rdc.admin.dto.*;
 import com.rdc.admin.entity.*;
 import com.rdc.admin.exception.ResourceNotFoundException;
+import com.rdc.admin.repository.CategoryRepository; // ✅ Added Import
 import com.rdc.admin.repository.DesignDeletionRecordRepository;
 import com.rdc.admin.repository.DesignMediaRepository;
 import com.rdc.admin.repository.DesignRepository;
 import com.rdc.admin.util.DesignMapper;
-import com.rdc.admin.util.SlugGenerator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -27,6 +27,7 @@ public class DesignService {
     private final DesignRepository repository;
     private final DesignMediaRepository mediaRepository;
     private final DesignDeletionRecordRepository deletionRecordRepository;
+    private final CategoryRepository categoryRepository; // ✅ Added Constructor Injection
     private final DesignMapper mapper;
     private final DesignPricingService pricingService;
     private final AssetClientService assetClientService;
@@ -39,13 +40,6 @@ public class DesignService {
                 .stream()
                 .map(d -> mapper.toResponse(d, mediaRepository.findByDesignId(d.getId())))
                 .collect(Collectors.toList());
-    }
-
-    @Transactional(readOnly = true)
-    public DesignResponse getDesignBySlug(String slug) {
-        Design design = repository.findBySlug(slug)
-                .orElseThrow(() -> new ResourceNotFoundException("Design not found with slug: " + slug));
-        return mapper.toResponse(design, mediaRepository.findByDesignId(design.getId()));
     }
 
     @Transactional(readOnly = true)
@@ -82,20 +76,39 @@ public class DesignService {
 
         Design design = new Design();
         design.setTitle(request.getTitle());
-        design.setSlug(generateUniqueSlug(request.getTitle()));
         design.setDescription(request.getDescription());
         design.setDesignIdentifier(request.getDesignIdentifier());
         design.setBasePriceCents(request.getBasePriceCents());
-        design.setCategoryId(request.getCategoryId());
         design.setAssetUuid(request.getCoverAssetUuid());
+
+        // ✅ FIXED: Category Many-to-Many Logic
+        if (request.getCategoryIds() != null && !request.getCategoryIds().isEmpty()) {
+            List<Category> categories = categoryRepository.findAllById(request.getCategoryIds());
+            design.getCategories().clear();
+            design.getCategories().addAll(categories);
+        }
+
+        // ✅ ADDED: Industrial Specifications
+        design.setRepeatSize(request.getRepeatSize());
+        design.setDesignType(request.getDesignType());
+        design.setImageType(request.getImageType());
+        design.setImageFormat(request.getImageFormat());
+        design.setColorCount(request.getColorCount());
+        design.setResolution(request.getResolution());
 
         if (request.getTags() != null) {
             design.getTags().clear();
             design.getTags().addAll(request.getTags());
         }
 
-        if (request.getSegment() != null) {
-            design.setSegment(Segment.valueOf(request.getSegment().toUpperCase()));
+        if (request.getSegments() != null && !request.getSegments().isEmpty()) {
+            design.getSegments().clear();
+            design.getSegments().addAll(
+                    request.getSegments()
+                            .stream()
+                            .map(s -> Segment.valueOf(s.toUpperCase()))
+                            .toList()
+            );
         }
 
         design.setActive(Boolean.TRUE.equals(request.getActive()));
@@ -103,7 +116,7 @@ public class DesignService {
         design.setTrending(Boolean.TRUE.equals(request.getTrending()));
         design.setEditorsPick(Boolean.TRUE.equals(request.getEditorsPick()));
         design.setNewArrival(Boolean.TRUE.equals(request.getNewArrival()));
-        design.setPremium(Boolean.TRUE.equals(request.getPremium()));
+        design.setLuxury(Boolean.TRUE.equals(request.getLuxury()));
         design.setDiscountPercent(request.getDiscountPercent() != null ? request.getDiscountPercent() : 0);
         design.setSpecialOffer(Boolean.TRUE.equals(request.getSpecialOffer()));
         design.setFinalPriceCents(pricingService.calculateFinalPrice(design));
@@ -134,7 +147,10 @@ public class DesignService {
 
         if (request.getTitle() != null && !request.getTitle().isBlank()) {
             design.setTitle(request.getTitle());
-            design.setSlug(generateUniqueSlug(request.getTitle()));
+        }
+
+        if (request.getDesignIdentifier() != null && !request.getDesignIdentifier().isBlank()) {
+            design.setDesignIdentifier(request.getDesignIdentifier());
         }
 
         String newCoverUuid = request.getCoverAssetUuid();
@@ -148,10 +164,36 @@ public class DesignService {
         }
 
         if (request.getDescription() != null) design.setDescription(request.getDescription());
-        if (request.getCategoryId() != null) design.setCategoryId(request.getCategoryId());
 
-        if (request.getSegment() != null) {
-            design.setSegment(Segment.valueOf(request.getSegment().toUpperCase()));
+        // ✅ FIXED: Update Category IDs
+        if (request.getCategoryIds() != null) {
+            List<Category> categories = categoryRepository.findAllById(request.getCategoryIds());
+            design.getCategories().clear();
+            design.getCategories().addAll(categories);
+        }
+
+        // ✅ ADDED: Update Industrial Specs
+        if (request.getRepeatSize() != null) design.setRepeatSize(request.getRepeatSize());
+        if (request.getDesignType() != null) design.setDesignType(request.getDesignType());
+        if (request.getImageFormat() != null) design.setImageFormat(request.getImageFormat());
+        if (request.getColorCount() != null) design.setColorCount(request.getColorCount());
+        if (request.getResolution() != null) design.setResolution(request.getResolution());
+
+        if (request.getImageType() != null) design.setImageType(request.getImageType());
+
+        if (request.getTags() != null) {
+            design.getTags().clear();
+            design.getTags().addAll(request.getTags());
+        }
+
+        if (request.getSegments() != null) {
+            design.getSegments().clear();
+            design.getSegments().addAll(
+                    request.getSegments()
+                            .stream()
+                            .map(s -> Segment.valueOf(s.toUpperCase()))
+                            .toList()
+            );
         }
 
         if (request.getBasePriceCents() != null) design.setBasePriceCents(request.getBasePriceCents());
@@ -164,7 +206,7 @@ public class DesignService {
         if (request.getTrending() != null) design.setTrending(request.getTrending());
         if (request.getEditorsPick() != null) design.setEditorsPick(request.getEditorsPick());
         if (request.getNewArrival() != null) design.setNewArrival(request.getNewArrival());
-        if (request.getPremium() != null) design.setPremium(request.getPremium());
+        if (request.getLuxury() != null) design.setLuxury(request.getLuxury());
         if (request.getSpecialOffer() != null) design.setSpecialOffer(request.getSpecialOffer());
 
         updateDesignMedia(design.getId(), request);
@@ -187,7 +229,6 @@ public class DesignService {
         Design design = repository.findById(designId)
                 .orElseThrow(() -> new ResourceNotFoundException("Design", designId));
 
-        // 1. Capture SKU/Identifier before the design is removed from DB
         String sku = design.getDesignIdentifier();
 
         List<DesignMedia> mediaList = mediaRepository.findByDesignId(designId);
@@ -195,7 +236,6 @@ public class DesignService {
                 .map(DesignMedia::getAssetUuid)
                 .toList();
 
-        // 2. Physical Deletion
         for (String uuid : assetUuids) {
             try {
                 assetClientService.deleteAsset(uuid);
@@ -204,14 +244,12 @@ public class DesignService {
             }
         }
 
-        // 3. Clear Database
         mediaRepository.deleteAll(mediaList);
         repository.delete(design);
 
-        // 4. Create Audit Record with the captured SKU
         DesignDeletionRecord record = DesignDeletionRecord.builder()
                 .designId(designId)
-                .designIdentifier(sku) // ✅ Persisting the SKU here
+                .designIdentifier(sku)
                 .orderId(orderId)
                 .deletedBy("order-service")
                 .deletedAssetsCsv(String.join(",", assetUuids))
@@ -285,13 +323,4 @@ public class DesignService {
                 .build());
     }
 
-    private String generateUniqueSlug(String title) {
-        String base = SlugGenerator.generateSlug(title);
-        String slug = base;
-        int i = 1;
-        while (repository.existsBySlug(slug)) {
-            slug = base + "-" + i++;
-        }
-        return slug;
-    }
 }

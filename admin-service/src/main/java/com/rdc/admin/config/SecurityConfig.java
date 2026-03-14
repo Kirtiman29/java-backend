@@ -81,6 +81,14 @@ public class SecurityConfig {
                                 "/api/banners/**"
                         ).permitAll()
 
+                        // 🌍 SEO SITEMAP (PUBLIC FOR GOOGLE)
+                        .requestMatchers(
+                                "/sitemap.xml",
+                                "/sitemap-pages.xml",
+                                "/sitemap-products.xml",
+                                "/sitemap-categories.xml"
+                        ).permitAll()
+
                         // 🔓 AUTH
                         .requestMatchers("/api/admin/login", "/actuator/**").permitAll()
 

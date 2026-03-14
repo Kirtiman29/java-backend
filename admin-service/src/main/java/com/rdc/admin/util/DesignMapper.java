@@ -1,5 +1,6 @@
 package com.rdc.admin.util;
 
+import com.rdc.admin.dto.CategoryDto; // Ensure this import exists
 import com.rdc.admin.dto.DesignMediaDto;
 import com.rdc.admin.dto.DesignResponse;
 import com.rdc.admin.entity.Design;
@@ -23,14 +24,29 @@ public class DesignMapper {
                 .id(design.getId())
                 .designIdentifier(design.getDesignIdentifier())
                 .title(design.getTitle())
-                .slug(design.getSlug())
                 .description(design.getDescription())
                 .basePriceCents(design.getBasePriceCents())
                 .finalPriceCents(design.getFinalPriceCents())
                 .discountPercent(design.getDiscountPercent())
                 .specialOffer(design.getSpecialOffer())
-                .categoryId(design.getCategoryId())
-                .segment(design.getSegment() != null ? design.getSegment().name() : null)
+
+                // ✅ Industrial Specifications Mapping
+                .repeatSize(design.getRepeatSize())
+                .designType(design.getDesignType())
+                .imageType(design.getImageType())
+                .imageFormat(design.getImageFormat())
+                .colorCount(design.getColorCount())
+                .resolution(design.getResolution())
+
+
+                .segments(
+                        design.getSegments() != null
+                                ? design.getSegments()
+                                .stream()
+                                .map(Enum::name)
+                                .collect(Collectors.toList())
+                                : new ArrayList<>()
+                )
                 .assetUuid(design.getAssetUuid())
 
                 .tags(design.getTags() != null ? new ArrayList<>(design.getTags()) : new ArrayList<>())
@@ -40,16 +56,34 @@ public class DesignMapper {
                 .trending(design.getTrending())
                 .editorsPick(design.getEditorsPick())
                 .newArrival(design.getNewArrival())
-                .premium(design.getPremium())
+                .luxury(design.getLuxury())
 
-                .media(mediaList != null ? mediaList.stream().map(this::mapMedia).collect(Collectors.toList()) : List.of())
+                // ✅ Categories Mapping
+                .categories(
+                        design.getCategories() != null ?
+                                design.getCategories()
+                                        .stream()
+                                        .map(cat -> CategoryDto.builder()
+                                                .id(cat.getId())
+                                                .name(cat.getName())
+                                                .description(cat.getDescription())
+                                                .imageUrl(cat.getImageUrl())
+                                                .build())
+                                        .collect(Collectors.toList())
+                                : new ArrayList<>()
+                )
+
+                .media(
+                        mediaList != null
+                                ? mediaList.stream().map(this::mapMedia).collect(Collectors.toList())
+                                : new ArrayList<>()
+                )
                 .createdAt(design.getCreatedAt())
                 .updatedAt(design.getUpdatedAt())
                 .build();
     }
 
     private DesignMediaDto mapMedia(DesignMedia media) {
-
         String dynamicUrl = assetServiceBaseUrl + "/api/assets/download/" + media.getAssetUuid();
 
         return DesignMediaDto.builder()

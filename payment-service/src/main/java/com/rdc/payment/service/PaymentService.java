@@ -15,7 +15,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -32,7 +31,6 @@ public class PaymentService {
     @Value("${razorpay.api.secret}")
     private String apiSecret;
 
-    // ✅ Dedicated secret for webhook verification
     @Value("${razorpay.webhook.secret}")
     private String webhookSecret;
 
@@ -52,22 +50,29 @@ public class PaymentService {
 
     @Transactional
     public Payment initiatePayment(Long orderId, Long userId) throws Exception {
-        Optional<Payment> existing = paymentRepository.findByUserIdAndOrderId(userId, orderId)
-                .stream().filter(p -> p.getStatus() != PaymentStatus.FAILED).findFirst();
+        Optional<Payment> existingPaid = paymentRepository
+                .findByUserIdAndOrderId(userId, orderId)
+                .stream()
+                .filter(p -> p.getStatus() == PaymentStatus.PAID)
+                .findFirst();
 
-        if (existing.isPresent()) {
-            return existing.get();
+        if (existingPaid.isPresent()) {
+            log.info("✅ Payment already completed for Order: {}", orderId);
+            return existingPaid.get();
         }
 
+        // 1. Fetch exact amount from Order Service (This is where the 503 was happening)
         Long amountCents = fetchAmountFromOrderService(orderId, userId);
 
+        // 2. Create Razorpay Order
         JSONObject orderRequest = new JSONObject();
-        orderRequest.put("amount", amountCents);
+        orderRequest.put("amount", amountCents); // Razorpay expects cents/paise
         orderRequest.put("currency", "INR");
         orderRequest.put("receipt", "order_rcpt_" + orderId);
 
         com.razorpay.Order razorpayOrder = razorpayClient.orders.create(orderRequest);
 
+        // 3. Save Payment Record
         Payment payment = Payment.builder()
                 .orderId(orderId)
                 .userId(userId)
@@ -78,74 +83,74 @@ public class PaymentService {
                 .currency("INR")
                 .build();
 
+        log.info("💳 Payment Session Initiated: {} for Order: {}", payment.getGatewayOrderId(), orderId);
         return paymentRepository.save(payment);
     }
 
-    /**
-     * ✅ SECURE WEBHOOK HANDLER
-     * Verifies authenticity and processes automated capture events.
-     */
+    private Long fetchAmountFromOrderService(Long orderId, Long userId) {
+
+        String url = orderServiceUrl + "/api/orders/internal/amount/" + orderId;
+
+        log.info("📡 Internal Bridge → Order Service: {}", url);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("X-INTERNAL-KEY", internalServiceKey);
+
+        HttpEntity<Void> entity = new HttpEntity<>(headers);
+
+        try {
+
+            ResponseEntity<Map> response =
+                    restTemplate.exchange(url, HttpMethod.GET, entity, Map.class);
+
+            Map data = response.getBody();
+
+            if (data == null) {
+                throw new RuntimeException("Order Service returned null body");
+            }
+
+            Object priceObj = data.get("grandTotalCents");
+
+            if (priceObj == null) {
+                throw new RuntimeException("Missing totalPriceCents in response");
+            }
+
+            Long amount = ((Number) priceObj).longValue();
+
+            log.info("💰 Verified Order Amount: {} paise for Order {}", amount, orderId);
+
+            return amount;
+
+        } catch (Exception e) {
+
+            log.error("❌ Bridge Failure → Order Service unreachable: {}", e.getMessage());
+
+            throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "Order Service Unreachable"
+            );
+        }
+    }
+
     @Transactional
     public boolean handleWebhook(String payload, String razorpaySignature) {
         try {
-            // 1. Verify webhook signature using the Webhook Secret
-            boolean isValid = Utils.verifyWebhookSignature(
-                    payload,
-                    razorpaySignature,
-                    webhookSecret
-            );
-
+            boolean isValid = Utils.verifyWebhookSignature(payload, razorpaySignature, webhookSecret);
             if (!isValid) {
-                log.error("❌ Invalid Razorpay webhook signature detected!");
+                log.error("❌ Invalid Razorpay webhook signature!");
                 return false;
             }
 
             JSONObject json = new JSONObject(payload);
             String event = json.getString("event");
 
-            // 2. Only process payment capture events
-            if (!"payment.captured".equals(event)) {
-                log.info("Ignoring webhook event type: {}", event);
-                return true;
-            }
+            if (!"payment.captured".equals(event)) return true;
 
-            JSONObject paymentEntity = json
-                    .getJSONObject("payload")
-                    .getJSONObject("payment")
-                    .getJSONObject("entity");
-
-            String gatewayOrderId = paymentEntity.getString("order_id");
-            String paymentId = paymentEntity.getString("id");
-
-            log.info("Webhook verified for Order: {} | Payment: {}", gatewayOrderId, paymentId);
-
-            // 3. Mark as paid and notify Order Service
-            return markAsPaid(gatewayOrderId, paymentId, razorpaySignature);
-
+            JSONObject paymentEntity = json.getJSONObject("payload").getJSONObject("payment").getJSONObject("entity");
+            return markAsPaid(paymentEntity.getString("order_id"), paymentEntity.getString("id"), razorpaySignature);
         } catch (Exception e) {
             log.error("❌ Webhook processing failed: {}", e.getMessage());
             return false;
-        }
-    }
-
-    private Long fetchAmountFromOrderService(Long orderId, Long userId) {
-        String url = orderServiceUrl + "/api/internal/orders/" + orderId;
-        HttpHeaders headers = new HttpHeaders();
-        headers.set("X-INTERNAL-KEY", internalServiceKey);
-        HttpEntity<Void> entity = new HttpEntity<>(headers);
-
-        try {
-            ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.GET, entity, Map.class);
-            Map data = response.getBody();
-
-            Object priceObj = data.get("totalPriceCents");
-            if (priceObj instanceof Number) {
-                return ((Number) priceObj).longValue();
-            } else {
-                throw new RuntimeException("Invalid price data format");
-            }
-        } catch (Exception e) {
-            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Order Service Unreachable");
         }
     }
 
@@ -171,20 +176,16 @@ public class PaymentService {
 
     private boolean markAsPaid(String gatewayOrderId, String paymentId, String signature) {
         Payment p = paymentRepository.findByGatewayOrderId(gatewayOrderId)
-                .orElseThrow(() -> new RuntimeException("Payment record not found for Order ID: " + gatewayOrderId));
+                .orElseThrow(() -> new RuntimeException("Payment record not found: " + gatewayOrderId));
 
-        // ✅ IDEMPOTENCY: Check if already paid to prevent duplicate processing
-        if (p.getStatus() == PaymentStatus.PAID) {
-            log.info("Payment {} already processed. Skipping.", gatewayOrderId);
-            return true;
-        }
+        if (p.getStatus() == PaymentStatus.PAID) return true;
 
         String paymentMode = "N/A";
         try {
             com.razorpay.Payment razorpayPayment = razorpayClient.payments.fetch(paymentId);
             paymentMode = razorpayPayment.get("method").toString().toUpperCase();
         } catch (Exception e) {
-            log.error("⚠️ Could not fetch payment method details: {}", e.getMessage());
+            log.warn("⚠️ Could not fetch payment method: {}", e.getMessage());
         }
 
         p.setStatus(PaymentStatus.PAID);
@@ -192,24 +193,32 @@ public class PaymentService {
         p.setGatewaySignature(signature);
         paymentRepository.save(p);
 
-        log.info("✅ Payment marked PAID. Notifying Order Service for Order #{}", p.getOrderId());
         notifyOrderService(p.getOrderId(), paymentId, paymentMode);
         return true;
     }
 
     private void notifyOrderService(Long orderId, String transactionId, String paymentMode) {
+
         try {
-            String url = orderServiceUrl + "/api/internal/orders/" + orderId + "/paid"
-                    + "?transactionId=" + transactionId
+
+            String url = orderServiceUrl
+                    + "/api/orders/internal/" + orderId
+                    + "/paid?transactionId=" + transactionId
                     + "&paymentMode=" + paymentMode;
+
+            log.info("📡 Notifying Order Service: {}", url);
 
             HttpHeaders headers = new HttpHeaders();
             headers.set("X-INTERNAL-KEY", internalServiceKey);
+
             HttpEntity<Void> entity = new HttpEntity<>(headers);
 
             restTemplate.postForEntity(url, entity, Void.class);
+
         } catch (Exception e) {
-            log.error("⚠️ Failed to notify Order Service for Order {}: {}", orderId, e.getMessage());
+
+            log.error("⚠️ Order Service notification failed: {}", e.getMessage());
+
         }
     }
 }

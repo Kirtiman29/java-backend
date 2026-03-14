@@ -1,10 +1,11 @@
 package com.rdc.order.service;
 
+import com.rdc.order.dto.OrderRequest;
 import com.rdc.order.dto.OrderResponse;
 import java.util.List;
 
 public interface OrderService {
-    OrderResponse createOrder(Long userId);
+    OrderResponse createOrder(OrderRequest request);
     OrderResponse getOrderById(Long orderId, Long userId);
     OrderResponse getOrderByIdInternal(Long orderId);
     OrderResponse getOrderByIdAdmin(Long orderId);

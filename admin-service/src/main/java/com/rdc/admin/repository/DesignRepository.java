@@ -13,27 +13,24 @@ import java.util.Optional;
 @Repository
 public interface DesignRepository extends JpaRepository<Design, Long> {
 
-    Optional<Design> findBySlug(String slug);
-
-    boolean existsBySlug(String slug);
-
-    List<Design> findBySegmentAndActiveTrue(Segment segment);
+    @Query("SELECT d FROM Design d JOIN d.segments s WHERE s = :segment AND d.active = true")
+    List<Design> findBySegmentAndActiveTrue(@Param("segment") Segment segment);
 
     List<Design> findByDraftFalseAndActiveTrue();
 
     boolean existsByDesignIdentifier(String designIdentifier);
-
+    List<Design> findByDraftFalseAndActiveTrueAndCategories_Id(Long categoryId);
 
     @Query("""
-   SELECT DISTINCT d FROM Design d
-   LEFT JOIN d.tags t
-   WHERE d.active = true
-     AND d.draft = false
-     AND (
-          LOWER(d.title) = LOWER(:search)
-          OR LOWER(t) = LOWER(:search)
-          OR (LOWER(d.title) LIKE LOWER(CONCAT('% ', :search, ' %')))
-     )
+SELECT DISTINCT d FROM Design d
+LEFT JOIN d.segments s
+WHERE d.draft = false
+AND d.active = true
+AND (
+LOWER(d.title) LIKE LOWER(CONCAT('%', :search, '%'))
+OR LOWER(d.tags) LIKE LOWER(CONCAT('%', :search, '%'))
+OR LOWER(s) LIKE LOWER(CONCAT('%', :search, '%'))
+)
 """)
     List<Design> searchByTitleOrTags(@Param("search") String search);
 }

@@ -14,4 +14,5 @@ public class ApplicationRequest {
     private String phone;
     @NotBlank
     private String resumeAssetUuid;
+    private String portfolioAssetUuid;
 }

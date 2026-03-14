@@ -8,7 +8,6 @@ import com.rdc.admin.entity.JobApplication;
 import com.rdc.admin.entity.JobStatus;
 import com.rdc.admin.repository.JobApplicationRepository;
 import com.rdc.admin.repository.JobRepository;
-import com.rdc.admin.util.SlugGenerator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -29,7 +28,6 @@ public class CareerService {
     private final JobApplicationRepository applicationRepository;
     private final SmtpEmailService emailService;
 
-
     @Value("${service.asset.url}")
     private String assetServiceBaseUrl;
 
@@ -40,7 +38,6 @@ public class CareerService {
     public JobResponse createJob(JobCreateRequest request) {
         Job job = Job.builder()
                 .title(request.getTitle())
-                .slug(generateUniqueSlug(request.getTitle()))
                 .description(request.getDescription())
                 .location(request.getLocation())
                 .experienceLevel(request.getExperienceLevel())
@@ -75,12 +72,14 @@ public class CareerService {
             throw new IllegalStateException("Hiring for this position is CLOSED.");
         }
 
+        // Updated to save the optional portfolioAssetUuid to the entity
         JobApplication application = JobApplication.builder()
                 .job(job)
                 .fullName(req.getFullName())
                 .email(req.getEmail())
                 .phone(req.getPhone())
                 .resumeAssetUuid(req.getResumeAssetUuid())
+                .portfolioAssetUuid(req.getPortfolioAssetUuid()) // Added optional field
                 .build();
 
         applicationRepository.save(application);
@@ -95,6 +94,12 @@ public class CareerService {
         hrVars.put("candidateName", req.getFullName());
         hrVars.put("candidateEmail", req.getEmail());
         hrVars.put("resumeLink", resumeLink);
+
+        // Include portfolio link in the HR alert email variables if it was provided
+        if (req.getPortfolioAssetUuid() != null && !req.getPortfolioAssetUuid().isBlank()) {
+            String portfolioLink = assetServiceBaseUrl + "/api/assets/download/" + req.getPortfolioAssetUuid();
+            hrVars.put("portfolioLink", portfolioLink);
+        }
 
         emailService.sendHtmlEmail(hrRecipientEmail, "RDC ALERT: New Job Applicant", "hr-job-alert", hrVars);
     }
@@ -115,29 +120,25 @@ public class CareerService {
                     map.put("name", app.getFullName());
                     map.put("email", app.getEmail());
                     map.put("phone", (app.getPhone() != null ? app.getPhone() : "N/A"));
-                    // ✅ FIXED: Uses dynamic base URL instead of hardcoded localhost
+
+                    // Provides the clickable URL for the Resume
                     map.put("resumeUrl", assetServiceBaseUrl + "/api/assets/download/" + app.getResumeAssetUuid());
+
+                    // Added: Provides the clickable URL for the Portfolio if it exists
+                    if (app.getPortfolioAssetUuid() != null && !app.getPortfolioAssetUuid().isBlank()) {
+                        map.put("portfolioUrl", assetServiceBaseUrl + "/api/assets/download/" + app.getPortfolioAssetUuid());
+                    }
+
                     map.put("appliedAt", app.getAppliedAt());
                     return map;
                 })
                 .collect(Collectors.toList());
     }
 
-    private String generateUniqueSlug(String title) {
-        String baseSlug = SlugGenerator.generateSlug(title);
-        String slug = baseSlug;
-        int count = 1;
-        while (jobRepository.existsBySlug(slug)) {
-            slug = baseSlug + "-" + count++;
-        }
-        return slug;
-    }
-
     private JobResponse mapToResponse(Job job) {
         return JobResponse.builder()
                 .id(job.getId())
                 .title(job.getTitle())
-                .slug(job.getSlug())
                 .description(job.getDescription())
                 .location(job.getLocation())
                 .experienceLevel(job.getExperienceLevel())

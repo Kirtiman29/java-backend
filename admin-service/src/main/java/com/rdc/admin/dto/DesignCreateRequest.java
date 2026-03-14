@@ -4,6 +4,7 @@ import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Set;
 
 @Data
 public class DesignCreateRequest {
@@ -12,27 +13,31 @@ public class DesignCreateRequest {
     private Long basePriceCents;
     private Integer discountPercent;
     private Boolean specialOffer;
-    private Long categoryId;
-    private String segment;
+    private List<String> segments = new ArrayList<>();
 
-    // ✅ FIXED: Tags must be a List for @ElementCollection mapping
     private List<String> tags = new ArrayList<>();
 
-    // ✅ Bulk Media Assets (UUIDs from Asset Service)
     private String coverAssetUuid;
     private List<String> galleryUuids;
     private String previewVideoUuid;
     private String downloadTiffUuid;
 
-    // ✅ Status & Section Flags
     private Boolean active = true;
     private Boolean draft = false;
     private Boolean trending = false;
     private Boolean editorsPick = false;
     private Boolean newArrival = true;
-    private Boolean premium = false;
+    private Boolean luxury = false;
 
     @NotBlank
     private String designIdentifier;
+
+    private String repeatSize;
+    private String imageType;
+    private String designType;
+    private String imageFormat;
+    private Integer colorCount;
+    private String resolution;
+    private List<Long> categoryIds = new ArrayList<>();
 
 }

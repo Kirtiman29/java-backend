@@ -24,18 +24,24 @@ public class InvoiceGeneratorService {
     }
 
     private void enrichOrderForInvoice(Order order) {
-        long grandTotal = order.getTotalPriceCents();
 
-        long subTotal = Math.round(grandTotal / 1.18);
+        long grandTotal = order.getGrandTotalCents();
+
+        // calculate taxable amount
+        long subTotal = Math.round((grandTotal / 1.18) / 100.0) * 100;
 
         long gstTotal = grandTotal - subTotal;
-        long cgst = gstTotal / 2;
-        long sgst = gstTotal - cgst;
+
+        // split GST equally with rounding
+        long halfGst = Math.round(gstTotal / 2.0);
+
+        long cgst = halfGst;
+        long sgst = halfGst;
 
         order.setSubTotalCents(subTotal);
         order.setCgstCents(cgst);
         order.setSgstCents(sgst);
-        order.setTotalAmountCents(grandTotal);
+        order.setGrandTotalCents(grandTotal);
 
         long rupees = grandTotal / 100;
         order.setAmountInWords(IndianNumberToWords.convert(rupees));

@@ -8,9 +8,6 @@ import lombok.NoArgsConstructor;
 import java.time.Instant;
 import java.util.List;
 
-/**
- * Order Response DTO
- */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -18,9 +15,30 @@ import java.util.List;
 public class OrderResponse {
     private Long id;
     private Long userId;
-    private Long totalPriceCents;
     private String status;
     private Instant createdAt;
     private Instant updatedAt;
+
+    // Detailed Totals
+    private Long subTotalCents;
+    private Long cgstCents;
+    private Long sgstCents;
+    private Long igstCents;
+    private Long grandTotalCents;
+
+    // Billing Details
+    private String customerName;
+    private String customerEmail;
+    private String customerPhone;
+    private String billingState;
+    private String city;
+    private String customerGstin;
+    private String invoiceType;
+
+    private String addressOne;
+    private String addressTwo;
+    private String pincode;
+    private String organizationName;
+
     private List<OrderItemResponse> items;
 }

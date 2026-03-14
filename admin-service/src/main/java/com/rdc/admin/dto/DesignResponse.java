@@ -1,6 +1,8 @@
 package com.rdc.admin.dto;
 
 import lombok.*;
+
+import java.util.ArrayList;
 import java.util.List;
 import java.time.LocalDateTime;
 
@@ -12,31 +14,36 @@ public class DesignResponse {
 
     private Long id;
     private String title;
-    private String slug;
     private String description;
     private Long basePriceCents;
     private Long finalPriceCents;
     private Integer discountPercent;
     private Boolean specialOffer;
-    private Long categoryId;
-    private String segment;
+    private List<String> segments = new ArrayList<>();
     private String assetUuid;
 
     // ✅ FIXED: Added tags to the response so the frontend can display them
     private List<String> tags;
-
+    private String imageType;
     // Flags
     private Boolean draft;
     private Boolean active;
     private Boolean trending;
     private Boolean editorsPick;
     private Boolean newArrival;
-    private Boolean premium;
+    private Boolean luxury;
 
     private List<DesignMediaDto> media;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
     private String designIdentifier;
+
+    private String repeatSize;
+    private String designType;
+    private String imageFormat;
+    private Integer colorCount;
+    private String resolution;
+    private List<CategoryDto> categories;
 
 }

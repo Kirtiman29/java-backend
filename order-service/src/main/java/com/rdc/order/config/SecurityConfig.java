@@ -38,18 +38,10 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        // 1. Preflight and Health checks
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/actuator/**").permitAll()
-
-                        // ✅ FIXED: Standardized Internal Bridge Mapping
-                        // Allows service-to-service calls (like Payment -> Order) without JWT
-                        .requestMatchers("/api/internal/**").permitAll()
-
-                        // ⚡ Webhooks (e.g., external payment provider callbacks)
+                        .requestMatchers("/api/orders/internal/**").permitAll()
                         .requestMatchers("/api/webhooks/**").permitAll()
-
-                        // 🔒 Secure all other endpoints
                         .anyRequest().authenticated()
                 )
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt ->

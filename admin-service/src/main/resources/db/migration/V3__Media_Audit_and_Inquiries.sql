@@ -1,3 +1,4 @@
+
   CREATE TABLE design_media (
       id BIGINT AUTO_INCREMENT PRIMARY KEY,
       design_id BIGINT NOT NULL,

@@ -31,11 +31,6 @@ public class OrderEmailService {
     @Value("${spring.mail.username}")
     private String fromEmail;
 
-    /**
-     * Prepares and sends the order confirmation email.
-     * Note: To ensure @Async works, call sendEmailAsync from a separate Task executor
-     * or ensure this method is called from the OrderService.
-     */
     public void sendOrderConfirmation(Order order, String userEmail, String userName) {
         log.info("📧 Preparing tax invoice for Order #{}", order.getId());
 
@@ -69,7 +64,7 @@ public class OrderEmailService {
             Context context = new Context();
             context.setVariable("name", userName);
             context.setVariable("orderId", order.getId());
-            context.setVariable("totalAmount", order.getTotalPriceCents() / 100.0);
+            context.setVariable("totalAmount", order.getGrandTotalCents() / 100.0);
             context.setVariable("items", items);
 
             String htmlContent = templateEngine.process("order-success", context);

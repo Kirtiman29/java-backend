@@ -11,7 +11,6 @@ import java.time.LocalDateTime;
 public class JobResponse {
     private Long id;
     private String title;
-    private String slug;
     private String description;
     private String location;
     private String experienceLevel;

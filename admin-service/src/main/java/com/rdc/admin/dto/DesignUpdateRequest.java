@@ -9,13 +9,22 @@ public class DesignUpdateRequest {
     // Basic Info
     private String title;
     private String description;
-    private Long categoryId;
-    private String segment;
+    private List<String> segments = new ArrayList<>();
 
     // Pricing
     private Long basePriceCents;
     private Integer discountPercent;
     private Boolean specialOffer;
+
+    private List<Long> categoryIds = new ArrayList<>();
+
+    private String designIdentifier;
+    // Industrial Specifications
+    private String repeatSize;
+    private String designType;
+    private String imageFormat;
+    private Integer colorCount;
+    private String resolution;
 
     // Media Assets
     private String coverAssetUuid;
@@ -29,8 +38,9 @@ public class DesignUpdateRequest {
     private Boolean trending;
     private Boolean editorsPick;
     private Boolean newArrival;
-    private Boolean premium;
+    private Boolean luxury;
 
-    // ✅ FIXED: Tags list for updating the design_tags table
     private List<String> tags = new ArrayList<>();
+
+    private String imageType;
 }

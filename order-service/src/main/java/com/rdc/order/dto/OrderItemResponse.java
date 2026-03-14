@@ -5,11 +5,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/**
- * Order Item Response DTO
- *
- * Uses designId instead of assetId.
- */
+
 @Data
 @NoArgsConstructor
 @AllArgsConstructor

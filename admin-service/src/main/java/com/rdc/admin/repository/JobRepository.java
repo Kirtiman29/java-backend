@@ -8,6 +8,4 @@ import java.util.Optional;
 
 public interface JobRepository extends JpaRepository<Job, Long> {
     List<Job> findByStatus(JobStatus status);
-    Optional<Job> findBySlug(String slug);
-    boolean existsBySlug(String slug);
 }

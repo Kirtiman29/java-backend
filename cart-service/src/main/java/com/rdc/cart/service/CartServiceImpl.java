@@ -24,47 +24,67 @@ public class CartServiceImpl implements CartService {
     private final CartItemRepository cartItemRepository;
     private final AdminServiceClient adminServiceClient;
 
+    /**
+     * Add design to cart
+     */
     @Override
     @Transactional
     public CartItemResponse addToCart(Long userId, CartItemRequest request) {
-        log.info("🛒 Attempting to add to cart: userId={}, designId={}", userId, request.getDesignId());
 
-        DesignDto design = adminServiceClient.getDesignById(request.getDesignId());
+        log.info("🛒 Add to cart request: userId={}, designId={}", userId, request.getDesignId());
 
-        log.debug("📦 Fetched Design Info: ID={}, SKU={}, Title={}, UUID={}",
-                design.getId(), design.getDesignIdentifier(), design.getTitle(), design.getAssetUuid());
+        DesignDto design;
 
-        // 3. HARD VALIDATION
-        if (design == null) {
+        try {
+            design = adminServiceClient.getDesignById(request.getDesignId());
+        } catch (Exception ex) {
+            log.error("❌ Failed to fetch design {} from admin service", request.getDesignId(), ex);
             throw new DesignNotAvailableException("Design information could not be retrieved");
         }
 
-        if (Boolean.TRUE.equals(design.getDraft()) || !Boolean.TRUE.equals(design.getActive())) {
-            log.warn("⚠️ Design {} is either a draft or inactive. Blocking purchase.", design.getId());
+        if (design == null) {
+            throw new DesignNotAvailableException("Design does not exist");
+        }
+
+        log.debug("📦 Design fetched → ID={}, SKU={}, Title={}",
+                design.getId(),
+                design.getDesignIdentifier(),
+                design.getTitle());
+
+        /**
+         * HARD VALIDATION
+         */
+
+        if (Boolean.TRUE.equals(design.getDraft())) {
+            log.warn("⚠️ Attempt to add draft design {}", design.getId());
+            throw new DesignNotAvailableException("Design is not available for purchase");
+        }
+
+        if (!Boolean.TRUE.equals(design.getActive())) {
+            log.warn("⚠️ Attempt to add inactive design {}", design.getId());
             throw new DesignNotAvailableException("Design is not available for purchase");
         }
 
         if (design.getAssetUuid() == null || design.getAssetUuid().isBlank()) {
-            log.error("❌ CRITICAL: Design {} has no assetUuid!", design.getId());
+            log.error("❌ Design {} missing assetUuid", design.getId());
             throw new DesignNotAvailableException("Design asset is not ready for download");
         }
 
-        // 4. Idempotency Check: Update quantity if item already exists
-        Optional<CartItem> existingItem = cartItemRepository
-                .findByUserIdAndDesignIdAndDeletedFalse(userId, request.getDesignId());
+        /**
+         * DUPLICATE CHECK
+         */
+
+        Optional<CartItem> existingItem =
+                cartItemRepository.findByUserIdAndDesignIdAndDeletedFalse(userId, request.getDesignId());
 
         if (existingItem.isPresent()) {
-            CartItem item = existingItem.get();
-            log.info("🔄 Item exists. Updating quantity for CartID: {}", item.getId());
-            item.setQuantity(item.getQuantity() + request.getQuantity());
-            item.setPriceCents(design.getFinalPriceCents());
-            item.setDesignTitle(design.getTitle());
-            item.setAssetUuid(design.getAssetUuid());
-
-            item.setDesignIdentifier(design.getDesignIdentifier());
-
-            return toResponse(cartItemRepository.save(item));
+            log.warn("⚠️ Duplicate cart attempt → userId={}, designId={}", userId, request.getDesignId());
+            throw new DesignNotAvailableException("This design is already in your cart");
         }
+
+        /**
+         * CREATE CART ITEM
+         */
 
         CartItem newItem = CartItem.builder()
                 .userId(userId)
@@ -73,60 +93,102 @@ public class CartServiceImpl implements CartService {
                 .designTitle(design.getTitle())
                 .assetUuid(design.getAssetUuid())
                 .priceCents(design.getFinalPriceCents())
-                .quantity(request.getQuantity())
+                .quantity(1) // digital asset → always 1
                 .deleted(false)
                 .build();
 
-        log.info("✅ Successfully saved new cart item with SKU: {}", design.getDesignIdentifier());
-        return toResponse(cartItemRepository.save(newItem));
+        CartItem savedItem = cartItemRepository.save(newItem);
+
+        log.info("✅ Cart item created → userId={}, designId={}, cartItemId={}",
+                userId,
+                design.getId(),
+                savedItem.getId());
+
+        return toResponse(savedItem);
     }
 
+    /**
+     * Get cart
+     */
     @Override
     @Transactional(readOnly = true)
     public List<CartItemResponse> getCartByUserId(Long userId) {
+
+        log.debug("📦 Fetching cart for userId={}", userId);
+
         return cartItemRepository.findByUserIdAndDeletedFalse(userId)
                 .stream()
                 .map(this::toResponse)
                 .toList();
     }
 
+    /**
+     * Update quantity (not really used for digital products)
+     */
     @Override
     @Transactional
     public CartItemResponse updateQuantity(Long userId, Long cartItemId, Integer quantity) {
-        CartItem item = cartItemRepository.findByIdAndUserIdAndDeletedFalse(cartItemId, userId)
+
+        CartItem item = cartItemRepository
+                .findByIdAndUserIdAndDeletedFalse(cartItemId, userId)
                 .orElseThrow(() -> new CartItemNotFoundException("Cart item not found"));
 
-        if (quantity <= 0) {
+        if (quantity == null || quantity <= 0) {
             item.setDeleted(true);
-            log.info("🗑️ Removed item {} from cart", cartItemId);
+            log.info("🗑️ Cart item {} removed due to quantity=0", cartItemId);
         } else {
             item.setQuantity(quantity);
+            log.info("🔄 Updated quantity for cartItemId={} → {}", cartItemId, quantity);
         }
+
         return toResponse(cartItemRepository.save(item));
     }
 
+    /**
+     * Remove single item
+     */
     @Override
     @Transactional
     public void removeFromCart(Long userId, Long cartItemId) {
-        CartItem item = cartItemRepository.findByIdAndUserIdAndDeletedFalse(cartItemId, userId)
+
+        CartItem item = cartItemRepository
+                .findByIdAndUserIdAndDeletedFalse(cartItemId, userId)
                 .orElseThrow(() -> new CartItemNotFoundException("Cart item not found"));
+
         item.setDeleted(true);
+
         cartItemRepository.save(item);
+
+        log.info("🗑️ Cart item removed → cartItemId={}, userId={}", cartItemId, userId);
     }
 
+    /**
+     * Clear cart
+     */
     @Override
     @Transactional
     public void clearCart(Long userId) {
+
+        log.info("🧹 Clearing cart for userId={}", userId);
+
         cartItemRepository.softDeleteAllByUserId(userId);
     }
 
+    /**
+     * Cart count
+     */
     @Override
     @Transactional(readOnly = true)
     public long getCartItemCount(Long userId) {
+
         return cartItemRepository.countByUserIdAndDeletedFalse(userId);
     }
 
+    /**
+     * Mapper
+     */
     private CartItemResponse toResponse(CartItem item) {
+
         return CartItemResponse.builder()
                 .id(item.getId())
                 .userId(item.getUserId())

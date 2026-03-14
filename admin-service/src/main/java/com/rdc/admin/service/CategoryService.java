@@ -6,7 +6,6 @@ import com.rdc.admin.dto.CategoryUpdateRequest;
 import com.rdc.admin.entity.Category;
 import com.rdc.admin.exception.ResourceNotFoundException;
 import com.rdc.admin.repository.CategoryRepository;
-import com.rdc.admin.util.SlugGenerator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -34,7 +33,6 @@ public class CategoryService {
         return CategoryResponse.builder()
                 .id(category.getId())
                 .name(category.getName())
-                .slug(category.getSlug())
                 .description(category.getDescription())
                 .imageUrl(category.getImageUrl())
                 .createdAt(category.getCreatedAt())
@@ -63,16 +61,9 @@ public class CategoryService {
             resolvedImageUrl = assetServiceBaseUrl + "/api/assets/" + request.getImageUuid() + "/download";
         }
 
-        String baseSlug = SlugGenerator.generateSlug(request.getName());
-        String finalSlug = baseSlug;
-        int counter = 1;
-        while (categoryRepository.existsBySlug(finalSlug)) {
-            finalSlug = baseSlug + "-" + counter++;
-        }
 
         Category newCategory = Category.builder()
                 .name(request.getName())
-                .slug(finalSlug)
                 .description(request.getDescription())
                 .imageUrl(resolvedImageUrl)
                 .build();
@@ -101,13 +92,6 @@ public class CategoryService {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Category name already exists: " + request.getName());
                 }
                 existingCategory.setName(request.getName());
-                String newBaseSlug = SlugGenerator.generateSlug(request.getName());
-                String newFinalSlug = newBaseSlug;
-                int counter = 1;
-                while (categoryRepository.existsBySlug(newFinalSlug)) {
-                    newFinalSlug = newBaseSlug + "-" + counter++;
-                }
-                existingCategory.setSlug(newFinalSlug);
             }
         }
 

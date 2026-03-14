@@ -50,7 +50,7 @@
         .billing-section td {
             width: 50%;
             vertical-align: top;
-            line-height: 1.6;
+            line-height: 1.4;
             font-size: 11px;
         }
 
@@ -77,7 +77,7 @@
 
         /* TOTALS */
         .totals-table {
-            width: 35%;
+            width: 40%;
             margin-left: auto;
             margin-top: 20px;
             font-size: 11px;
@@ -86,6 +86,7 @@
         .total-row {
             font-weight: bold;
             font-size: 13px;
+            border-top: 1px solid #333;
         }
 
         /* FOOTER */
@@ -111,15 +112,15 @@
             </div>
             <div class="company-details">
                 <strong>RUCHITA DESIGN PVT LTD</strong><br/>
-                Mumbai, Maharashtra – 400078<br/>
-                India<br/>
-                GSTIN: 27AAKCR3368P1ZJ<br/>
-                9th Floor, LBS Road, Bhandup (West)
+                9th Floor, Filix Commercial Tower,LBS Road, Bhandup (West)<br/>
+                Mumbai, Maharashtra – 400078, India<br/>
+                <strong>GSTIN: 27AAKCR3368P1ZJ</strong>
             </div>
         </td>
 
         <td class="invoice-title-box">
             <h1>TAX INVOICE</h1>
+            <div style="font-size: 10px; color: #888; margin-bottom: 5px;" th:text="${order.invoiceType}">B2C</div>
 
             <div class="txn-details">
                 <strong>Invoice No:</strong> <span th:text="${invoiceNumber}"></span><br/>
@@ -131,7 +132,7 @@
             <div class="balance-due-box">
                 <span style="font-size:10px;color:#666;">Total Value (Incl. Tax)</span><br/>
                 <strong style="font-size:16px;">
-                    ₹ <span th:text="${#numbers.formatDecimal(order.totalAmountCents / 100.0, 1, 'COMMA', 2, 'POINT')}"></span>
+                    ₹ <span th:text="${#numbers.formatDecimal(order.grandTotalCents / 100.0, 1, 'COMMA', 2, 'POINT')}"></span>
                 </strong>
             </div>
         </td>
@@ -141,9 +142,23 @@
 <table class="full-width billing-section">
     <tr>
         <td>
-            <strong style="color:#666;">Bill To</strong><br/>
+            <strong style="color:#666; text-transform: uppercase; font-size: 10px;">Bill To</strong><br/>
             <strong th:text="${order.customerName}"></strong><br/>
-            GSTIN: <span th:text="${order.customerGstin}"></span>
+
+            <span th:if="${order.organizationName != null && !order.organizationName.isEmpty()}" th:text="${order.organizationName}"></span><br th:if="${order.organizationName != null && !order.organizationName.isEmpty()}"/>
+
+            <span th:text="${order.addressOne}"></span><br/>
+            <span th:if="${order.addressTwo != null && !order.addressTwo.isEmpty()}" th:text="${order.addressTwo}"></span><br th:if="${order.addressTwo != null && !order.addressTwo.isEmpty()}"/>
+
+            <span th:text="${order.city}"></span>, <span th:text="${order.billingState}"></span> <span th:text="${order.pincode}"></span><br/>
+            India<br/>
+
+            <div style="margin-top: 5px;">
+                <strong>Phone:</strong> <span th:text="${order.customerPhone}"></span><br/>
+                <strong>Email:</strong> <span th:text="${order.customerEmail}"></span><br/>
+                <strong th:if="${order.customerGstin != null && !order.customerGstin.isEmpty()}">GSTIN:</strong>
+                <span th:text="${order.customerGstin}"></span>
+            </div>
         </td>
         <td style="text-align:right;">
             <table style="margin-left:auto;">
@@ -153,26 +168,27 @@
                 </tr>
                 <tr>
                     <td style="color:#666;padding-right:15px;">Status:</td>
-                    <td th:text="${order.status}">PAID</td>
+                    <td><strong th:text="${order.status}">PAID</strong></td>
+                </tr>
+                <tr>
+                    <td style="color:#666;padding-right:15px;">Place of Supply:</td>
+                    <td th:text="${order.billingState}"></td>
                 </tr>
             </table>
         </td>
     </tr>
 </table>
 
-<div style="margin-top:15px;font-size:11px;">
-    Place of Supply: Maharashtra (27)
-</div>
-
 <table class="items-table">
     <thead>
     <tr>
         <th>#</th>
-        <th>Item &amp; Description</th>
+        <th class="left">Item &amp; Description</th>
         <th>Qty</th>
         <th>Rate</th>
-        <th>CGST</th>
-        <th>SGST</th>
+        <th th:if="${order.igstCents != null && order.igstCents > 0}">IGST (18%)</th>
+        <th th:if="${order.igstCents == null || order.igstCents == 0}">CGST (9%)</th>
+        <th th:if="${order.igstCents == null || order.igstCents == 0}">SGST (9%)</th>
         <th>Amount</th>
     </tr>
     </thead>
@@ -184,60 +200,75 @@
         <td class="left">
             <div style="font-weight: bold;" th:text="${item.designTitle}">Design Name</div>
             <div style="font-size:10px; color:#666;">
-                Design ID: <span th:text="${item.designIdentifier}">SKU-123</span>
+                Design-ID: <span th:text="${item.designIdentifier}">ID-123</span>
             </div>
         </td>
 
-        <td><span th:text="${item.quantity}"></span> pcs</td>
+        <td th:text="${item.quantity}"></td>
 
-        <td th:text="${#numbers.formatDecimal((item.priceCents / 1.18) / 100.0, 1, 'COMMA', 2, 'POINT')}"></td>
+        <!-- RATE (Taxable value per item) -->
+        <td th:text="${#numbers.formatDecimal((order.subTotalCents / items.size()) / 100.0,1,'COMMA',2,'POINT')}"></td>
 
-        <td>
-            <span th:text="${#numbers.formatDecimal(((item.priceCents * item.quantity) - ((item.priceCents * item.quantity) / 1.18)) / 2 / 100.0, 1, 'COMMA', 2, 'POINT')}"></span><br/>
-            <span style="font-size:8px;">9%</span>
+        <!-- IGST -->
+        <td th:if="${order.igstCents != null && order.igstCents > 0}"
+            th:text="${#numbers.formatDecimal(order.igstCents / 100.0,1,'COMMA',2,'POINT')}">
         </td>
 
-        <td>
-            <span th:text="${#numbers.formatDecimal(((item.priceCents * item.quantity) - ((item.priceCents * item.quantity) / 1.18)) / 2 / 100.0, 1, 'COMMA', 2, 'POINT')}"></span><br/>
-            <span style="font-size:8px;">9%</span>
+        <!-- CGST -->
+        <td th:if="${order.igstCents == null || order.igstCents == 0}"
+            th:text="${#numbers.formatDecimal(order.cgstCents / 100.0,1,'COMMA',2,'POINT')}">
         </td>
 
-        <td th:text="${#numbers.formatDecimal((item.priceCents * item.quantity) / 100.0, 1, 'COMMA', 2, 'POINT')}"></td>
+        <!-- SGST -->
+        <td th:if="${order.igstCents == null || order.igstCents == 0}"
+            th:text="${#numbers.formatDecimal(order.sgstCents / 100.0,1,'COMMA',2,'POINT')}">
+        </td>
+
+        <!-- TOTAL -->
+        <td th:text="${#numbers.formatDecimal(order.grandTotalCents / 100.0,1,'COMMA',2,'POINT')}"></td>
+
     </tr>
     </tbody>
 </table>
 
 <table class="totals-table">
     <tr>
-        <td style="color:#666;">Taxable Value</td>
-        <td th:text="${#numbers.formatDecimal((order.totalAmountCents / 1.18) / 100.0, 1, 'COMMA', 2, 'POINT')}"></td>
+        <td style="color:#666;">Taxable Subtotal</td>
+        <td th:text="${#numbers.formatDecimal(order.subTotalCents / 100.0, 1, 'COMMA', 2, 'POINT')}"></td>
     </tr>
-    <tr>
+
+    <tr th:if="${order.igstCents != null && order.igstCents > 0}">
+        <td style="color:#666;">IGST (18%)</td>
+        <td th:text="${#numbers.formatDecimal(order.igstCents / 100.0, 1, 'COMMA', 2, 'POINT')}"></td>
+    </tr>
+
+    <tr th:if="${order.igstCents == null || order.igstCents == 0}">
         <td style="color:#666;">CGST (9%)</td>
-        <td th:text="${#numbers.formatDecimal((order.totalAmountCents - (order.totalAmountCents / 1.18)) / 2 / 100.0, 1, 'COMMA', 2, 'POINT')}"></td>
+        <td th:text="${#numbers.formatDecimal(order.cgstCents / 100.0, 1, 'COMMA', 2, 'POINT')}"></td>
     </tr>
-    <tr>
+    <tr th:if="${order.igstCents == null || order.igstCents == 0}">
         <td style="color:#666;">SGST (9%)</td>
-        <td th:text="${#numbers.formatDecimal((order.totalAmountCents - (order.totalAmountCents / 1.18)) / 2 / 100.0, 1, 'COMMA', 2, 'POINT')}"></td>
+        <td th:text="${#numbers.formatDecimal(order.sgstCents / 100.0, 1, 'COMMA', 2, 'POINT')}"></td>
     </tr>
+
     <tr class="total-row">
         <td>Grand Total</td>
         <td>
-            ₹ <span th:text="${#numbers.formatDecimal(order.totalAmountCents / 100.0, 1, 'COMMA', 2, 'POINT')}"></span>
+            ₹ <span th:text="${#numbers.formatDecimal(order.grandTotalCents / 100.0, 1, 'COMMA', 2, 'POINT')}"></span>
         </td>
     </tr>
 </table>
 
 <div style="margin-top:15px;text-align:right;font-size:11px;">
-    Total in Words:
+    Amount in Words:
     <strong th:text="${order.amountInWords} + ' Only'"></strong>
 </div>
 
 <div class="footer">
-    <strong>Notes</strong><br/>
-    Exclusivity Guaranteed. This design has been permanently removed from our catalog upon your purchase.<br/>
-    <strong>Purchase Policy:</strong> Digital design assets are strictly non-refundable once the master file link is generated.<br/>
-    <strong>Color Accuracy:</strong> Please note that shades may vary based on display quality and hardware calibration. We recommend reviewing on professional-grade monitors.
+    <strong>Terms &amp; Conditions</strong><br/>
+    1. <strong>Exclusivity:</strong> This design is sold with exclusive rights and has been permanently removed from the RDC Archive.<br/>
+    2. <strong>Non-Refundable:</strong> Due to the digital nature of assets, purchases are non-refundable once master files are accessed.<br/>
+    3. <strong>Usage:</strong> Master files provided are intended for industrial production. Please check color profiles before bulk printing.
 </div>
 
 </body>

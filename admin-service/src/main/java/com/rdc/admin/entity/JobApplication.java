@@ -33,4 +33,6 @@ public class JobApplication {
 
     @CreationTimestamp
     private LocalDateTime appliedAt;
+
+    private String portfolioAssetUuid;
 }
