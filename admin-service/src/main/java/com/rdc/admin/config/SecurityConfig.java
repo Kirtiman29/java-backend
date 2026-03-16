@@ -49,6 +49,7 @@ public class SecurityConfig {
     @Bean
     public JwtAuthenticationConverter jwtAuthenticationConverter() {
         JwtGrantedAuthoritiesConverter converter = new JwtGrantedAuthoritiesConverter();
+        // Since your userDetailsService adds "ROLE_", ensure the JWT converter matches your token structure
         converter.setAuthorityPrefix("ROLE_");
         converter.setAuthoritiesClaimName("role");
 
@@ -68,20 +69,15 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
-                        // 🔒 INTERNAL BRIDGE
+                        // INTERNAL
                         .requestMatchers("/api/internal/**").permitAll()
 
-                        // 🌍 PUBLIC APIs
-                        .requestMatchers(HttpMethod.POST, "/api/contact").permitAll()
-                        .requestMatchers("/api/categories/public").permitAll()
+                        // PUBLIC
                         .requestMatchers("/api/public/**").permitAll()
-                        .requestMatchers(HttpMethod.GET,
-                                "/api/designs/**",
-                                "/api/categories/**",
-                                "/api/banners/**"
-                        ).permitAll()
+                        .requestMatchers("/api/categories/public").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/contact").permitAll()
 
-                        // 🌍 SEO SITEMAP (PUBLIC FOR GOOGLE)
+                        // SEO
                         .requestMatchers(
                                 "/sitemap.xml",
                                 "/sitemap-pages.xml",
@@ -89,18 +85,16 @@ public class SecurityConfig {
                                 "/sitemap-categories.xml"
                         ).permitAll()
 
-                        // 🔓 AUTH
-                        .requestMatchers("/api/admin/login", "/actuator/**").permitAll()
+                        // ADMIN LOGIN
+                        .requestMatchers("/api/admin/login").permitAll()
 
-                        // 🔐 ADMIN ENDPOINTS
+                        // ADMIN
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
 
                         .anyRequest().authenticated()
                 )
                 .oauth2ResourceServer(oauth ->
-                        oauth.jwt(jwt ->
-                                jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())
-                        )
+                        oauth.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()))
                 );
 
         return http.build();
@@ -137,7 +131,6 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
 
-        // Convert the comma-separated string from .env into a List
         List<String> origins = Arrays.stream(allowedOrigins.split(","))
                 .map(String::trim)
                 .collect(Collectors.toList());

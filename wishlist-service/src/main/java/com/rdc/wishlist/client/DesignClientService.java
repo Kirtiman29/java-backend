@@ -11,7 +11,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 
-
 @Component
 @RequiredArgsConstructor
 @Slf4j
@@ -22,12 +21,18 @@ public class DesignClientService {
     @Value("${service.design.url}")
     private String designServiceUrl;
 
+    /**
+     * Fetches design metadata from the public endpoint of the Admin Service.
+     * No internal headers required for public access.
+     */
     public DesignDto getDesignById(Long designId) {
+
         String url = designServiceUrl + "/api/public/designs/" + designId;
 
         log.debug("📡 Requesting metadata from Admin Service: {}", url);
 
         try {
+            // Updated to use direct GET since it's a public endpoint
             DesignDto design = restTemplate.getForObject(url, DesignDto.class);
 
             if (design == null) {
@@ -37,20 +42,27 @@ public class DesignClientService {
             return design;
 
         } catch (HttpClientErrorException e) {
+
             if (e.getStatusCode() == HttpStatus.NOT_FOUND) {
                 throw new DesignNotFoundException("Design metadata not found for ID: " + designId);
             }
+
             log.error("❌ Admin Service error ({}): {}", e.getStatusCode(), e.getResponseBodyAsString());
             throw new RuntimeException("Communication failure with Admin Service");
+
         } catch (Exception e) {
+
             log.error("❌ Critical fetch failure: {}", e.getMessage());
             throw new RuntimeException("Internal Service Communication Error");
         }
     }
 
+    /**
+     * Validates if a design is eligible to be added to a wishlist.
+     */
     public void validateDesignForWishlist(Long designId) {
-        DesignDto design = getDesignById(designId);
 
+        DesignDto design = getDesignById(designId);
 
         String designTitle = design.getTitle() != null ? design.getTitle() : "ID: " + designId;
 

@@ -205,4 +205,19 @@ public class OrderController {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid Industrial User ID");
         }
     }
+
+    @GetMapping("/internal/has-purchased")
+    public ResponseEntity<Boolean> hasPurchased(
+            @RequestParam Long userId,
+            @RequestParam String assetUuid,
+            @RequestHeader("X-INTERNAL-KEY") String key) {
+
+        if (!internalServiceKey.equals(key)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Invalid internal key");
+        }
+
+        boolean purchased = orderService.hasUserPaidForAsset(userId, assetUuid);
+
+        return ResponseEntity.ok(purchased);
+    }
 }
