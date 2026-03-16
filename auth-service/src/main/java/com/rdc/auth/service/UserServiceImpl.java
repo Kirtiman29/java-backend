@@ -136,7 +136,7 @@ public class UserServiceImpl implements UserService {
                 );
             }
 
-            String verificationUrl = backendUrl + "/auth/verify-email?token=" + newToken;
+            String verificationUrl = backendUrl + "/api/auth/verify-email?token=" + newToken;
             emailService.sendVerificationEmail(existingUser.getEmail(), verificationUrl);
 
             Map<String, String> response = new HashMap<>();
@@ -163,7 +163,7 @@ public class UserServiceImpl implements UserService {
 
         boolean emailSent = false;
         try {
-            String verificationUrl = backendUrl + "/auth/verify-email?token=" + token;
+            String verificationUrl = backendUrl + "/api/auth/verify-email?token=" + token;
             emailSent = emailService.sendVerificationEmail(req.getEmail(), verificationUrl);
         } catch (Exception e) {
             log.error("NON-BLOCKING ERROR: Verification email failed for {}: {}", req.getEmail(), e.getMessage());
@@ -265,7 +265,7 @@ public class UserServiceImpl implements UserService {
         String token = UUID.randomUUID().toString();
         verificationTokenRepository.save(new VerificationToken(token, user, Instant.now().plusSeconds(300)));
 
-        String verificationUrl = backendUrl + "/auth/verify-email?token=" + token;
+        String verificationUrl = backendUrl + "/api/auth/verify-email?token=" + token;
         emailService.sendVerificationEmail(email, verificationUrl);
     }
 
