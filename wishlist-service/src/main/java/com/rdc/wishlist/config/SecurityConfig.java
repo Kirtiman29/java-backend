@@ -38,6 +38,9 @@ public class SecurityConfig {
         config.setAllowedMethods(Arrays.asList("GET","POST","PUT","DELETE","PATCH","OPTIONS"));
         config.setAllowedHeaders(Arrays.asList("Authorization","Content-Type","Accept","X-Requested-With","X-INTERNAL-KEY"));
         config.setExposedHeaders(Arrays.asList("Authorization","Content-Type"));
+
+        // When allowCredentials is true, AllowedOrigins MUST NOT be "*"
+        // If allowedOrigins is "*", Spring will throw an error or default to blocking.
         config.setAllowCredentials(true);
         config.setMaxAge(3600L);
 
@@ -61,17 +64,17 @@ public class SecurityConfig {
                         // 2. Public health checks
                         .requestMatchers("/actuator/**").permitAll()
 
-                        // 3. THE FIX: Permit the specific check endpoint FIRST
-                        // This allows guests to see if a heart is filled without being redirected to login
+                        // 3. Permit the "check" endpoint for everyone
+                        // Using /check/** handles both /check/1 and /check/1/
                         .requestMatchers("/api/wishlist/check/**").permitAll()
 
-                        // 4. PROTECT: All other wishlist actions (Add/Remove/View) require USER role
-                        .requestMatchers("/api/wishlist/**").hasRole("USER")
+                        // 4. Protect main wishlist endpoints
+                        // We use both the path and the sub-paths to handle trailing slashes
+                        .requestMatchers("/api/wishlist", "/api/wishlist/**").hasRole("USER")
 
                         // 5. Catch-all
                         .anyRequest().authenticated()
                 )
-                // Add your JWT filter
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();

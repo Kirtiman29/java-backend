@@ -13,7 +13,11 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/wishlist")
+/**
+ * Updated to handle both patterns. Your frontend is calling "/api/wishlist/",
+ * so adding the trailing slash here prevents 403/404 mismatches.
+ */
+@RequestMapping({"/api/wishlist", "/api/wishlist/"})
 @RequiredArgsConstructor
 @Slf4j
 public class WishlistController {
@@ -46,8 +50,8 @@ public class WishlistController {
      */
     @GetMapping("/check/{designId}")
     public ResponseEntity<Boolean> isHearted(Authentication auth, @PathVariable Long designId) {
-        // If the user isn't logged in, they haven't "hearted" anything.
-        // Returning 'false' (200 OK) prevents the frontend from redirecting to login.
+        // Updated logic: if authentication is missing or invalid, treat as not wishlisted (false)
+        // This stops the frontend from thinking there's a security error.
         if (auth == null || !auth.isAuthenticated() || !(auth.getPrincipal() instanceof UserPrincipal)) {
             return ResponseEntity.ok(false);
         }
@@ -64,10 +68,14 @@ public class WishlistController {
         return ResponseEntity.noContent().build();
     }
 
+    /**
+     * Safely extract userId from authentication.
+     * Throws an exception only for protected routes (POST, DELETE, GET all). [cite: 57, 58]
+     */
     private Long getUserIdFromAuth(Authentication auth) {
         if (auth == null || auth.getPrincipal() == null || !(auth.getPrincipal() instanceof UserPrincipal)) {
             log.warn("Unauthorized access attempt to protected wishlist resource");
-            throw new RuntimeException("User not authenticated"); // This triggers a 401 via GlobalExceptionHandler
+            throw new RuntimeException("User not authenticated"); // Triggers 401 via GlobalExceptionHandler [cite: 57, 58]
         }
 
         UserPrincipal principal = (UserPrincipal) auth.getPrincipal();

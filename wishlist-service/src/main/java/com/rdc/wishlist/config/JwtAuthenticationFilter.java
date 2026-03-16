@@ -32,8 +32,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         final String authHeader = request.getHeader("Authorization");
 
-        // 1. If no token, just move to the next filter.
-        // Spring Security will handle access control based on SecurityConfig.
+        // 1. If no token, continue the filter chain.
+        // Spring Security will check permissions based on your SecurityConfig.
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
             return;
@@ -42,17 +42,22 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         try {
             final String jwt = authHeader.substring(7);
 
-            // 2. Validate token.
-            // FIX: If token is invalid/expired, don't send 401 here.
-            // Just don't set the Authentication in the context.
+            // 2. Validate token without sending an immediate 401 response.
             if (jwtUtil.validateToken(jwt)) {
                 String subject = jwtUtil.getSubjectFromToken(jwt);
                 Long userId = Long.parseLong(subject);
                 String role = jwtUtil.getRoleFromToken(jwt);
 
                 if (userId != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+
+                    // FIX: Ensure the "ROLE_" prefix is not duplicated.
+                    // This prevents the 403 Forbidden error caused by "ROLE_ROLE_USER".
+                    String finalRole = role.toUpperCase().startsWith("ROLE_")
+                            ? role.toUpperCase()
+                            : "ROLE_" + role.toUpperCase();
+
                     List<SimpleGrantedAuthority> authorities = List.of(
-                            new SimpleGrantedAuthority("ROLE_" + role.toUpperCase())
+                            new SimpleGrantedAuthority(finalRole)
                     );
 
                     UserPrincipal principal = new UserPrincipal(userId, null, role);
@@ -63,18 +68,20 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
 
                     SecurityContextHolder.getContext().setAuthentication(authToken);
+                    log.debug("Successfully authenticated user {} with role {}", userId, finalRole);
                 }
             } else {
-                log.warn("Invalid JWT token provided, proceeding as anonymous user");
+                log.warn("Invalid or expired JWT token provided; proceeding as anonymous user.");
             }
 
         } catch (Exception e) {
-            // FIX: Don't write to response. Let the security configuration handle unauthorized access.
+            // Log the error but do not block the request here.
+            // SecurityConfig will block it later if the endpoint is not public.
             log.error("JWT Authentication Error: {}", e.getMessage());
             SecurityContextHolder.clearContext();
         }
 
-        // 3. ALWAYS call doFilter so the request can reach the Controller
+        // 3. ALWAYS call doFilter to ensure the request reaches the Controller.
         filterChain.doFilter(request, response);
     }
 }
