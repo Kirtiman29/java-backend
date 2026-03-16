@@ -28,7 +28,7 @@ public class PublicDesignController {
     public ResponseEntity<Map<String, Object>> getPublicFeed(
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String segment,
-            @RequestParam(required = false) Long categoryId,   // ✅ NEW CATEGORY FILTER
+            @RequestParam(required = false) Long categoryId,
             @RequestParam(required = false) Boolean luxury,
             @RequestParam(required = false) Boolean trending,
             @RequestParam(required = false) Boolean editorsPick,
@@ -37,13 +37,17 @@ public class PublicDesignController {
             @RequestParam(defaultValue = "24") int size
     ) {
 
-        List<Design> designs;
+        List<Design> designs = new ArrayList<>();
 
         // 1️⃣ Search
         if (search != null && !search.isBlank()) {
-            designs = designRepository.searchByTitleOrTags(search.trim());
+            designs = Optional.ofNullable(
+                    designRepository.searchByTitleOrTags(search.trim())
+            ).orElse(new ArrayList<>());
         } else {
-            designs = designRepository.findByDraftFalseAndActiveTrue();
+            designs = Optional.ofNullable(
+                    designRepository.findByDraftFalseAndActiveTrue()
+            ).orElse(new ArrayList<>());
         }
 
         // 2️⃣ Segment filter
@@ -52,46 +56,53 @@ public class PublicDesignController {
                 Segment seg = Segment.valueOf(segment.toUpperCase());
 
                 designs = designs.stream()
+                        .filter(Objects::nonNull)
                         .filter(d -> d.getSegments() != null && d.getSegments().contains(seg))
                         .collect(Collectors.toList());
 
             } catch (IllegalArgumentException ignored) {}
         }
 
-        // 3️⃣ Category filter (NEW)
+        // 3️⃣ Category filter
         if (categoryId != null) {
-            designs = designRepository
-                    .findByDraftFalseAndActiveTrueAndCategories_Id(categoryId);
+            designs = Optional.ofNullable(
+                    designRepository.findByDraftFalseAndActiveTrueAndCategories_Id(categoryId)
+            ).orElse(new ArrayList<>());
         }
 
         // 4️⃣ Attribute filters
 
         if (Boolean.TRUE.equals(luxury)) {
             designs = designs.stream()
-                    .filter(Design::getLuxury)
+                    .filter(d -> Boolean.TRUE.equals(d.getLuxury()))
                     .collect(Collectors.toList());
         }
 
         if (Boolean.TRUE.equals(trending)) {
             designs = designs.stream()
-                    .filter(Design::getTrending)
+                    .filter(d -> Boolean.TRUE.equals(d.getTrending()))
                     .collect(Collectors.toList());
         }
 
         if (Boolean.TRUE.equals(editorsPick)) {
             designs = designs.stream()
-                    .filter(Design::getEditorsPick)
+                    .filter(d -> Boolean.TRUE.equals(d.getEditorsPick()))
                     .collect(Collectors.toList());
         }
 
         if (Boolean.TRUE.equals(newArrival)) {
             designs = designs.stream()
-                    .filter(Design::getNewArrival)
+                    .filter(d -> Boolean.TRUE.equals(d.getNewArrival()))
                     .collect(Collectors.toList());
         }
 
-        // 5️⃣ Sort newest first (using createdAt)
-        designs.sort((a, b) -> b.getCreatedAt().compareTo(a.getCreatedAt()));
+        // 5️⃣ Sort newest first
+        designs.sort(
+                Comparator.comparing(
+                        Design::getCreatedAt,
+                        Comparator.nullsLast(Comparator.reverseOrder())
+                )
+        );
 
         // 6️⃣ Pagination
         int start = page * size;
@@ -105,13 +116,14 @@ public class PublicDesignController {
 
         // 7️⃣ Map to response
         List<DesignResponse> content = paginated.stream()
+                .filter(Objects::nonNull)
                 .map(d -> mapper.toResponse(
                         d,
                         mediaRepository.findByDesignId(d.getId())
                 ))
                 .collect(Collectors.toList());
 
-        // 8️⃣ Final API response
+        // 8️⃣ Response
         Map<String, Object> result = new HashMap<>();
 
         result.put("content", content);
