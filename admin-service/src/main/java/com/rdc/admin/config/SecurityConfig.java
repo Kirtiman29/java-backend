@@ -93,7 +93,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/categories/public").permitAll()
 
                         /* CONTACT FORM */
-                        .requestMatchers("/api/contact/**").permitAll()
+                        .requestMatchers("/api/public/contact/**").permitAll()
 
                         /* SEO SITEMAPS */
                         .requestMatchers(
