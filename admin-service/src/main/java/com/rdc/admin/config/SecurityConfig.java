@@ -75,7 +75,7 @@ public class SecurityConfig {
                         // PUBLIC
                         .requestMatchers("/api/public/**").permitAll()
                         .requestMatchers("/api/categories/public").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/contact").permitAll()
+                        .requestMatchers("/api/contact").permitAll()
 
                         // SEO
                         .requestMatchers(
