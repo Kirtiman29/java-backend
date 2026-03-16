@@ -79,7 +79,7 @@ public class SecurityConfig {
 
                         // wishlist endpoints
                         .requestMatchers("/api/wishlist/**").hasRole("USER")
-
+                        .requestMatchers("/api/wishlist/check/**").permitAll()
                         .anyRequest().authenticated()
                 )
 

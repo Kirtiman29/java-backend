@@ -45,9 +45,14 @@ public class WishlistController {
     @GetMapping("/check/{designId}")
     public ResponseEntity<Boolean> isHearted(Authentication auth, @PathVariable Long designId) {
 
-        Long userId = getUserIdFromAuth(auth);
+        if (auth == null || !(auth.getPrincipal() instanceof UserPrincipal)) {
+            return ResponseEntity.ok(false);
+        }
 
-        boolean result = wishlistService.isWishlisted(userId, designId);
+        UserPrincipal principal = (UserPrincipal) auth.getPrincipal();
+
+        boolean result = wishlistService.isWishlisted(principal.getUserId(), designId);
+
         return ResponseEntity.ok(result);
     }
 
