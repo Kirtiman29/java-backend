@@ -40,44 +40,62 @@ public class SecurityConfig {
     @Value("${CORS_ALLOWED_ORIGINS}")
     private String allowedOrigins;
 
+    /* ================================
+       JWT DECODER
+    ================================ */
     @Bean
     public JwtDecoder jwtDecoder() {
         SecretKeySpec secretKey = new SecretKeySpec(jwtSecret.getBytes(), "HmacSHA256");
         return NimbusJwtDecoder.withSecretKey(secretKey).build();
     }
 
+    /* ================================
+       JWT ROLE MAPPING
+    ================================ */
     @Bean
     public JwtAuthenticationConverter jwtAuthenticationConverter() {
+
         JwtGrantedAuthoritiesConverter converter = new JwtGrantedAuthoritiesConverter();
-        // Since your userDetailsService adds "ROLE_", ensure the JWT converter matches your token structure
         converter.setAuthorityPrefix("ROLE_");
         converter.setAuthoritiesClaimName("role");
 
         JwtAuthenticationConverter jwtConverter = new JwtAuthenticationConverter();
         jwtConverter.setJwtGrantedAuthoritiesConverter(converter);
+
         return jwtConverter;
     }
 
+    /* ================================
+       SECURITY FILTER CHAIN
+    ================================ */
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+
         http
                 .csrf(csrf -> csrf.disable())
+
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
+
                 .authorizeHttpRequests(auth -> auth
+
+                        /* ALWAYS ALLOW PREFLIGHT */
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
-                        // INTERNAL
+                        /* INTERNAL MICROSERVICE COMMUNICATION */
                         .requestMatchers("/api/internal/**").permitAll()
 
-                        // PUBLIC
+                        /* PUBLIC STORE FRONT */
                         .requestMatchers("/api/public/**").permitAll()
                         .requestMatchers("/api/categories/public").permitAll()
-                        .requestMatchers("/api/contact").permitAll()
 
-                        // SEO
+                        /* CONTACT FORM */
+                        .requestMatchers("/api/contact/**").permitAll()
+
+                        /* SEO SITEMAPS */
                         .requestMatchers(
                                 "/sitemap.xml",
                                 "/sitemap-pages.xml",
@@ -85,14 +103,16 @@ public class SecurityConfig {
                                 "/sitemap-categories.xml"
                         ).permitAll()
 
-                        // ADMIN LOGIN
+                        /* ADMIN LOGIN */
                         .requestMatchers("/api/admin/login").permitAll()
 
-                        // ADMIN
+                        /* ADMIN PROTECTED APIs */
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
 
+                        /* EVERYTHING ELSE REQUIRES AUTH */
                         .anyRequest().authenticated()
                 )
+
                 .oauth2ResourceServer(oauth ->
                         oauth.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()))
                 );
@@ -100,19 +120,28 @@ public class SecurityConfig {
         return http.build();
     }
 
+    /* ================================
+       AUTH MANAGER
+    ================================ */
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
         return config.getAuthenticationManager();
     }
 
+    /* ================================
+       ADMIN USER LOADER
+    ================================ */
     @Bean
     public UserDetailsService userDetailsService(AdminRepository adminRepository) {
+
         return username -> adminRepository.findByUsername(username)
                 .map(admin -> new org.springframework.security.core.userdetails.User(
                         admin.getUsername(),
                         admin.getPassword(),
                         admin.isEnabled(),
-                        true, true, true,
+                        true,
+                        true,
+                        true,
                         Collections.singletonList(
                                 new SimpleGrantedAuthority("ROLE_" + admin.getRole())
                         )
@@ -122,13 +151,20 @@ public class SecurityConfig {
                 );
     }
 
+    /* ================================
+       PASSWORD ENCODER
+    ================================ */
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
 
+    /* ================================
+       CORS CONFIGURATION
+    ================================ */
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
+
         CorsConfiguration config = new CorsConfiguration();
 
         List<String> origins = Arrays.stream(allowedOrigins.split(","))
@@ -136,13 +172,27 @@ public class SecurityConfig {
                 .collect(Collectors.toList());
 
         config.setAllowedOrigins(origins);
-        config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
-        config.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "Accept", "X-Requested-With", "X-INTERNAL-KEY"));
+
+        config.setAllowedMethods(
+                Arrays.asList("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")
+        );
+
+        config.setAllowedHeaders(
+                Arrays.asList(
+                        "Authorization",
+                        "Content-Type",
+                        "Accept",
+                        "X-Requested-With",
+                        "X-INTERNAL-KEY"
+                )
+        );
+
         config.setAllowCredentials(true);
         config.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
+
         return source;
     }
 }
