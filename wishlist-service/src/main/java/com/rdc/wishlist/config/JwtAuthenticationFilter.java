@@ -26,19 +26,26 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtUtil jwtUtil;
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
-            throws ServletException, IOException {
+    protected void doFilterInternal(HttpServletRequest request,
+                                    HttpServletResponse response,
+                                    FilterChain filterChain) throws ServletException, IOException {
 
         final String authHeader = request.getHeader("Authorization");
+
+        // If no token → continue (public endpoints may exist)
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
             return;
         }
 
         try {
+
             final String jwt = authHeader.substring(7);
+
+            // Validate token
             if (!jwtUtil.validateToken(jwt)) {
-                filterChain.doFilter(request, response);
+                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                response.getWriter().write("Invalid or expired JWT token");
                 return;
             }
 
@@ -47,21 +54,30 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             String role = jwtUtil.getRoleFromToken(jwt);
 
             if (userId != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+
                 List<SimpleGrantedAuthority> authorities = List.of(
                         new SimpleGrantedAuthority("ROLE_" + role.toUpperCase())
                 );
 
                 UserPrincipal principal = new UserPrincipal(userId, null, role);
-                UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                        principal, null, authorities
-                );
+
+                UsernamePasswordAuthenticationToken authToken =
+                        new UsernamePasswordAuthenticationToken(principal, null, authorities);
 
                 authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+
                 SecurityContextHolder.getContext().setAuthentication(authToken);
             }
+
         } catch (Exception e) {
-            log.error("Authentication Error: {}", e.getMessage());
+
+            log.error("JWT Authentication Error: {}", e.getMessage());
+
             SecurityContextHolder.clearContext();
+
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            response.getWriter().write("Authentication failed");
+            return;
         }
 
         filterChain.doFilter(request, response);
