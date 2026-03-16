@@ -2,6 +2,7 @@ package com.rdc.wishlist.util;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
 import lombok.extern.slf4j.Slf4j;
@@ -25,7 +26,6 @@ public class JwtUtil {
     }
 
     private Claims getAllClaimsFromToken(String token) {
-
         return Jwts.parserBuilder()
                 .setSigningKey(getSigningKey())
                 .build()
@@ -38,40 +38,29 @@ public class JwtUtil {
     }
 
     public String getRoleFromToken(String token) {
-
-        Claims claims = getAllClaimsFromToken(token);
-
-        Object role = claims.get("role");
-
-        if (role == null) {
-            log.warn("JWT role claim missing");
+        try {
+            Claims claims = getAllClaimsFromToken(token);
+            Object role = claims.get("role");
+            return (role != null) ? role.toString() : "USER";
+        } catch (Exception e) {
             return "USER";
         }
-
-        return role.toString();
     }
 
     public <T> T getClaimFromToken(String token, Function<Claims, T> claimsResolver) {
-
-        Claims claims = getAllClaimsFromToken(token);
-
+        final Claims claims = getAllClaimsFromToken(token);
         return claimsResolver.apply(claims);
     }
 
     public boolean validateToken(String token) {
-
         try {
-
             Claims claims = getAllClaimsFromToken(token);
-
-            Date expiration = claims.getExpiration();
-
-            return expiration != null && expiration.after(new Date());
-
+            return !claims.getExpiration().before(new Date());
+        } catch (ExpiredJwtException e) {
+            log.warn("JWT token is expired");
+            return false;
         } catch (Exception e) {
-
             log.error("JWT validation failed: {}", e.getMessage());
-
             return false;
         }
     }

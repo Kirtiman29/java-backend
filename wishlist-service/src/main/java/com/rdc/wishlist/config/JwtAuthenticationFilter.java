@@ -32,54 +32,49 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         final String authHeader = request.getHeader("Authorization");
 
-        // If no token → continue (public endpoints may exist)
+        // 1. If no token, just move to the next filter.
+        // Spring Security will handle access control based on SecurityConfig.
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
             return;
         }
 
         try {
-
             final String jwt = authHeader.substring(7);
 
-            // Validate token
-            if (!jwtUtil.validateToken(jwt)) {
-                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-                response.getWriter().write("Invalid or expired JWT token");
-                return;
-            }
+            // 2. Validate token.
+            // FIX: If token is invalid/expired, don't send 401 here.
+            // Just don't set the Authentication in the context.
+            if (jwtUtil.validateToken(jwt)) {
+                String subject = jwtUtil.getSubjectFromToken(jwt);
+                Long userId = Long.parseLong(subject);
+                String role = jwtUtil.getRoleFromToken(jwt);
 
-            String subject = jwtUtil.getSubjectFromToken(jwt);
-            Long userId = Long.parseLong(subject);
-            String role = jwtUtil.getRoleFromToken(jwt);
+                if (userId != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+                    List<SimpleGrantedAuthority> authorities = List.of(
+                            new SimpleGrantedAuthority("ROLE_" + role.toUpperCase())
+                    );
 
-            if (userId != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+                    UserPrincipal principal = new UserPrincipal(userId, null, role);
 
-                List<SimpleGrantedAuthority> authorities = List.of(
-                        new SimpleGrantedAuthority("ROLE_" + role.toUpperCase())
-                );
+                    UsernamePasswordAuthenticationToken authToken =
+                            new UsernamePasswordAuthenticationToken(principal, null, authorities);
 
-                UserPrincipal principal = new UserPrincipal(userId, null, role);
+                    authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
 
-                UsernamePasswordAuthenticationToken authToken =
-                        new UsernamePasswordAuthenticationToken(principal, null, authorities);
-
-                authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-
-                SecurityContextHolder.getContext().setAuthentication(authToken);
+                    SecurityContextHolder.getContext().setAuthentication(authToken);
+                }
+            } else {
+                log.warn("Invalid JWT token provided, proceeding as anonymous user");
             }
 
         } catch (Exception e) {
-
+            // FIX: Don't write to response. Let the security configuration handle unauthorized access.
             log.error("JWT Authentication Error: {}", e.getMessage());
-
             SecurityContextHolder.clearContext();
-
-            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            response.getWriter().write("Authentication failed");
-            return;
         }
 
+        // 3. ALWAYS call doFilter so the request can reach the Controller
         filterChain.doFilter(request, response);
     }
 }

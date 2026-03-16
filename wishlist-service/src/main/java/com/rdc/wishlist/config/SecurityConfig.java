@@ -28,7 +28,6 @@ public class SecurityConfig {
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
-
         CorsConfiguration config = new CorsConfiguration();
 
         List<String> origins = Arrays.stream(allowedOrigins.split(","))
@@ -36,53 +35,43 @@ public class SecurityConfig {
                 .collect(Collectors.toList());
 
         config.setAllowedOrigins(origins);
-
-        config.setAllowedMethods(
-                Arrays.asList("GET","POST","PUT","DELETE","PATCH","OPTIONS")
-        );
-
-        config.setAllowedHeaders(
-                Arrays.asList("Authorization","Content-Type","Accept","X-Requested-With","X-INTERNAL-KEY")
-        );
-
-        config.setExposedHeaders(
-                Arrays.asList("Authorization","Content-Type")
-        );
-
+        config.setAllowedMethods(Arrays.asList("GET","POST","PUT","DELETE","PATCH","OPTIONS"));
+        config.setAllowedHeaders(Arrays.asList("Authorization","Content-Type","Accept","X-Requested-With","X-INTERNAL-KEY"));
+        config.setExposedHeaders(Arrays.asList("Authorization","Content-Type"));
         config.setAllowCredentials(true);
         config.setMaxAge(3600L);
 
-        UrlBasedCorsConfigurationSource source =
-                new UrlBasedCorsConfigurationSource();
-
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
-
         return source;
     }
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable())
-
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
-
                 .authorizeHttpRequests(auth -> auth
-
+                        // 1. Always allow OPTIONS for CORS pre-flight
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
+                        // 2. Public health checks
                         .requestMatchers("/actuator/**").permitAll()
 
-                        // wishlist endpoints
-                        .requestMatchers("/api/wishlist/**").hasRole("USER")
+                        // 3. THE FIX: Permit the specific check endpoint FIRST
+                        // This allows guests to see if a heart is filled without being redirected to login
                         .requestMatchers("/api/wishlist/check/**").permitAll()
+
+                        // 4. PROTECT: All other wishlist actions (Add/Remove/View) require USER role
+                        .requestMatchers("/api/wishlist/**").hasRole("USER")
+
+                        // 5. Catch-all
                         .anyRequest().authenticated()
                 )
-
+                // Add your JWT filter
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
