@@ -99,4 +99,7 @@ public class Order {
 
     @Column(name = "payment_mode")
     private String paymentMode;
+
+    @Column(name = "total_amount_cents")
+    private Long totalAmountCents;
 }

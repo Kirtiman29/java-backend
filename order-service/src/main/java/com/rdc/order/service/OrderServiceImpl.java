@@ -98,6 +98,9 @@ public class OrderServiceImpl implements OrderService {
         order.setSgstCents(gst / 2);
         order.setGrandTotalCents(subtotalCents);
 
+        // ✅ FIX: Set total amount for DB stability
+        order.setTotalAmountCents(order.getGrandTotalCents());
+
         // 5. Determine B2B vs B2C
         String invoiceType = (request.getCustomerGstin() != null && !request.getCustomerGstin().isBlank())
                 ? "B2B" : "B2C";
@@ -106,36 +109,11 @@ public class OrderServiceImpl implements OrderService {
         // 6. Save to database
         Order saved = orderRepository.save(order);
 
-        // 7. Clear cart
-        cartServiceClient.clearCart(userId);
+        // 7. 🔥 REMOVED: cartServiceClient.clearCart(userId);
+        // Moved to updateStatus to prevent losing cart on payment failure.
 
         log.info("✅ Order #{} created. Type: {}, Total: ₹{}", saved.getId(), invoiceType, saved.getGrandTotalCents()/100.0);
         return mapToResponse(saved);
-    }
-
-    private void calculateAndSetTaxes(Order order, long subtotal) {
-        boolean isSameState = COMPANY_STATE.equalsIgnoreCase(order.getBillingState().trim());
-
-        long cgst = 0L;
-        long sgst = 0L;
-        long igst = 0L;
-
-        if (isSameState) {
-            // 9% CGST + 9% SGST
-            cgst = Math.round(subtotal * 0.09);
-            sgst = Math.round(subtotal * 0.09);
-        } else {
-            // 18% IGST
-            igst = Math.round(subtotal * 0.18);
-        }
-
-        long grandTotal = subtotal + cgst + sgst + igst;
-
-        order.setSubTotalCents(subtotal);
-        order.setCgstCents(cgst);
-        order.setSgstCents(sgst);
-        order.setIgstCents(igst);
-        order.setGrandTotalCents(grandTotal);
     }
 
     /* ================= FULFILLMENT & STATUS ================= */
@@ -153,6 +131,10 @@ public class OrderServiceImpl implements OrderService {
         Order updatedOrder = orderRepository.save(order);
 
         if (OrderStatus.PAID.name().equals(status)) {
+
+            // ✅ FIX: Clear cart only when payment is successful
+            cartServiceClient.clearCart(order.getUserId());
+
             List<OrderItem> items = order.getItems();
             items.forEach(item -> {
                 markDesignAsSoldInternal(item.getDesignId());
@@ -201,13 +183,11 @@ public class OrderServiceImpl implements OrderService {
                 .status(order.getStatus())
                 .createdAt(order.getCreatedAt())
                 .updatedAt(order.getUpdatedAt())
-                // Financials
                 .subTotalCents(order.getSubTotalCents())
                 .cgstCents(order.getCgstCents())
                 .sgstCents(order.getSgstCents())
                 .igstCents(order.getIgstCents())
                 .grandTotalCents(order.getGrandTotalCents())
-                // Customer Info
                 .customerName(order.getCustomerName())
                 .customerEmail(order.getCustomerEmail())
                 .customerPhone(order.getCustomerPhone())
