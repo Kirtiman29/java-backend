@@ -2,6 +2,7 @@ package com.rdc.cart.security;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -19,19 +20,14 @@ public class JwtUtil {
     private String secret;
 
     private Key getSigningKey() {
-        return Keys.hmacShaKeyFor(secret.getBytes());
+        byte[] keyBytes = Decoders.BASE64.decode(secret); // ✅ FIXED
+        return Keys.hmacShaKeyFor(keyBytes);
     }
 
-    /**
-     * Extract subject (Numeric User ID) from JWT[cite: 311].
-     */
     public String extractEmail(String token) {
         return extractClaim(token, Claims::getSubject);
     }
 
-    /**
-     * Extract role from JWT[cite: 313].
-     */
     public String extractRole(String token) {
         Claims claims = extractAllClaims(token);
         return claims.get("role", String.class);
@@ -60,7 +56,6 @@ public class JwtUtil {
             boolean expired = claims.getExpiration().before(new Date());
             String tokenType = claims.get("type", String.class);
 
-            // Reject refresh tokens for standard API calls [cite: 324]
             if ("refresh".equals(tokenType)) {
                 log.warn("Refresh token used for API call - rejecting");
                 return false;
