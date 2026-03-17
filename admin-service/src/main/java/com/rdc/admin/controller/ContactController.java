@@ -23,10 +23,13 @@ public class ContactController {
      * 🌍 PUBLIC – Accessible without a token.
      * Use this for the storefront contact form.
      */
-    @PostMapping("/contact")
-    public ResponseEntity<Void> submitContact(@Valid @RequestBody ContactRequest request) {
+    @PostMapping("/public/contact")
+    public ResponseEntity<Map<String, String>> submitContact(@Valid @RequestBody ContactRequest request) {
         contactService.submit(request);
-        return ResponseEntity.ok().build();
+
+        return ResponseEntity.ok(
+                Map.of("message", "Contact submitted successfully")
+        );
     }
 
     /**

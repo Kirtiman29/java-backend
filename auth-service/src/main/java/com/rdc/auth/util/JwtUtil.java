@@ -2,13 +2,13 @@ package com.rdc.auth.util;
 
 import com.rdc.auth.entity.User;
 import io.jsonwebtoken.*;
+import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import java.nio.charset.StandardCharsets;
 import java.security.Key;
 import java.util.Date;
 
@@ -27,21 +27,30 @@ public class JwtUtil {
 
     private Key signingKey;
 
+    /**
+     * ✅ FIXED: Uses Base64 decoding (matches Wishlist Service)
+     */
     @PostConstruct
     public void init() {
-        if (secret == null || secret.length() < 32) {
-            log.error("❌ CRITICAL: JWT secret must be at least 32 characters long for industrial security standards.");
-            throw new IllegalStateException("JWT secret must be at least 32 characters long");
+        try {
+            byte[] keyBytes = Decoders.BASE64.decode(secret);
+            this.signingKey = Keys.hmacShaKeyFor(keyBytes);
+            log.info("🛡️ JWT Signing Key initialized using BASE64 decoding.");
+        } catch (Exception e) {
+            log.error("❌ Failed to decode JWT secret. Ensure it is valid Base64.");
+            throw new IllegalStateException("Invalid JWT secret format", e);
         }
-        this.signingKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
-        log.info("🛡️ JWT Signing Key initialized successfully.");
     }
+
+    /* =========================
+       TOKEN GENERATION
+       ========================= */
 
     public String generateToken(User user) {
         return Jwts.builder()
                 .setSubject(String.valueOf(user.getId()))
                 .claim("email", user.getEmail())
-                .claim("role", user.getRole()) // Matches ROLE_ prefixing in SecurityConfig
+                .claim("role", user.getRole())
                 .claim("type", "access")
                 .setIssuedAt(new Date())
                 .setExpiration(new Date(System.currentTimeMillis() + jwtExpirationMs))
@@ -58,6 +67,10 @@ public class JwtUtil {
                 .signWith(signingKey, SignatureAlgorithm.HS256)
                 .compact();
     }
+
+    /* =========================
+       TOKEN PARSING
+       ========================= */
 
     public Claims parseToken(String token) {
         try {

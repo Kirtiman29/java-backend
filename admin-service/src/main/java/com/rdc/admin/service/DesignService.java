@@ -157,7 +157,7 @@ public class DesignService {
         String oldCoverUuid = design.getAssetUuid();
 
         if (newCoverUuid != null && !newCoverUuid.isBlank() && !newCoverUuid.equals(oldCoverUuid)) {
-            if (oldCoverUuid != null) {
+            if (oldCoverUuid != null && !oldCoverUuid.equals(newCoverUuid)) {
                 assetClientService.deleteAsset(oldCoverUuid);
             }
             design.setAssetUuid(newCoverUuid);
@@ -299,8 +299,12 @@ public class DesignService {
                 .filter(m -> m.getMediaRole() == role)
                 .collect(Collectors.toList());
 
+        List<String> newUuids = uuids;
+
         for (DesignMedia media : existing) {
-            assetClientService.deleteAsset(media.getAssetUuid());
+            if (!newUuids.contains(media.getAssetUuid())) {
+                assetClientService.deleteAsset(media.getAssetUuid());
+            }
         }
 
         mediaRepository.deleteAll(existing);

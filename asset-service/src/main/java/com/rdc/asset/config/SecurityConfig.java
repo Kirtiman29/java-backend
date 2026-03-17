@@ -1,11 +1,12 @@
 package com.rdc.asset.config;
 
 import com.rdc.asset.security.InternalKeyFilter;
+import io.jsonwebtoken.io.Decoders; // ✅ Added for Base64 decoding
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
-import org.springframework.security.config.Customizer; // ✅ Added
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -14,7 +15,7 @@ import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter; // ✅ Standardized
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -42,8 +43,6 @@ public class SecurityConfig {
 
     /**
      * ✅ Main Security Filter Chain for the RDC Asset Service.
-     * Configured to permit public access to industrial asset downloads while
-     * securing administrative upload and management endpoints.
      */
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -54,43 +53,27 @@ public class SecurityConfig {
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
                 .authorizeHttpRequests(auth -> auth
-                        // 1. Preflight requests
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-
-                        // 🌍 2. PUBLIC DOWNLOAD ACCESS: Essential for storefront gallery display
-                        // Permitting these routes stops the 401 Unauthorized errors on images
                         .requestMatchers(HttpMethod.GET, "/api/assets/download/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/assets/*/download").permitAll()
-
-                        // 🌍 3. PUBLIC RESUME UPLOAD: Used by the industrial recruitment page
                         .requestMatchers(HttpMethod.POST, "/api/assets/resume-upload").permitAll()
-
-                        // 🔐 4. INTERNAL SERVICE BRIDGE: Validated by the InternalKeyFilter
                         .requestMatchers("/api/assets/internal/**").permitAll()
-
-                        // 🔒 5. ADMIN PROTECTED: Strict JWT role-based access for asset management
+                        .requestMatchers(HttpMethod.DELETE, "/api/assets/internal/**").permitAll() // ✅ FIXED
                         .requestMatchers(HttpMethod.POST, "/api/assets/upload").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/assets").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/assets/**").hasRole("ADMIN")
-
-                        // 6. Secure all other endpoints
                         .anyRequest().authenticated()
                 )
 
-                // Configure JWT decoding and authority mapping
                 .oauth2ResourceServer(oauth ->
                         oauth.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()))
                 )
 
-                // ✅ IMPORTANT: Apply the InternalKeyFilter BEFORE standard auth to handle bridge calls
                 .addFilterBefore(internalKeyFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
 
-    /**
-     * Maps JWT "role" claims into standard Spring Security "ROLE_" authorities.
-     */
     @Bean
     public JwtAuthenticationConverter jwtAuthenticationConverter() {
         JwtGrantedAuthoritiesConverter converter = new JwtGrantedAuthoritiesConverter();
@@ -103,17 +86,15 @@ public class SecurityConfig {
     }
 
     /**
-     * Decodes incoming JWTs using the platform-wide HS256 secret key.
+     * ✅ UPDATED: Decodes incoming JWTs using Base64 decoding for the secret key.
      */
     @Bean
     public JwtDecoder jwtDecoder() {
-        SecretKeySpec secretKey = new SecretKeySpec(jwtSecret.getBytes(), "HmacSHA256");
+        byte[] keyBytes = Decoders.BASE64.decode(jwtSecret);
+        SecretKeySpec secretKey = new SecretKeySpec(keyBytes, "HmacSHA256");
         return NimbusJwtDecoder.withSecretKey(secretKey).build();
     }
 
-    /**
-     * Dynamically generates CORS policy based on the allowed origins in .env.
-     */
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();

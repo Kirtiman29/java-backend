@@ -30,7 +30,7 @@ public class InternalKeyFilter extends OncePerRequestFilter {
             filterChain.doFilter(request, response);
             return;
         }
-        if (path.contains("/internal/")) {
+        if (path.startsWith("/api/assets/internal/")) {
             String providedKey = request.getHeader("X-INTERNAL-KEY");
 
             if (providedKey == null || !providedKey.equals(internalServiceKey)) {
