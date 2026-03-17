@@ -81,6 +81,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Object> handleGenericException(
             Exception ex, WebRequest request) {
+        ex.printStackTrace();
         log.error("Unhandled Exception in Order Service: ", ex);
         return buildErrorResponse(
                 HttpStatus.INTERNAL_SERVER_ERROR,

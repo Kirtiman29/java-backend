@@ -57,6 +57,10 @@ public class OrderController {
 
         OrderResponse order = orderService.getOrderByIdAdmin(orderId);
 
+        if (order.getGrandTotalCents() == null || order.getGrandTotalCents() <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Order amount not available");
+        }
+
         return ResponseEntity.ok(
                 Map.of("grandTotalCents", order.getGrandTotalCents())
         );

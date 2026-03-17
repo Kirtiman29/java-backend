@@ -98,6 +98,10 @@ public class OrderServiceImpl implements OrderService {
         order.setSgstCents(gst / 2);
         order.setGrandTotalCents(subtotalCents);
 
+        if (order.getGrandTotalCents() == null || order.getGrandTotalCents() <= 0) {
+            throw new RuntimeException("❌ Order total calculation failed");
+        }
+
         // ✅ FIX: Set total amount for DB stability
         order.setTotalAmountCents(order.getGrandTotalCents());
 
