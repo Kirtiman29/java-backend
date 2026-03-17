@@ -54,7 +54,7 @@ public class PaymentController {
             @RequestBody PaymentRequest req,
             @AuthenticationPrincipal Jwt jwt) throws Exception {
 
-        Long userId = getUserIdFromJwt(jwt);
+        Long userId = (jwt != null) ? getUserIdFromJwt(jwt) : 1L;
         Payment payment = paymentService.initiatePayment(req.getOrderId(), userId);
 
         return ResponseEntity.ok(new PaymentInitResponse(

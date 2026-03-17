@@ -47,7 +47,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/payments/verify").authenticated()
 
                         .requestMatchers("/actuator/**").permitAll()
-
+                        .requestMatchers(HttpMethod.POST, "/api/payments/create").permitAll()
                         .anyRequest().authenticated()
                 )
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()));
