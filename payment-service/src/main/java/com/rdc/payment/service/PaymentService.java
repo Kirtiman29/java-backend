@@ -213,7 +213,12 @@ public class PaymentService {
 
             HttpEntity<Void> entity = new HttpEntity<>(headers);
 
-            restTemplate.postForEntity(url, entity, Void.class);
+            restTemplate.exchange(
+                    url,
+                    HttpMethod.POST,
+                    entity,
+                    Void.class
+            );
 
         } catch (Exception e) {
 
