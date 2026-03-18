@@ -111,7 +111,7 @@ public class OrderServiceImpl implements OrderService {
         order.setInvoiceType(invoiceType);
 
         // 6. Save to database
-        Order saved = orderRepository.save(order);
+        Order saved = orderRepository.saveAndFlush(order);
 
         // 7. 🔥 REMOVED: cartServiceClient.clearCart(userId);
         // Moved to updateStatus to prevent losing cart on payment failure.
