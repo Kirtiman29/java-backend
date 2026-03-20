@@ -2,12 +2,20 @@ package com.rdc.admin.service;
 
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
+
 @Service
 public class SitemapService {
 
     private final String DOMAIN = "https://ruchitadesigncompany.in";
 
+    private String today() {
+        return LocalDate.now().toString();
+    }
+
+    // =========================
     // MAIN SITEMAP INDEX
+    // =========================
     public String sitemapIndex() {
 
         return """
@@ -15,82 +23,178 @@ public class SitemapService {
         <sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 
             <sitemap>
-                <loc>https://ruchitadesigncompany.in/sitemap-pages.xml</loc>
+                <loc>%s/sitemap-pages.xml</loc>
+                <lastmod>%s</lastmod>
             </sitemap>
 
             <sitemap>
-                <loc>https://ruchitadesigncompany.in/sitemap-categories.xml</loc>
+                <loc>%s/sitemap-categories.xml</loc>
+                <lastmod>%s</lastmod>
             </sitemap>
 
             <sitemap>
-                <loc>https://ruchitadesigncompany.in/sitemap-products.xml</loc>
+                <loc>%s/sitemap-products.xml</loc>
+                <lastmod>%s</lastmod>
             </sitemap>
 
         </sitemapindex>
-        """;
+        """.formatted(DOMAIN, today(), DOMAIN, today(), DOMAIN, today());
     }
 
+    // =========================
     // STATIC WEBSITE PAGES
+    // =========================
     public String pagesSitemap() {
 
         return """
         <?xml version="1.0" encoding="UTF-8"?>
         <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 
-        <url>
-            <loc>https://ruchitadesigncompany.in/</loc>
-        </url>
+            <url>
+                <loc>%s/</loc>
+                <lastmod>%s</lastmod>
+                <changefreq>daily</changefreq>
+                <priority>1.0</priority>
+            </url>
 
-        <url>
-            <loc>https://ruchitadesigncompany.in/about</loc>
-        </url>
+            <url>
+                <loc>%s/about</loc>
+                <lastmod>%s</lastmod>
+                <changefreq>monthly</changefreq>
+                <priority>0.8</priority>
+            </url>
 
-        <url>
-            <loc>https://ruchitadesigncompany.in/contact</loc>
-        </url>
+            <url>
+                <loc>%s/gallery</loc>
+                <lastmod>%s</lastmod>
+                <changefreq>weekly</changefreq>
+                <priority>0.9</priority>
+            </url>
 
-        <url>
-            <loc>https://ruchitadesigncompany.in/privacy-policy</loc>
-        </url>
+            <url>
+                <loc>%s/luxury</loc>
+                <lastmod>%s</lastmod>
+                <changefreq>weekly</changefreq>
+                <priority>0.8</priority>
+            </url>
+
+            <url>
+                <loc>%s/trends</loc>
+                <lastmod>%s</lastmod>
+                <changefreq>weekly</changefreq>
+                <priority>0.8</priority>
+            </url>
+
+            <url>
+                <loc>%s/special-offers</loc>
+                <lastmod>%s</lastmod>
+                <changefreq>weekly</changefreq>
+                <priority>0.7</priority>
+            </url>
+
+            <url>
+                <loc>%s/contact</loc>
+                <lastmod>%s</lastmod>
+                <changefreq>yearly</changefreq>
+                <priority>0.6</priority>
+            </url>
+
+            <url>
+                <loc>%s/faq</loc>
+                <lastmod>%s</lastmod>
+                <changefreq>monthly</changefreq>
+                <priority>0.6</priority>
+            </url>
+
+            <url>
+                <loc>%s/terms</loc>
+                <lastmod>%s</lastmod>
+                <changefreq>yearly</changefreq>
+                <priority>0.5</priority>
+            </url>
+
+            <url>
+                <loc>%s/privacy</loc>
+                <lastmod>%s</lastmod>
+                <changefreq>yearly</changefreq>
+                <priority>0.5</priority>
+            </url>
 
         </urlset>
-        """;
+        """.formatted(
+                DOMAIN, today(),
+                DOMAIN, today(),
+                DOMAIN, today(),
+                DOMAIN, today(),
+                DOMAIN, today(),
+                DOMAIN, today(),
+                DOMAIN, today(),
+                DOMAIN, today(),
+                DOMAIN, today(),
+                DOMAIN, today()
+        );
     }
 
+    // =========================
     // CATEGORY PAGES
+    // =========================
     public String categorySitemap() {
 
         return """
         <?xml version="1.0" encoding="UTF-8"?>
         <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 
-        <url>
-            <loc>https://ruchitadesigncompany.in/categories</loc>
-        </url>
+            <url>
+                <loc>%s/categories</loc>
+                <lastmod>%s</lastmod>
+                <changefreq>weekly</changefreq>
+                <priority>0.9</priority>
+            </url>
+
+            <url>
+                <loc>%s/categories/luxury</loc>
+                <lastmod>%s</lastmod>
+                <changefreq>weekly</changefreq>
+                <priority>0.8</priority>
+            </url>
+
+            <url>
+                <loc>%s/categories/trends</loc>
+                <lastmod>%s</lastmod>
+                <changefreq>weekly</changefreq>
+                <priority>0.8</priority>
+            </url>
 
         </urlset>
-        """;
+        """.formatted(
+                DOMAIN, today(),
+                DOMAIN, today(),
+                DOMAIN, today()
+        );
     }
 
+    // =========================
     // PRODUCT / DESIGN PAGES
+    // =========================
     public String productSitemap() {
 
         return """
         <?xml version="1.0" encoding="UTF-8"?>
         <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
-        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+                xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
 
-        <url>
-            <loc>https://ruchitadesigncompany.in/design/sample-design</loc>
+            <url>
+                <loc>%s/design/sample-design</loc>
+                <lastmod>%s</lastmod>
+                <changefreq>weekly</changefreq>
+                <priority>0.9</priority>
 
-            <image:image>
-                <image:loc>https://ruchitadesigncompany.in/images/sample.jpg</image:loc>
-            </image:image>
-
-        </url>
+                <image:image>
+                    <image:loc>%s/images/sample.jpg</image:loc>
+                </image:image>
+            </url>
 
         </urlset>
-        """;
+        """.formatted(DOMAIN, today(), DOMAIN);
     }
-
 }

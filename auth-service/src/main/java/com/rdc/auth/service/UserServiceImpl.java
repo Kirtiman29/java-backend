@@ -45,12 +45,8 @@ public class UserServiceImpl implements UserService {
     public void saveRefreshToken(User user, String refreshToken) {
         log.info("Rotating refresh token for user: {}", user.getEmail());
 
-        refreshTokenRepository.findAll().stream()
-                .filter(t -> t.getUser().getId().equals(user.getId()) && !t.isRevoked())
-                .forEach(t -> {
-                    t.setRevoked(true);
-                    refreshTokenRepository.save(t);
-                });
+        // 🔥 DELETE OLD TOKENS (CLEAN FIX)
+        refreshTokenRepository.deleteAllByUser(user);
 
         RefreshToken tokenEntity = RefreshToken.builder()
                 .user(user)
@@ -66,12 +62,8 @@ public class UserServiceImpl implements UserService {
     @Transactional
     public void revokeAllRefreshTokens(User user) {
         log.info("Revoking all tokens for user: {}", user.getEmail());
-        refreshTokenRepository.findAll().stream()
-                .filter(t -> t.getUser().getId().equals(user.getId()) && !t.isRevoked())
-                .forEach(t -> {
-                    t.setRevoked(true);
-                    refreshTokenRepository.save(t);
-                });
+        // Clean fix: Deleting is generally safer and more performant than updating every row for rotation/revocation
+        refreshTokenRepository.deleteAllByUser(user);
     }
 
     @Override
@@ -106,18 +98,15 @@ public class UserServiceImpl implements UserService {
     public Map<String, String> createUser(SignupRequest req) {
         log.info("Attempting to create RDC user account: {}", req.getEmail());
 
-        // ✅ INDUSTRIAL FIX: Smart logic to resend verification if account exists but isn't verified
         Optional<User> existingUserOpt = userRepository.findByEmail(req.getEmail());
 
         if (existingUserOpt.isPresent()) {
             User existingUser = existingUserOpt.get();
 
-            // 🔴 If already verified → block signup to prevent duplicates
             if (existingUser.isVerified()) {
                 throw new RuntimeException("USER_EXISTS");
             }
 
-            // 🟡 If NOT verified → Revoke old token and resend verification
             log.info("Unverified user {} attempting re-signup. Resending verification.", req.getEmail());
             VerificationToken existingToken =
                     verificationTokenRepository.findByUser(existingUser)
@@ -144,7 +133,6 @@ public class UserServiceImpl implements UserService {
             return response;
         }
 
-        // Standard new user creation flow
         User newUser = User.builder()
                 .email(req.getEmail())
                 .displayName(req.getDisplayName())

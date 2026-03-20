@@ -43,6 +43,11 @@ public class AuthController {
     @GetMapping("/me")
     public ResponseEntity<?> getCurrentUser(Principal principal) {
         try {
+
+            if (principal == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            }
+
             Long userId = Long.parseLong(principal.getName());
             User user = userRepository.findById(userId)
                     .orElseThrow(() -> new RuntimeException("USER_NOT_FOUND"));

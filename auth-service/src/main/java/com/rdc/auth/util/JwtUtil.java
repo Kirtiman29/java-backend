@@ -11,6 +11,7 @@ import org.springframework.stereotype.Component;
 
 import java.security.Key;
 import java.util.Date;
+import java.util.UUID;
 
 @Component
 @Slf4j
@@ -62,6 +63,7 @@ public class JwtUtil {
         return Jwts.builder()
                 .setSubject(String.valueOf(user.getId()))
                 .claim("type", "refresh")
+                .setId(UUID.randomUUID().toString()) // 🔥 MOST IMPORTANT FIX
                 .setIssuedAt(new Date())
                 .setExpiration(new Date(System.currentTimeMillis() + refreshExpirationMs))
                 .signWith(signingKey, SignatureAlgorithm.HS256)
