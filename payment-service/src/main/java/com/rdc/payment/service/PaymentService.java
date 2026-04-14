@@ -60,7 +60,7 @@ public class PaymentService {
             log.info("✅ Payment already completed for Order: {}", orderId);
             return existingPaid.get();
         }
-        log.info("🚀 Initiating payment for orderId: {}, userId: {}", orderId, userId);
+        log.info("Initiating payment for orderId: {}, userId: {}", orderId, userId);
         // 1. Fetch exact amount from Order Service (This is where the 503 was happening)
         Long amountCents = fetchAmountFromOrderService(orderId, userId);
 

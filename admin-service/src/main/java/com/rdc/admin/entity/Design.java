@@ -17,29 +17,66 @@ public class Design {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(nullable = false)
     private String title;
 
     @Column(columnDefinition = "TEXT")
     private String description;
 
-    // Pricing (Stored in Cents for precision)
-    private Long basePriceCents;
-    private Long finalPriceCents;
+    @Column(name = "asset_uuid", length = 128)
+    private String assetUuid;
 
-    private Boolean specialOffer = false;
-    private Integer discountPercent = 0;
+    @Column(name = "design_identifier", nullable = false, unique = true, length = 100)
+    private String designIdentifier;
 
-    // Status Flags
-    private Boolean active = false;
-    private Boolean draft = true;
+    @Column(name = "base_price_cents")
+    private Long basePriceCents = 0L;
 
-    // Section Flags
+    @Column(name = "final_price_cents")
+    private Long finalPriceCents = 0L;
+
+    private String segment;
+
+    private Boolean active = true;
+    private Boolean draft = false;
     private Boolean trending = false;
+
+    @Column(name = "editors_pick")
     private Boolean editorsPick = false;
+
+    @Column(name = "new_arrival")
     private Boolean newArrival = true;
+
     private Boolean luxury = false;
 
-    // Relations & External IDs
+    // Industrial Specifications matching your SQL and screenshots
+    @Column(name = "repeat_size")
+    private String repeatSize;
+
+    @Column(name = "design_type")
+    private String designType;
+
+    @Column(name = "image_format")
+    private String imageFormat;
+
+    @Column(name = "image_type")
+    private String imageType;
+
+    @Column(name = "color_count")
+    private Integer colorCount;
+
+    private String resolution;
+
+    @Column(name = "special_offer")
+    private Boolean specialOffer = false;
+
+    @Column(name = "discount_percent")
+    private Integer discountPercent = 0;
+
+    @Column(name = "asset_id")
+    private Long assetId;
+
+    // Many-to-Many Join Table Relationship
     @ManyToMany
     @JoinTable(
             name = "design_categories",
@@ -48,32 +85,15 @@ public class Design {
     )
     private Set<Category> categories = new HashSet<>();
 
-    private Long assetId;
-
-    @Column(name = "asset_uuid")
-    private String assetUuid;
-
     @ElementCollection(fetch = FetchType.EAGER)
-    @CollectionTable(
-            name = "design_tags",
-            joinColumns = @JoinColumn(name = "design_id")
-    )
+    @CollectionTable(name = "design_tags", joinColumns = @JoinColumn(name = "design_id"))
     @Column(name = "tag_name")
     private List<String> tags = new ArrayList<>();
 
-    @ElementCollection(fetch = FetchType.EAGER)
-    @CollectionTable(
-            name = "design_segments",
-            joinColumns = @JoinColumn(name = "design_id")
-    )
-    @Enumerated(EnumType.STRING)
-    @Column(name = "segment")
-    private Set<Segment> segments = new HashSet<>();
-
-    // Timestamps
-    @Column(updatable = false)
+    @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
+    @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
     @PrePersist
@@ -86,21 +106,4 @@ public class Design {
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
     }
-
-
-    @Column(name = "design_identifier", nullable = false, unique = true)
-    private String designIdentifier;
-
-    private String repeatSize;
-
-    private String designType;
-
-    private String imageFormat;
-
-    private String imageType;
-
-    private Integer colorCount;
-
-    private String resolution;
-
 }

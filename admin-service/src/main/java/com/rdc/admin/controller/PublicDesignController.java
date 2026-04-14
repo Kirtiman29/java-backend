@@ -2,7 +2,6 @@ package com.rdc.admin.controller;
 
 import com.rdc.admin.dto.DesignResponse;
 import com.rdc.admin.entity.Design;
-import com.rdc.admin.entity.Segment;
 import com.rdc.admin.repository.DesignRepository;
 import com.rdc.admin.repository.DesignMediaRepository;
 import com.rdc.admin.service.DesignService;
@@ -50,17 +49,13 @@ public class PublicDesignController {
             ).orElse(new ArrayList<>());
         }
 
-        // 2️⃣ Segment filter
+        // 2️⃣ Segment filter (✅ FIXED: Updated to use the single 'segment' string field)
         if (segment != null && !segment.isBlank()) {
-            try {
-                Segment seg = Segment.valueOf(segment.toUpperCase());
-
-                designs = designs.stream()
-                        .filter(Objects::nonNull)
-                        .filter(d -> d.getSegments() != null && d.getSegments().contains(seg))
-                        .collect(Collectors.toList());
-
-            } catch (IllegalArgumentException ignored) {}
+            String segFilter = segment.toUpperCase();
+            designs = designs.stream()
+                    .filter(Objects::nonNull)
+                    .filter(d -> hasSegment(d, segFilter))
+                    .collect(Collectors.toList());
         }
 
         // 3️⃣ Category filter
@@ -71,7 +66,6 @@ public class PublicDesignController {
         }
 
         // 4️⃣ Attribute filters
-
         if (Boolean.TRUE.equals(luxury)) {
             designs = designs.stream()
                     .filter(d -> Boolean.TRUE.equals(d.getLuxury()))
@@ -155,5 +149,15 @@ public class PublicDesignController {
         }
 
         return ResponseEntity.ok(response);
+    }
+
+    private boolean hasSegment(Design design, String segment) {
+        if (design.getSegment() == null || design.getSegment().isBlank()) {
+            return false;
+        }
+
+        return Arrays.stream(design.getSegment().split(","))
+                .map(String::trim)
+                .anyMatch(saved -> saved.equalsIgnoreCase(segment));
     }
 }

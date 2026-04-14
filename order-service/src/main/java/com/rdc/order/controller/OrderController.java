@@ -82,13 +82,13 @@ public class OrderController {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "User ID mismatch");
         }
 
-        log.info("🚀 Initiating order creation for Customer: {} (userId: {})",
+        log.info("Initiating order creation for Customer: {} (userId: {})",
                 request.getCustomerName(), userId);
 
         // Pass the full request DTO to the service
         OrderResponse createdOrder = orderService.createOrder(request);
 
-        log.info("✅ Order created successfully. ID: {}", createdOrder.getId());
+        log.info("Order created successfully. ID: {}", createdOrder.getId());
 
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(Map.of("data", createdOrder));
@@ -112,7 +112,7 @@ public class OrderController {
     }
 
     /**
-     * ✅ GET SINGLE ORDER
+     * GET SINGLE ORDER
      */
     @GetMapping("/{orderId}")
     public ResponseEntity<Map<String, Object>> getOrder(@PathVariable String orderId, @AuthenticationPrincipal Jwt jwt) {
@@ -135,7 +135,7 @@ public class OrderController {
     }
 
     /**
-     * ✅ DOWNLOAD INVOICE
+     * DOWNLOAD INVOICE
      */
     @GetMapping("/{orderId}/invoice")
     public ResponseEntity<byte[]> downloadInvoice(@PathVariable Long orderId, @AuthenticationPrincipal Jwt jwt) {
@@ -148,7 +148,7 @@ public class OrderController {
         List<OrderItem> items = orderItemRepository.findByOrderId(orderId);
         byte[] pdfBytes = invoiceGeneratorService.generateInvoicePdf(order, items);
 
-        log.info("✅ Manual invoice download triggered for Order #{}", orderId);
+        log.info("Manual invoice download triggered for Order #{}", orderId);
 
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=Invoice-RDC-" + orderId + ".pdf")
@@ -157,7 +157,7 @@ public class OrderController {
     }
 
     /**
-     * ✅ SECURE DOWNLOAD
+     * SECURE DOWNLOAD
      */
     @GetMapping("/{orderId}/download")
     public ResponseEntity<Map<String, Object>> getSecureDownload(@PathVariable Long orderId, @AuthenticationPrincipal Jwt jwt) {
@@ -173,7 +173,7 @@ public class OrderController {
     }
 
     /**
-     * ✅ INTERNAL BRIDGE: Mark order as PAID
+     * INTERNAL BRIDGE: Mark order as PAID
      */
     @PostMapping("/internal/{orderId}/paid")
     public ResponseEntity<Void> markOrderPaidInternal(
@@ -186,7 +186,7 @@ public class OrderController {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Invalid Internal Key");
         }
 
-        log.info("💰 Internal Bridge: Marking Order #{} as PAID (Txn: {})", orderId, transactionId);
+        log.info("Internal Bridge: Marking Order #{} as PAID (Txn: {})", orderId, transactionId);
         orderService.updateStatus(orderId, "PAID", transactionId, paymentMode);
         return ResponseEntity.ok().build();
     }

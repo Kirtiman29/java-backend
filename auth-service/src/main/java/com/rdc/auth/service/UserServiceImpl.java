@@ -24,8 +24,10 @@ import java.util.*;
 public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
+    private final com.rdc.auth.repository.AdminRepository adminRepository;
     private final VerificationTokenRepository verificationTokenRepository;
     private final RefreshTokenRepository refreshTokenRepository;
+    private final com.rdc.auth.repository.AdminRefreshTokenRepository adminRefreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final SmtpEmailService emailService;
     private final JwtUtil jwtUtil;
@@ -45,8 +47,11 @@ public class UserServiceImpl implements UserService {
     public void saveRefreshToken(User user, String refreshToken) {
         log.info("Rotating refresh token for user: {}", user.getEmail());
 
-        // 🔥 DELETE OLD TOKENS (CLEAN FIX)
-        refreshTokenRepository.deleteAllByUser(user);
+        List<RefreshToken> activeTokens = refreshTokenRepository.findAllByUserOrderByExpiryDateDesc(user);
+        if (activeTokens.size() >= 5) {
+            List<RefreshToken> tokensToDelete = activeTokens.subList(4, activeTokens.size());
+            refreshTokenRepository.deleteAll(tokensToDelete);
+        }
 
         RefreshToken tokenEntity = RefreshToken.builder()
                 .user(user)
@@ -57,20 +62,59 @@ public class UserServiceImpl implements UserService {
 
         refreshTokenRepository.save(tokenEntity);
     }
+    
+    @Override
+    @Transactional
+    public void saveRefreshToken(com.rdc.auth.entity.Admin admin, String refreshToken) {
+        log.info("Rotating refresh token for admin: {}", admin.getEmail());
+
+        List<com.rdc.auth.entity.AdminRefreshToken> activeTokens = adminRefreshTokenRepository.findAllByAdminOrderByExpiryDateDesc(admin);
+        if (activeTokens.size() >= 5) {
+            List<com.rdc.auth.entity.AdminRefreshToken> tokensToDelete = activeTokens.subList(4, activeTokens.size());
+            adminRefreshTokenRepository.deleteAll(tokensToDelete);
+        }
+
+        com.rdc.auth.entity.AdminRefreshToken tokenEntity = com.rdc.auth.entity.AdminRefreshToken.builder()
+                .admin(admin)
+                .token(refreshToken)
+                .expiryDate(Instant.now().plusSeconds(60L * 60 * 24 * 7)) // 7 Days
+                .revoked(false)
+                .build();
+
+        adminRefreshTokenRepository.save(tokenEntity);
+    }
 
     @Override
     @Transactional
     public void revokeAllRefreshTokens(User user) {
-        log.info("Revoking all tokens for user: {}", user.getEmail());
-        // Clean fix: Deleting is generally safer and more performant than updating every row for rotation/revocation
         refreshTokenRepository.deleteAllByUser(user);
     }
 
     @Override
     @Transactional
-    public String refreshAccessToken(String token) {
+    public void revokeAllRefreshTokens(com.rdc.auth.entity.Admin admin) {
+        adminRefreshTokenRepository.deleteAllByAdmin(admin);
+    }
+
+    @Override
+    @Transactional
+    public String refreshAccessToken(String token, boolean isAdmin) {
         if (!"refresh".equals(jwtUtil.getClaim(token, "type"))) {
             throw new RuntimeException("INVALID_TOKEN_TYPE");
+        }
+
+        if (isAdmin) {
+            com.rdc.auth.entity.AdminRefreshToken storedToken = adminRefreshTokenRepository.findByToken(token)
+                    .orElseThrow(() -> new RuntimeException("REFRESH_TOKEN_NOT_FOUND"));
+            if (storedToken.isRevoked()) {
+                revokeAllRefreshTokens(storedToken.getAdmin());
+                throw new RuntimeException("TOKEN_REVOKED");
+            }
+            if (storedToken.getExpiryDate().isBefore(Instant.now())) {
+                adminRefreshTokenRepository.delete(storedToken);
+                throw new RuntimeException("TOKEN_EXPIRED");
+            }
+            return jwtUtil.generateToken(storedToken.getAdmin());
         }
 
         RefreshToken storedToken = refreshTokenRepository.findByToken(token)
@@ -165,6 +209,16 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public String authenticate(String email, String password, String requiredRole) {
+        if ("ADMIN".equalsIgnoreCase(requiredRole)) {
+            com.rdc.auth.entity.Admin admin = adminRepository.findByEmail(email)
+                    .orElseThrow(() -> new IllegalArgumentException("INVALID_CREDENTIALS"));
+            if (!admin.isEnabled()) throw new IllegalArgumentException("USER_DISABLED");
+            if (!passwordEncoder.matches(password, admin.getPassword())) {
+                throw new IllegalArgumentException("INVALID_CREDENTIALS");
+            }
+            return jwtUtil.generateToken(admin);
+        }
+
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new IllegalArgumentException("INVALID_CREDENTIALS"));
 
@@ -293,5 +347,80 @@ public class UserServiceImpl implements UserService {
         user.setResetTokenExpiryDate(null);
         user.setResetCount(0);
         userRepository.save(user);
+    }
+
+    @Override
+    @Transactional
+    public void generateAndSendOtp(String email, String requiredRole) {
+        if ("ADMIN".equalsIgnoreCase(requiredRole)) {
+            com.rdc.auth.entity.Admin admin = adminRepository.findByEmail(email)
+                    .orElseThrow(() -> new IllegalArgumentException("USER_NOT_FOUND"));
+            if (!admin.isEnabled()) throw new IllegalArgumentException("USER_DISABLED");
+
+            String otp = String.format("%06d", new java.util.Random().nextInt(999999));
+            admin.setOtp(otp);
+            admin.setOtpExpiryDate(Instant.now().plusSeconds(300));
+            adminRepository.save(admin);
+
+            emailService.sendOtpEmail(email, otp);
+            return;
+        }
+
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new IllegalArgumentException("USER_NOT_FOUND"));
+
+        if (!user.isEnabled()) {
+            throw new IllegalArgumentException("USER_DISABLED");
+        }
+
+        String otp = String.format("%06d", new java.util.Random().nextInt(999999));
+        user.setOtp(otp);
+        user.setOtpExpiryDate(Instant.now().plusSeconds(300));
+        userRepository.save(user);
+
+        emailService.sendOtpEmail(email, otp);
+    }
+
+    @Override
+    @Transactional
+    public String verifyOtp(String email, String otp, String requiredRole) {
+        if ("ADMIN".equalsIgnoreCase(requiredRole)) {
+            com.rdc.auth.entity.Admin admin = adminRepository.findByEmail(email)
+                    .orElseThrow(() -> new IllegalArgumentException("USER_NOT_FOUND"));
+            if (!admin.isEnabled()) throw new IllegalArgumentException("USER_DISABLED");
+            if (admin.getOtp() == null || admin.getOtpExpiryDate() == null) throw new IllegalArgumentException("NO_OTP_REQUESTED");
+            if (admin.getOtpExpiryDate().isBefore(Instant.now())) throw new IllegalArgumentException("OTP_EXPIRED");
+            if (!admin.getOtp().equals(otp)) throw new IllegalArgumentException("INVALID_OTP");
+            
+            admin.setOtp(null);
+            admin.setOtpExpiryDate(null);
+            adminRepository.save(admin);
+            return jwtUtil.generateToken(admin);
+        }
+
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new IllegalArgumentException("USER_NOT_FOUND"));
+
+        if (!user.isEnabled()) {
+            throw new IllegalArgumentException("USER_DISABLED");
+        }
+        if (requiredRole != null && !user.getRole().equalsIgnoreCase(requiredRole)) {
+            throw new IllegalArgumentException("UNAUTHORIZED_ROLE");
+        }
+        if (user.getOtp() == null || user.getOtpExpiryDate() == null) {
+            throw new IllegalArgumentException("NO_OTP_REQUESTED");
+        }
+        if (user.getOtpExpiryDate().isBefore(Instant.now())) {
+            throw new IllegalArgumentException("OTP_EXPIRED");
+        }
+        if (!user.getOtp().equals(otp)) {
+            throw new IllegalArgumentException("INVALID_OTP");
+        }
+
+        user.setOtp(null);
+        user.setOtpExpiryDate(null);
+        userRepository.save(user);
+
+        return jwtUtil.generateToken(user);
     }
 }

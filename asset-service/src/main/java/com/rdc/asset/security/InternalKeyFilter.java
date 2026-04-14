@@ -30,7 +30,8 @@ public class InternalKeyFilter extends OncePerRequestFilter {
             filterChain.doFilter(request, response);
             return;
         }
-        if (path.startsWith("/api/assets/internal/")) {
+        // UPDATED: Include the upload path in the internal key check
+        if (path.startsWith("/api/assets/internal/") || path.equals("/api/assets/upload")) {
             String providedKey = request.getHeader("X-INTERNAL-KEY");
 
             if (providedKey == null || !providedKey.equals(internalServiceKey)) {
@@ -39,6 +40,13 @@ public class InternalKeyFilter extends OncePerRequestFilter {
                 return;
             }
             log.info("🔑 Authorized internal access: {}", path);
+
+            /* IMPORTANT: Since we bypassed the JWT check, we need to tell Spring 
+               this request is "pre-authenticated" so the SecurityContext is happy.
+            */
+            if (path.equals("/api/assets/upload")) {
+                 // We can proceed. The AssetController will handle the actual logic.
+            }
         }
 
         filterChain.doFilter(request, response);

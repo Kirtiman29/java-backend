@@ -40,7 +40,7 @@ public class BannerController {
         return ResponseEntity.ok(bannerService.updateBanner(id, request));
     }
 
-    @DeleteMapping("/api/admin/banners/{id}") // ✅ FIXED: Completed CRUD
+    @DeleteMapping("/api/admin/banners/{id}")
     public ResponseEntity<Void> deleteBanner(@PathVariable Long id) {
         bannerService.deleteBanner(id);
         return ResponseEntity.noContent().build();

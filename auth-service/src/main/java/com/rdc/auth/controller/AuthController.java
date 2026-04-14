@@ -29,6 +29,7 @@ public class AuthController {
 
     private final UserService userService;
     private final UserRepository userRepository;
+    private final com.rdc.auth.repository.AdminRepository adminRepository;
     private final JwtUtil jwtUtil;
 
     @Value("${frontend.url}")
@@ -74,12 +75,16 @@ public class AuthController {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "REFRESH_TOKEN_EXPIRED"));
             }
 
-            String newAccessToken = userService.refreshAccessToken(oldRefreshToken);
+            boolean isAdmin = "ADMIN".equals(jwtUtil.getClaim(oldRefreshToken, "role"));
+            if (isAdmin) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(Map.of("error", "ADMIN_REFRESH_DISABLED"));
+            }
 
+            String newAccessToken = userService.refreshAccessToken(oldRefreshToken, false);
             Long userId = Long.parseLong(jwtUtil.getSubjectFromToken(oldRefreshToken));
             User user = userRepository.findById(userId).orElseThrow();
             String newRefreshToken = jwtUtil.generateRefreshToken(user);
-
             userService.saveRefreshToken(user, newRefreshToken);
 
             return ResponseEntity.ok(new TokenResponse(
@@ -179,6 +184,64 @@ public class AuthController {
         }
     }
 
+    @PostMapping("/login/otp/request")
+    public ResponseEntity<?> requestLoginOtp(@RequestBody Map<String, String> req) {
+        try {
+            userService.generateAndSendOtp(req.get("email"), "USER");
+            return ResponseEntity.ok(Map.of("message", "OTP sent to your email."));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/admin/login/otp/request")
+    public ResponseEntity<?> requestAdminLoginOtp(@RequestBody Map<String, String> req) {
+        try {
+            userService.generateAndSendOtp(req.get("email"), "ADMIN");
+            return ResponseEntity.ok(Map.of("message", "OTP sent to your email."));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/login/otp/verify")
+    public ResponseEntity<?> verifyLoginOtp(@RequestBody Map<String, String> req) {
+        return processOtpVerification(req.get("email"), req.get("otp"), "USER");
+    }
+
+    @PostMapping("/admin/login/verify")
+    public ResponseEntity<?> verifyAdminLoginOtp(@RequestBody Map<String, String> req) {
+        return processOtpVerification(req.get("email"), req.get("otp"), "ADMIN");
+    }
+
+    private ResponseEntity<?> processOtpVerification(String email, String otp, String role) {
+        try {
+            String accessToken = userService.verifyOtp(email, otp, role);
+
+            if ("ADMIN".equals(role)) {
+                return ResponseEntity.ok(new TokenResponse(
+                        accessToken,
+                        null,
+                        jwtUtil.getAdminAccessTokenExpirationSeconds()
+                ));
+            } else {
+                User user = userRepository.findByEmail(email).orElseThrow();
+                String refreshToken = jwtUtil.generateRefreshToken(user);
+                userService.saveRefreshToken(user, refreshToken);
+
+                return ResponseEntity.ok(new TokenResponse(
+                        accessToken,
+                        refreshToken,
+                        jwtUtil.getAccessTokenExpirationSeconds()
+                ));
+            }
+        } catch (Exception e) {
+            log.error("OTP verification failed for {}: {}", email, e.getMessage());
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", e.getMessage() != null ? e.getMessage() : "INVALID_OTP"));
+        }
+    }
+
     @GetMapping("/verify-email")
     public ResponseEntity<Void> verifyEmail(@RequestParam("token") String token) {
         String redirectUrl;
@@ -194,6 +257,12 @@ public class AuthController {
     private ResponseEntity<?> processLogin(String email, String password, String role) {
         try {
             String accessToken = userService.authenticate(email, password, role);
+
+            if ("ADMIN".equals(role)) {
+                userService.generateAndSendOtp(email, "ADMIN");
+                return ResponseEntity.ok(Map.of("status", "OTP_REQUIRED", "message", "OTP sent to your email."));
+            }
+
             User user = userRepository.findByEmail(email).orElseThrow();
 
             String refreshToken = jwtUtil.generateRefreshToken(user);

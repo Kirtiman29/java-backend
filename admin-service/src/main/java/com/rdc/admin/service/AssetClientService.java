@@ -29,7 +29,7 @@ public class AssetClientService {
         if (uuid == null || uuid.isBlank()) return;
 
         String url = assetServiceBaseUrl + "/api/assets/internal/" + uuid;
-        log.info("📡 Validating asset via internal bridge: {}", url);
+        log.info("Validating asset via internal bridge: {}", url);
 
         try {
             restTemplate.exchange(
@@ -38,16 +38,18 @@ public class AssetClientService {
                     new HttpEntity<>(buildInternalHeaders()),
                     Void.class
             );
-            log.info("✅ Asset validated successfully: {}", uuid);
+            log.info("Asset validated successfully: {}", uuid);
         } catch (Exception e) {
-            log.warn("⚠️ Asset {} no longer exists or validation failed, skipping reference update", uuid);
+            log.warn("Asset {} no longer exists or validation failed, skipping reference update", uuid);
         }
     }
 
     public AssetResponse upload(MultipartFile file, AssetType type) {
         String url = assetServiceBaseUrl + "/api/assets/upload";
+
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+        headers.set("X-INTERNAL-KEY", internalKey);
 
         MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
         body.add("file", file.getResource());
@@ -62,7 +64,7 @@ public class AssetClientService {
     public void deleteAsset(String uuid) {
         if (uuid == null || uuid.isBlank()) return;
 
-        // ✅ Uses injected URL for authorized deletion
+        //Uses injected URL for authorized deletion
         String url = assetServiceBaseUrl + "/api/assets/internal/" + uuid;
         log.info("🗑️ Sending authorized internal delete request for UUID: {}", uuid);
 
@@ -84,4 +86,5 @@ public class AssetClientService {
         headers.set("X-INTERNAL-KEY", internalKey);
         return headers;
     }
+
 }

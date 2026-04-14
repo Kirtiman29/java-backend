@@ -61,6 +61,12 @@ public class User {
     @Column(name = "token_expiry_date")
     private Instant resetTokenExpiryDate;
 
+    @Column(name = "otp")
+    private String otp;
+
+    @Column(name = "otp_expiry_date")
+    private Instant otpExpiryDate;
+
     // Manual setter to ensure consistency with Lombok's boolean generation
     public void setVerified(boolean verified) {
         this.isVerified = verified;

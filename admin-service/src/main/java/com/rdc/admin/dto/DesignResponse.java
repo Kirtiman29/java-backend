@@ -22,7 +22,7 @@ public class DesignResponse {
     private List<String> segments = new ArrayList<>();
     private String assetUuid;
 
-    // ✅ FIXED: Added tags to the response so the frontend can display them
+    //FIXED: Added tags to the response so the frontend can display them
     private List<String> tags;
     private String imageType;
     // Flags

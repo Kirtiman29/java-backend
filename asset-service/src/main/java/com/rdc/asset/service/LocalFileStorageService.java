@@ -18,7 +18,7 @@ public class LocalFileStorageService implements StorageProvider {
         Path filePath = Paths.get(storageLocation).resolve(path);
         Files.createDirectories(filePath.getParent());
         Files.copy(data, filePath, StandardCopyOption.REPLACE_EXISTING);
-        log.info("💾 File written: {}", filePath);
+        log.info("File written: {}", filePath);
     }
 
     @Override
@@ -33,15 +33,15 @@ public class LocalFileStorageService implements StorageProvider {
             Path path = Paths.get(storageLocation).resolve(relativePath);
 
             if (!Files.exists(path)) {
-                log.warn("⚠️ Physical file already missing from storage: {}", path);
+                log.warn("Physical file already missing from storage: {}", path);
                 return;
             }
 
             Files.delete(path);
-            log.info("🗑️ Successfully deleted physical file: {}", path);
+            log.info("Successfully deleted physical file: {}", path);
 
         } catch (IOException e) {
-            log.error("❌ Fatal error during physical file deletion for: {}", relativePath);
+            log.error("Fatal error during physical file deletion for: {}", relativePath);
             throw new RuntimeException("Failed to delete physical file: " + relativePath, e);
         }
     }

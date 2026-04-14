@@ -10,9 +10,5 @@ import java.util.List;
 public interface DesignDeletionRecordRepository
         extends JpaRepository<DesignDeletionRecord, Long> {
 
-    /**
-     * ✅ Custom Query: Fetches all audit records sorted by deletion time.
-     * This ensures the React frontend shows the latest purges (sales) at the top.
-     */
     List<DesignDeletionRecord> findAllByOrderByDeletedAtDesc();
 }

@@ -20,10 +20,10 @@ public class ContactMessage {
     private String message;
 
     @Enumerated(EnumType.STRING)
-    @Builder.Default // ✅ FIX: Ensures Builder uses the default value
+    @Builder.Default // FIX: Ensures Builder uses the default value
     private Status status = Status.NEW;
 
-    @Builder.Default // ✅ FIX: Ensures Builder uses the current time
+    @Builder.Default // FIX: Ensures Builder uses the current time
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 

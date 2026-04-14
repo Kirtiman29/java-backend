@@ -11,8 +11,7 @@ public class DesignPricingService {
 
         long price = design.getBasePriceCents();
 
-        if (Boolean.TRUE.equals(design.getSpecialOffer())
-                && design.getDiscountPercent() != null
+        if (design.getDiscountPercent() != null
                 && design.getDiscountPercent() > 0) {
 
             double discountMultiplier = (100.0 - design.getDiscountPercent()) / 100.0;

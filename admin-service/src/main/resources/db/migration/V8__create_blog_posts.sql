@@ -1,0 +1,21 @@
+CREATE TABLE IF NOT EXISTS blog_posts (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    slug VARCHAR(180) NOT NULL UNIQUE,
+    title VARCHAR(255) NOT NULL,
+    excerpt TEXT,
+    content LONGTEXT,
+    cover_asset_uuid VARCHAR(128),
+    cover_image_url VARCHAR(600),
+    category VARCHAR(120),
+    author_name VARCHAR(120),
+    reading_time_minutes INT,
+    published_at DATETIME,
+    published BOOLEAN DEFAULT FALSE,
+    featured BOOLEAN DEFAULT FALSE,
+    seo_title VARCHAR(255),
+    seo_description TEXT,
+    created_at DATETIME,
+    updated_at DATETIME,
+    INDEX idx_blog_posts_published_at (published, published_at),
+    INDEX idx_blog_posts_featured (published, featured, published_at)
+);

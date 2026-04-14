@@ -1,0 +1,27 @@
+package com.rdc.admin.dto;
+
+import lombok.Data;
+
+import java.util.ArrayList;
+import java.util.List;
+
+@Data
+public class FabricCreateRequest {
+
+    private String fabricIdentifier;
+    private String title;
+    private String description;
+
+    private Double pricePerMeter;
+    private Double stockMeters;
+
+    private String material;
+    private Double width;
+    private Integer gsm;
+    private String length;
+
+    private Long categoryId;
+    private String coverAssetUuid;
+    private List<String> galleryUuids = new ArrayList<>();
+    private Boolean active;
+}

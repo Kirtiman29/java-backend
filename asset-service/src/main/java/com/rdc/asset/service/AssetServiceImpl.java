@@ -28,17 +28,17 @@ public class AssetServiceImpl implements AssetService {
     @Transactional(readOnly = true)
     public void verifyExists(String uuid) {
         if (!assetRepo.existsByUuid(uuid)) {
-            log.error("❌ Validation Failed: Asset UUID {} not found in database", uuid);
+            log.error("Validation Failed: Asset UUID {} not found in database", uuid);
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Asset not found");
         }
-        log.info("✅ Asset existence verified for UUID: {}", uuid);
+        log.info("Asset existence verified for UUID: {}", uuid);
     }
 
 
     @Override
     @Transactional
     public void deleteAssetByUuid(String uuid) {
-        log.info("🗑️ Processing deletion for Asset UUID: {}", uuid);
+        log.info("Processing deletion for Asset UUID: {}", uuid);
 
         Optional<Asset> optionalAsset = assetRepo.findByUuid(uuid);
 
@@ -58,7 +58,7 @@ public class AssetServiceImpl implements AssetService {
 
         assetRepo.delete(asset);
 
-        log.info("✅ Successfully purged Asset UUID: {} from database and storage", uuid);
+        log.info("Successfully purged Asset UUID: {} from database and storage", uuid);
     }
 
     @Override
@@ -66,7 +66,7 @@ public class AssetServiceImpl implements AssetService {
     public AssetDto uploadAndCreateAsset(MultipartFile file, String title, Long sellerId, AssetType type) throws Exception {
         String storagePath = "vault/" + type.name() + "/" + System.currentTimeMillis() + "_" + file.getOriginalFilename();
 
-        log.info("🚀 Uploading asset: {} to path: {}", title, storagePath);
+        log.info("Uploading asset: {} to path: {}", title, storagePath);
         storageProvider.write(storagePath, file.getInputStream());
 
         Asset asset = Asset.builder()
@@ -80,7 +80,7 @@ public class AssetServiceImpl implements AssetService {
                 .build();
 
         Asset savedAsset = assetRepo.save(asset);
-        log.info("✅ Asset metadata saved with UUID: {}", savedAsset.getUuid());
+        log.info("Asset metadata saved with UUID: {}", savedAsset.getUuid());
 
         return mapToDto(savedAsset);
     }

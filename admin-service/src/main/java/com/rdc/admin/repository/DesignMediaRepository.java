@@ -13,6 +13,6 @@ public interface DesignMediaRepository extends JpaRepository<DesignMedia, Long> 
 
     List<DesignMedia> findByDesignId(Long designId);
 
-    // ✅ SINGLE media fetch (cover / preview)
+    //SINGLE media fetch (cover / preview)
     Optional<DesignMedia> findFirstByDesignIdAndAssetType(Long designId, AssetType assetType);
 }

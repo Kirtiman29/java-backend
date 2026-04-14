@@ -8,7 +8,10 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "categories")
-@Data @NoArgsConstructor @AllArgsConstructor @Builder
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class Category {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -17,19 +20,24 @@ public class Category {
     @Column(nullable = false, unique = true)
     private String name;
 
+    @Column(columnDefinition = "TEXT")
     private String description;
+
+    @Column(name = "image_url", length = 512)
     private String imageUrl;
 
-    @Builder.Default // FIX: Ensures builder uses 'true' by default
+    @Builder.Default
     private Boolean active = true;
 
-    @Builder.Default // FIX: Ensures builder uses '0' by default
+    @Builder.Default
+    @Column(name = "sort_order")
     private Integer sortOrder = 0;
 
     @CreationTimestamp
-    @Column(updatable = false)
+    @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
     @UpdateTimestamp
+    @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 }

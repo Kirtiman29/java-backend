@@ -12,4 +12,7 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long
 
     // ✅ Logout from all devices
     void deleteAllByUser(User user);
+
+    // ✅ Get all active tokens sorted by expiry
+    java.util.List<RefreshToken> findAllByUserOrderByExpiryDateDesc(User user);
 }

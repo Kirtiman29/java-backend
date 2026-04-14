@@ -59,7 +59,7 @@ public class OrderEmailService {
     @Async
     public void sendEmailLogic(Order order, List<OrderItem> items, String userEmail, String userName, byte[] invoicePdf) {
         try {
-            log.info("🚀 Initiating email delivery for Order #{}", order.getId());
+            log.info("Initiating email delivery for Order #{}", order.getId());
 
             Context context = new Context();
             context.setVariable("name", userName);

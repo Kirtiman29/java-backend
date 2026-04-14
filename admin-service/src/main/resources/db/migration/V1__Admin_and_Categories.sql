@@ -12,7 +12,6 @@ CREATE TABLE admin (
 CREATE TABLE categories (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(255) NOT NULL UNIQUE,
-    slug VARCHAR(255) NOT NULL UNIQUE,
     description TEXT,
     image_url VARCHAR(512),
     active BOOLEAN DEFAULT TRUE,

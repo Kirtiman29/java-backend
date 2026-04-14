@@ -1,4 +1,3 @@
-
   CREATE TABLE design_media (
       id BIGINT AUTO_INCREMENT PRIMARY KEY,
       design_id BIGINT NOT NULL,
@@ -32,7 +31,6 @@
   CREATE TABLE jobs (
       id BIGINT AUTO_INCREMENT PRIMARY KEY,
       title VARCHAR(255) NOT NULL,
-      slug VARCHAR(255) NOT NULL UNIQUE,
       description TEXT NOT NULL,
       location VARCHAR(255),
       experience_level VARCHAR(100),

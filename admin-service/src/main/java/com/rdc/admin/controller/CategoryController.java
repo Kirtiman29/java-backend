@@ -17,20 +17,12 @@ public class CategoryController {
 
     private final CategoryService categoryService;
 
-    /**
-     * ✅ PUBLIC: Get all categories for Storefront
-     * Matches SecurityConfig: .requestMatchers(HttpMethod.GET, "/api/categories/public").permitAll()
-     */
     @GetMapping("/api/categories/public")
     public ResponseEntity<List<CategoryResponse>> getAllCategoriesPublic() {
         List<CategoryResponse> categories = categoryService.getAllCategories();
         return ResponseEntity.ok(categories);
     }
 
-    /**
-     * 🔒 ADMIN: Create Category
-     * Matches SecurityConfig: .requestMatchers("/api/admin/**").hasRole("ADMIN")
-     */
     @PostMapping("/api/admin/categories")
     public ResponseEntity<CategoryResponse> createCategory(@Valid @RequestBody CategoryCreateRequest request) {
         CategoryResponse newCategory = categoryService.createCategory(request);

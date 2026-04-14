@@ -1,12 +1,13 @@
 package com.rdc.admin.util;
 
-import com.rdc.admin.dto.CategoryDto; // Ensure this import exists
+import com.rdc.admin.dto.CategoryDto;
 import com.rdc.admin.dto.DesignMediaDto;
 import com.rdc.admin.dto.DesignResponse;
 import com.rdc.admin.entity.Design;
 import com.rdc.admin.entity.DesignMedia;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+
 import java.util.List;
 import java.util.ArrayList;
 import java.util.stream.Collectors;
@@ -30,7 +31,7 @@ public class DesignMapper {
                 .discountPercent(design.getDiscountPercent())
                 .specialOffer(design.getSpecialOffer())
 
-                // ✅ Industrial Specifications Mapping
+                // Industrial Specifications Mapping
                 .repeatSize(design.getRepeatSize())
                 .designType(design.getDesignType())
                 .imageType(design.getImageType())
@@ -38,15 +39,8 @@ public class DesignMapper {
                 .colorCount(design.getColorCount())
                 .resolution(design.getResolution())
 
+                .segments(parseSegments(design.getSegment()))
 
-                .segments(
-                        design.getSegments() != null
-                                ? design.getSegments()
-                                .stream()
-                                .map(Enum::name)
-                                .collect(Collectors.toList())
-                                : new ArrayList<>()
-                )
                 .assetUuid(design.getAssetUuid())
 
                 .tags(design.getTags() != null ? new ArrayList<>(design.getTags()) : new ArrayList<>())
@@ -58,7 +52,7 @@ public class DesignMapper {
                 .newArrival(design.getNewArrival())
                 .luxury(design.getLuxury())
 
-                // ✅ Categories Mapping
+                // Categories Mapping
                 .categories(
                         design.getCategories() != null ?
                                 design.getCategories()
@@ -91,5 +85,16 @@ public class DesignMapper {
                 .type(media.getAssetType() != null ? media.getAssetType().name() : "IMAGE")
                 .role(media.getMediaRole() != null ? media.getMediaRole().name() : "GALLERY")
                 .build();
+    }
+
+    private List<String> parseSegments(String segmentValue) {
+        if (segmentValue == null || segmentValue.isBlank()) {
+            return new ArrayList<>();
+        }
+
+        return java.util.Arrays.stream(segmentValue.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isBlank())
+                .collect(Collectors.toList());
     }
 }

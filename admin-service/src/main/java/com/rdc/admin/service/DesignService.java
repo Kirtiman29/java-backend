@@ -3,7 +3,7 @@ package com.rdc.admin.service;
 import com.rdc.admin.dto.*;
 import com.rdc.admin.entity.*;
 import com.rdc.admin.exception.ResourceNotFoundException;
-import com.rdc.admin.repository.CategoryRepository; // ✅ Added Import
+import com.rdc.admin.repository.CategoryRepository;
 import com.rdc.admin.repository.DesignDeletionRecordRepository;
 import com.rdc.admin.repository.DesignMediaRepository;
 import com.rdc.admin.repository.DesignRepository;
@@ -16,8 +16,15 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
+import com.rdc.admin.util.CsvParserUtil;
+import org.springframework.web.multipart.MultipartFile;
+import java.io.InputStream;
 
 @Service
 @RequiredArgsConstructor
@@ -27,7 +34,7 @@ public class DesignService {
     private final DesignRepository repository;
     private final DesignMediaRepository mediaRepository;
     private final DesignDeletionRecordRepository deletionRecordRepository;
-    private final CategoryRepository categoryRepository; // ✅ Added Constructor Injection
+    private final CategoryRepository categoryRepository;
     private final DesignMapper mapper;
     private final DesignPricingService pricingService;
     private final AssetClientService assetClientService;
@@ -38,7 +45,7 @@ public class DesignService {
     public List<DesignResponse> getAllDesigns() {
         return repository.findByDraftFalseAndActiveTrue()
                 .stream()
-                .map(d -> mapper.toResponse(d, mediaRepository.findByDesignId(d.getId())))
+                .map(d -> (DesignResponse) mapper.toResponse(d, mediaRepository.findByDesignId(d.getId())))
                 .collect(Collectors.toList());
     }
 
@@ -52,15 +59,169 @@ public class DesignService {
     @Transactional(readOnly = true)
     public List<DesignResponse> getBySegment(String segment) {
         try {
-            Segment seg = Segment.valueOf(segment.toUpperCase());
-            return repository.findBySegmentAndActiveTrue(seg)
+            String seg = Segment.valueOf(segment.toUpperCase()).name();
+
+            return repository.findByDraftFalseAndActiveTrue()
                     .stream()
+                    .filter(d -> d.getSegment() != null)
+                    .filter(d -> java.util.Arrays.stream(d.getSegment().split(","))
+                            .map(String::trim)
+                            .anyMatch(saved -> saved.equalsIgnoreCase(seg)))
                     .filter(d -> !Boolean.TRUE.equals(d.getDraft()))
-                    .map(d -> mapper.toResponse(d, mediaRepository.findByDesignId(d.getId())))
+                    .map(d -> (DesignResponse) mapper.toResponse(d, mediaRepository.findByDesignId(d.getId())))
                     .collect(Collectors.toList());
         } catch (IllegalArgumentException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid segment");
         }
+    }
+
+    /* ================= BULK UPLOAD ================= */
+
+    @Transactional
+    public BulkUploadResponse processBulk(InputStream csvStream, MultipartFile[] assets) {
+        List<String> errors = new ArrayList<>();
+        int successCount = 0;
+
+        try {
+            // 1. Parse CSV
+            List<DesignCreateRequest> designRequests = CsvParserUtil.parse(csvStream);
+
+            // DEBUG LOG: Check if any rows were actually parsed
+            log.info("Parsed {} rows from CSV bulk upload", designRequests.size());
+
+            if (designRequests.isEmpty()) {
+                errors.add("The CSV file appears to be empty or has incorrect headers.");
+                return BulkUploadResponse.builder().successCount(0).failureCount(0).errors(errors).build();
+            }
+
+            // 2. Map files by identifier (D001 -> Files)
+            Map<String, List<MultipartFile>> assetMap = new HashMap<>();
+            if (assets != null) {
+                for (MultipartFile file : assets) {
+                    String filename = file.getOriginalFilename();
+                    if (filename != null && filename.contains("_")) {
+                        String identifier = filename.split("_")[0].toUpperCase();
+                        assetMap.computeIfAbsent(identifier, k -> new ArrayList<>()).add(file);
+                    }
+                }
+            }
+
+            // 3. Process each design
+            for (DesignCreateRequest req : designRequests) {
+                try {
+                    String idKey = req.getDesignIdentifier().toUpperCase();
+                    processSingleBulkDesign(req, assetMap.get(idKey));
+                    successCount++;
+                } catch (Exception e) {
+                    errors.add("Error processing " + req.getDesignIdentifier() + ": " + e.getMessage());
+                }
+            }
+        } catch (Exception e) {
+            errors.add("Fatal CSV Error: " + e.getMessage());
+        }
+
+        return BulkUploadResponse.builder()
+                .successCount(successCount)
+                .failureCount(errors.size())
+                .errors(errors)
+                .build();
+    }
+
+    public BulkUploadResponse bulkUploadFromGoogleSheet(String sheetLink, MultipartFile[] assets) {
+        try {
+            // 1. Clean the link and ensure it points to the CSV export
+            String csvUrl = sheetLink.split("/edit")[0] + "/export?format=csv";
+            
+            // 2. If you need a specific Tab (GID), handle the character joining
+            if (sheetLink.contains("gid=")) {
+                String gid = sheetLink.substring(sheetLink.indexOf("gid="));
+                csvUrl += "&" + gid; // Use '&' because 'format=csv' already used '?'
+            }
+
+            log.info("🔗 Fetching CSV from: {}", csvUrl);
+            InputStream stream = java.net.URI.create(csvUrl).toURL().openStream();
+            return processBulk(stream, assets); 
+        } catch (Exception e) {
+            return BulkUploadResponse.builder()
+                    .failureCount(1)
+                    .errors(List.of("Sheet Fetch Error: " + e.getMessage()))
+                    .build();
+        }
+    }
+
+    private void processSingleBulkDesign(DesignCreateRequest req, List<MultipartFile> files) {
+        List<String> galleryUuids = new ArrayList<>();
+
+        if (files != null) {
+            for (MultipartFile file : files) {
+                String originalFilename = file.getOriginalFilename();
+                if (originalFilename == null) {
+                    continue;
+                }
+
+                String name = originalFilename.toLowerCase();
+                AssetResponse uploaded = assetClientService.upload(file,
+                        name.contains("video") ? AssetType.VIDEO : AssetType.IMAGE);
+
+                if (name.contains("cover")) {
+                    req.setCoverAssetUuid(uploaded.getUuid());
+                } else if (name.contains("gallery")) {
+                    galleryUuids.add(uploaded.getUuid());
+                } else if (name.contains("video")) {
+                    req.setPreviewVideoUuid(uploaded.getUuid());
+                }
+            }
+        }
+
+        // Check UPSERT
+        Optional<Design> existing = repository.findByDesignIdentifier(req.getDesignIdentifier());
+        if (existing.isPresent()) {
+            if (!galleryUuids.isEmpty()) {
+                req.setGalleryUuids(galleryUuids);
+            }
+            updateDesign(existing.get().getId(), mapToUpdate(req));
+        } else {
+            if (req.getCoverAssetUuid() == null || req.getCoverAssetUuid().isBlank()) {
+                throw new RuntimeException("Missing mandatory cover image for new design");
+            }
+            req.setGalleryUuids(galleryUuids);
+            createDesign(req);
+        }
+    }
+
+    private DesignUpdateRequest mapToUpdate(DesignCreateRequest req) {
+        DesignUpdateRequest update = new DesignUpdateRequest();
+        update.setDesignIdentifier(req.getDesignIdentifier());
+        update.setTitle(req.getTitle());
+        update.setDescription(req.getDescription());
+        update.setBasePriceCents(req.getBasePriceCents());
+        update.setCategoryIds(req.getCategoryIds());
+        update.setRepeatSize(req.getRepeatSize());
+        update.setDesignType(req.getDesignType());
+        update.setImageType(req.getImageType());
+        update.setImageFormat(req.getImageFormat());
+        update.setColorCount(req.getColorCount());
+        update.setResolution(req.getResolution());
+        update.setTags(req.getTags());
+        update.setSegments(req.getSegments());
+        update.setActive(req.getActive());
+        update.setDraft(req.getDraft());
+        update.setTrending(req.getTrending());
+        update.setEditorsPick(req.getEditorsPick());
+        update.setNewArrival(req.getNewArrival());
+        update.setLuxury(req.getLuxury());
+        update.setDiscountPercent(req.getDiscountPercent());
+        update.setSpecialOffer(req.getSpecialOffer());
+        if (req.getCoverAssetUuid() != null && !req.getCoverAssetUuid().isBlank()) {
+            update.setCoverAssetUuid(req.getCoverAssetUuid());
+        }
+        if (req.getGalleryUuids() != null && !req.getGalleryUuids().isEmpty()) {
+            update.setGalleryUuids(req.getGalleryUuids());
+        }
+        if (req.getPreviewVideoUuid() != null && !req.getPreviewVideoUuid().isBlank()) {
+            update.setPreviewVideoUuid(req.getPreviewVideoUuid());
+        }
+        return update;
     }
 
     /* ================= CREATE ================= */
@@ -81,14 +242,13 @@ public class DesignService {
         design.setBasePriceCents(request.getBasePriceCents());
         design.setAssetUuid(request.getCoverAssetUuid());
 
-        // ✅ FIXED: Category Many-to-Many Logic
         if (request.getCategoryIds() != null && !request.getCategoryIds().isEmpty()) {
             List<Category> categories = categoryRepository.findAllById(request.getCategoryIds());
             design.getCategories().clear();
             design.getCategories().addAll(categories);
         }
 
-        // ✅ ADDED: Industrial Specifications
+        // Industrial Specifications
         design.setRepeatSize(request.getRepeatSize());
         design.setDesignType(request.getDesignType());
         design.setImageType(request.getImageType());
@@ -101,15 +261,7 @@ public class DesignService {
             design.getTags().addAll(request.getTags());
         }
 
-        if (request.getSegments() != null && !request.getSegments().isEmpty()) {
-            design.getSegments().clear();
-            design.getSegments().addAll(
-                    request.getSegments()
-                            .stream()
-                            .map(s -> Segment.valueOf(s.toUpperCase()))
-                            .toList()
-            );
-        }
+        design.setSegment(joinSegments(request.getSegments()));
 
         design.setActive(Boolean.TRUE.equals(request.getActive()));
         design.setDraft(Boolean.TRUE.equals(request.getDraft()));
@@ -165,20 +317,17 @@ public class DesignService {
 
         if (request.getDescription() != null) design.setDescription(request.getDescription());
 
-        // ✅ FIXED: Update Category IDs
         if (request.getCategoryIds() != null) {
             List<Category> categories = categoryRepository.findAllById(request.getCategoryIds());
             design.getCategories().clear();
             design.getCategories().addAll(categories);
         }
 
-        // ✅ ADDED: Update Industrial Specs
         if (request.getRepeatSize() != null) design.setRepeatSize(request.getRepeatSize());
         if (request.getDesignType() != null) design.setDesignType(request.getDesignType());
         if (request.getImageFormat() != null) design.setImageFormat(request.getImageFormat());
         if (request.getColorCount() != null) design.setColorCount(request.getColorCount());
         if (request.getResolution() != null) design.setResolution(request.getResolution());
-
         if (request.getImageType() != null) design.setImageType(request.getImageType());
 
         if (request.getTags() != null) {
@@ -187,13 +336,7 @@ public class DesignService {
         }
 
         if (request.getSegments() != null) {
-            design.getSegments().clear();
-            design.getSegments().addAll(
-                    request.getSegments()
-                            .stream()
-                            .map(s -> Segment.valueOf(s.toUpperCase()))
-                            .toList()
-            );
+            design.setSegment(joinSegments(request.getSegments()));
         }
 
         if (request.getBasePriceCents() != null) design.setBasePriceCents(request.getBasePriceCents());
@@ -293,16 +436,27 @@ public class DesignService {
             replaceMediaRole(designId, MediaRole.PREVIEW_VIDEO, List.of(request.getPreviewVideoUuid()), AssetType.VIDEO);
     }
 
+    private String joinSegments(List<String> segments) {
+        if (segments == null || segments.isEmpty()) {
+            return null;
+        }
+
+        return segments.stream()
+                .filter(s -> s != null && !s.isBlank())
+                .map(String::trim)
+                .map(String::toUpperCase)
+                .distinct()
+                .collect(Collectors.joining(","));
+    }
+
     private void replaceMediaRole(Long designId, MediaRole role, List<String> uuids, AssetType type) {
         List<DesignMedia> existing = mediaRepository.findByDesignId(designId)
                 .stream()
                 .filter(m -> m.getMediaRole() == role)
                 .collect(Collectors.toList());
 
-        List<String> newUuids = uuids;
-
         for (DesignMedia media : existing) {
-            if (!newUuids.contains(media.getAssetUuid())) {
+            if (!uuids.contains(media.getAssetUuid())) {
                 assetClientService.deleteAsset(media.getAssetUuid());
             }
         }
@@ -326,5 +480,4 @@ public class DesignService {
                 .sortOrder(order)
                 .build());
     }
-
 }

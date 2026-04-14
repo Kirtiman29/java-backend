@@ -22,7 +22,7 @@ public class BannerService {
     private final HomepageBannerRepository repository;
     private final AssetClientService assetClientService;
 
-    // ✅ Injected from application.properties or environment variables
+    //Injected from application.properties or environment variables
     @Value("${service.asset.url}")
     private String assetServiceBaseUrl;
 
@@ -49,7 +49,7 @@ public class BannerService {
         HomepageBanner banner = new HomepageBanner();
         updateBannerFields(banner, request);
 
-        // ✅ Uses injected base URL instead of hardcoded localhost
+        //Uses injected base URL instead of hardcoded localhost
         String imageUrl = assetServiceBaseUrl + "/api/assets/download/" + request.getBackgroundImageUuid();
         banner.setBackgroundImageUrl(imageUrl);
 
@@ -63,7 +63,7 @@ public class BannerService {
 
         if (request.getBackgroundImageUuid() != null) {
             assetClientService.validateAsset(request.getBackgroundImageUuid());
-            // ✅ Uses injected base URL instead of hardcoded localhost
+            //Uses injected base URL instead of hardcoded localhost
             banner.setBackgroundImageUrl(assetServiceBaseUrl + "/api/assets/download/" + request.getBackgroundImageUuid());
         }
 

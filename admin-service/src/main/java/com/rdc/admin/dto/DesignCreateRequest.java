@@ -6,7 +6,12 @@ import java.util.List;
 import java.util.ArrayList;
 import java.util.Set;
 
+import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
+
 @Data
+@NoArgsConstructor
+@AllArgsConstructor
 public class DesignCreateRequest {
     private String title;
     private String description;

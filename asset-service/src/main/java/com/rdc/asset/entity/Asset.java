@@ -37,7 +37,7 @@ public class Asset {
     @Column(name = "seller_id", nullable = false)
     private Long sellerId;
 
-    // ✅ ADDED TO MATCH DATABASE
+    //ADDED TO MATCH DATABASE
     @Column(name = "is_published")
     private Boolean isPublished = false;
 

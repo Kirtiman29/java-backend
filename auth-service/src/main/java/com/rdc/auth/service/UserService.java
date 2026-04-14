@@ -12,7 +12,7 @@ public interface UserService {
 
     String authenticate(String email, String password, String requiredRole);
 
-    String refreshAccessToken(String refreshToken);
+
 
 
     String authenticateOrCreateGoogleUser(String email, String name, String pictureUrl);
@@ -29,6 +29,12 @@ public interface UserService {
     void resetPassword(String token, String newPassword);
 
     void saveRefreshToken(User user, String refreshToken);
-
+    void saveRefreshToken(com.rdc.auth.entity.Admin admin, String refreshToken);
     void revokeAllRefreshTokens(User user);
+    void revokeAllRefreshTokens(com.rdc.auth.entity.Admin admin);
+    String refreshAccessToken(String token, boolean isAdmin);
+
+    void generateAndSendOtp(String email, String requiredRole);
+
+    String verifyOtp(String email, String otp, String requiredRole);
 }

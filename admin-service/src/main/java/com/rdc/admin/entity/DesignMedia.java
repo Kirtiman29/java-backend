@@ -20,7 +20,7 @@ public class DesignMedia {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "asset_type")
-    private AssetType assetType; // ✅ Uses the local Admin-service enum
+    private AssetType assetType; // Uses the local Admin-service enum
 
     @Enumerated(EnumType.STRING)
     @Column(name = "media_role")

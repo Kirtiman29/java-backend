@@ -3,8 +3,7 @@ package com.rdc.auth.config;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import io.jsonwebtoken.io.Decoders;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -51,6 +50,11 @@ public class SecurityConfig {
                         // ✅ Public Authentication Endpoints [cite: 828-831]
                         .requestMatchers(
                                 "/auth/login",
+                                "/auth/admin/login",
+                                "/auth/admin/login/otp/request",
+                                "/auth/admin/login/verify",
+                                "/auth/login/otp/request",
+                                "/auth/login/otp/verify",
                                 "/auth/signup",
                                 "/auth/google",
                                 "/auth/facebook",
@@ -81,7 +85,8 @@ public class SecurityConfig {
 
     @Bean
     public JwtDecoder jwtDecoder() {
-        SecretKeySpec secretKey = new SecretKeySpec(jwtSecret.getBytes(), "HmacSHA256");
+        byte[] keyBytes = Decoders.BASE64.decode(jwtSecret);
+        SecretKeySpec secretKey = new SecretKeySpec(keyBytes, "HmacSHA256");
         return NimbusJwtDecoder.withSecretKey(secretKey).build();
     }
 
@@ -130,8 +135,4 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder();
     }
 
-    @Bean
-    public AuthenticationManager authenticationManager(AuthenticationConfiguration authConfig) throws Exception {
-        return authConfig.getAuthenticationManager();
-    }
 }

@@ -1,7 +1,7 @@
 package com.rdc.asset.config;
 
 import com.rdc.asset.security.InternalKeyFilter;
-import io.jsonwebtoken.io.Decoders; // ✅ Added for Base64 decoding
+import io.jsonwebtoken.io.Decoders;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -42,7 +42,7 @@ public class SecurityConfig {
     }
 
     /**
-     * ✅ Main Security Filter Chain for the RDC Asset Service.
+     *  Main Security Filter Chain for the RDC Asset Service.
      */
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -58,8 +58,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/assets/*/download").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/assets/resume-upload").permitAll()
                         .requestMatchers("/api/assets/internal/**").permitAll()
-                        .requestMatchers(HttpMethod.DELETE, "/api/assets/internal/**").permitAll() // ✅ FIXED
-                        .requestMatchers(HttpMethod.POST, "/api/assets/upload").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/assets/internal/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/assets/upload").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/assets").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/assets/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
@@ -86,7 +86,7 @@ public class SecurityConfig {
     }
 
     /**
-     * ✅ UPDATED: Decodes incoming JWTs using Base64 decoding for the secret key.
+     * UPDATED: Decodes incoming JWTs using Base64 decoding for the secret key.
      */
     @Bean
     public JwtDecoder jwtDecoder() {

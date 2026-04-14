@@ -23,6 +23,9 @@ public class JwtUtil {
     @Value("${jwt.expiration.ms}")
     private long jwtExpirationMs;
 
+    @Value("${jwt.admin.expiration.ms:${jwt.expiration.ms}}")
+    private long adminJwtExpirationMs;
+
     @Value("${jwt.refresh.expiration.ms}")
     private long refreshExpirationMs;
 
@@ -59,11 +62,34 @@ public class JwtUtil {
                 .compact();
     }
 
+    public String generateToken(com.rdc.auth.entity.Admin admin) {
+        return Jwts.builder()
+                .setSubject(String.valueOf(admin.getId()))
+                .claim("email", admin.getEmail())
+                .claim("role", admin.getRole())
+                .claim("type", "access")
+                .setIssuedAt(new Date())
+                .setExpiration(new Date(System.currentTimeMillis() + adminJwtExpirationMs))
+                .signWith(signingKey, SignatureAlgorithm.HS256)
+                .compact();
+    }
+
     public String generateRefreshToken(User user) {
         return Jwts.builder()
                 .setSubject(String.valueOf(user.getId()))
                 .claim("type", "refresh")
                 .setId(UUID.randomUUID().toString()) // 🔥 MOST IMPORTANT FIX
+                .setIssuedAt(new Date())
+                .setExpiration(new Date(System.currentTimeMillis() + refreshExpirationMs))
+                .signWith(signingKey, SignatureAlgorithm.HS256)
+                .compact();
+    }
+
+    public String generateRefreshToken(com.rdc.auth.entity.Admin admin) {
+        return Jwts.builder()
+                .setSubject(String.valueOf(admin.getId()))
+                .claim("type", "refresh")
+                .setId(UUID.randomUUID().toString())
                 .setIssuedAt(new Date())
                 .setExpiration(new Date(System.currentTimeMillis() + refreshExpirationMs))
                 .signWith(signingKey, SignatureAlgorithm.HS256)
@@ -111,5 +137,9 @@ public class JwtUtil {
 
     public long getAccessTokenExpirationSeconds() {
         return jwtExpirationMs / 1000;
+    }
+
+    public long getAdminAccessTokenExpirationSeconds() {
+        return adminJwtExpirationMs / 1000;
     }
 }

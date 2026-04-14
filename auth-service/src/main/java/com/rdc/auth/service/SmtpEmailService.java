@@ -84,4 +84,28 @@ public class SmtpEmailService {
             return false;
         }
     }
+
+    public boolean sendOtpEmail(String toEmail, String otp) {
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+
+            Context context = new Context();
+            context.setVariable("otp", otp);
+
+            String htmlContent = templateEngine.process("otp-email", context);
+
+            helper.setFrom(fromEmail);
+            helper.setTo(toEmail);
+            helper.setSubject("Your OTP for Login");
+            helper.setText(htmlContent, true);
+
+            mailSender.send(message);
+            log.info("OTP email sent to: {}", toEmail);
+            return true;
+        } catch (Exception e) {
+            log.error("Failed to send OTP email: {}", e.getMessage());
+            return false;
+        }
+    }
 }

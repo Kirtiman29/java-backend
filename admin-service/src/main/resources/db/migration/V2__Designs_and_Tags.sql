@@ -2,7 +2,6 @@
 CREATE TABLE designs (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   title VARCHAR(255) NOT NULL,
-  slug VARCHAR(255) UNIQUE NOT NULL,
   description TEXT,
   asset_uuid VARCHAR(128),
   design_identifier VARCHAR(100) UNIQUE NOT NULL,
