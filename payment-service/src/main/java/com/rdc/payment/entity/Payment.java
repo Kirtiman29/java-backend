@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
+
 import java.time.Instant;
 
 @Entity
@@ -12,13 +13,21 @@ import java.time.Instant;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder // This enables the builder() method used in PaymentService
+@Builder
 public class Payment {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "purchase_type", nullable = false)
+    private String purchaseType;
+
+    @Column(name = "plan_id")
+    private Long planId;
+
+    @Column(name = "order_id")
     private Long orderId;
+
     private Long userId;
 
     private String gateway = "RAZORPAY";

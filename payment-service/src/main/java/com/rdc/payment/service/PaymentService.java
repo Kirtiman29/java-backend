@@ -2,6 +2,7 @@ package com.rdc.payment.service;
 
 import com.razorpay.RazorpayClient;
 import com.razorpay.Utils;
+import com.rdc.payment.dto.PaymentRequest;
 import com.rdc.payment.entity.Payment;
 import com.rdc.payment.entity.PaymentStatus;
 import com.rdc.payment.repo.PaymentRepository;
@@ -37,6 +38,9 @@ public class PaymentService {
     @Value("${service.order.url}")
     private String orderServiceUrl;
 
+    @Value("${service.subscription.url:http://localhost:8094}")
+    private String subscriptionServiceUrl;
+
     @Value("${internal.service.key}")
     private String internalServiceKey;
 
@@ -49,7 +53,22 @@ public class PaymentService {
     }
 
     @Transactional
-    public Payment initiatePayment(Long orderId, Long userId) throws Exception {
+    public Payment initiatePayment(PaymentRequest req, Long userId) throws Exception {
+        String purchaseType = req.getPurchaseType();
+
+        if (purchaseType == null || purchaseType.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "purchaseType is required");
+        }
+
+        return switch (purchaseType.toUpperCase()) {
+            case "ORDER" -> initiateOrderPayment(req.getOrderId(), userId);
+            case "SUBSCRIPTION" -> initiateSubscriptionPayment(req, userId);
+            default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported purchase type");
+        };
+    }
+
+    @Transactional
+    public Payment initiateOrderPayment(Long orderId, Long userId) throws Exception {
         Optional<Payment> existingPaid = paymentRepository
                 .findByUserIdAndOrderId(userId, orderId)
                 .stream()
@@ -74,6 +93,7 @@ public class PaymentService {
 
         // 3. Save Payment Record
         Payment payment = Payment.builder()
+                .purchaseType("ORDER")
                 .orderId(orderId)
                 .userId(userId)
                 .amountCents(amountCents)
@@ -84,6 +104,42 @@ public class PaymentService {
                 .build();
 
         log.info("💳 Payment Session Initiated: {} for Order: {}", payment.getGatewayOrderId(), orderId);
+        return paymentRepository.save(payment);
+    }
+
+    @Transactional
+    public Payment initiateSubscriptionPayment(PaymentRequest req, Long userId) throws Exception {
+        if (req.getPlanId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "planId is required for subscription payment");
+        }
+
+        if (req.getAmountCents() == null || req.getAmountCents() <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "amountCents must be greater than 0");
+        }
+
+        String currency = (req.getCurrency() == null || req.getCurrency().isBlank()) ? "INR" : req.getCurrency();
+        String receipt = (req.getReceipt() == null || req.getReceipt().isBlank())
+                ? "sub_plan_" + req.getPlanId() + "_user_" + userId
+                : req.getReceipt();
+
+        JSONObject orderRequest = new JSONObject();
+        orderRequest.put("amount", req.getAmountCents());
+        orderRequest.put("currency", currency);
+        orderRequest.put("receipt", receipt);
+
+        com.razorpay.Order razorpayOrder = razorpayClient.orders.create(orderRequest);
+
+        Payment payment = Payment.builder()
+                .purchaseType("SUBSCRIPTION")
+                .planId(req.getPlanId())
+                .userId(userId)
+                .amountCents(req.getAmountCents())
+                .gatewayOrderId(razorpayOrder.get("id"))
+                .status(PaymentStatus.CREATED)
+                .gateway("RAZORPAY")
+                .currency(currency)
+                .build();
+
         return paymentRepository.save(payment);
     }
 
@@ -193,7 +249,12 @@ public class PaymentService {
         p.setGatewaySignature(signature);
         paymentRepository.save(p);
 
-        notifyOrderService(p.getOrderId(), paymentId, paymentMode);
+        if ("ORDER".equalsIgnoreCase(p.getPurchaseType())) {
+            notifyOrderService(p.getOrderId(), paymentId, paymentMode);
+        } else if ("SUBSCRIPTION".equalsIgnoreCase(p.getPurchaseType())) {
+            notifySubscriptionService(p.getUserId(), p.getPlanId());
+        }
+
         return true;
     }
 
@@ -224,6 +285,37 @@ public class PaymentService {
 
             log.error("⚠️ Order Service notification failed: {}", e.getMessage());
 
+        }
+    }
+
+    private void notifySubscriptionService(Long userId, Long planId) {
+        try {
+            String url = subscriptionServiceUrl + "/api/internal/subscriptions/activate";
+
+            log.info("📡 Notifying Subscription Service: {}", url);
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("X-INTERNAL-KEY", internalServiceKey);
+            headers.setContentType(MediaType.APPLICATION_JSON);
+
+            Map<String, Object> body = Map.of(
+                    "userId", userId,
+                    "planId", planId
+            );
+
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);
+
+            ResponseEntity<Void> response = restTemplate.exchange(
+                    url,
+                    HttpMethod.POST,
+                    entity,
+                    Void.class
+            );
+            
+            log.info("✅ Subscription Service activation response: {}", response.getStatusCode());
+
+        } catch (Exception e) {
+            log.error("⚠️ Subscription Service notification failed: {}", e.getMessage());
         }
     }
 }

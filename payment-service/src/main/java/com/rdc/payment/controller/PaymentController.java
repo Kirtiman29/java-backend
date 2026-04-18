@@ -54,8 +54,13 @@ public class PaymentController {
             @RequestBody PaymentRequest req,
             @AuthenticationPrincipal Jwt jwt) throws Exception {
 
-        Long userId = (jwt != null) ? getUserIdFromJwt(jwt) : 1L;
-        Payment payment = paymentService.initiatePayment(req.getOrderId(), userId);
+        Long userId = (jwt != null) ? getUserIdFromJwt(jwt) : req.getUserId();
+
+        if (userId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "User ID is required");
+        }
+
+        Payment payment = paymentService.initiatePayment(req, userId);
 
         return ResponseEntity.ok(new PaymentInitResponse(
                 payment.getGatewayOrderId(),
