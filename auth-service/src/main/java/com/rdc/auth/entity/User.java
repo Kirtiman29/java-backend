@@ -67,6 +67,13 @@ public class User {
     @Column(name = "otp_expiry_date")
     private Instant otpExpiryDate;
 
+    @Builder.Default
+    @Column(name = "is_two_factor_enabled", nullable = false)
+    private boolean isTwoFactorEnabled = false;
+
+    @Column(name = "two_factor_secret")
+    private String twoFactorSecret;
+
     // Manual setter to ensure consistency with Lombok's boolean generation
     public void setVerified(boolean verified) {
         this.isVerified = verified;

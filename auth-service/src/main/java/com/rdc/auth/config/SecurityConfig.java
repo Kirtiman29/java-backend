@@ -49,6 +49,18 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // ✅ Public Authentication Endpoints [cite: 828-831]
                         .requestMatchers(
+                                "/api/auth/login",
+                                "/api/auth/admin/login",
+                                "/api/auth/admin/login/otp/request",
+                                "/api/auth/admin/login/verify",
+                                "/api/auth/login/otp/request",
+                                "/api/auth/login/otp/verify",
+                                "/api/auth/signup",
+                                "/api/auth/google",
+                                "/api/auth/facebook",
+                                "/api/auth/refresh",
+                                "/api/auth/verify-email",
+                                "/api/auth/password/**",
                                 "/auth/login",
                                 "/auth/admin/login",
                                 "/auth/admin/login/otp/request",
@@ -65,9 +77,9 @@ public class SecurityConfig {
                                 "/actuator/**"
                         ).permitAll()
 
-                        .requestMatchers("/api/users/**").permitAll()
+                        .requestMatchers("/api/users/**", "/users/**").permitAll()
 
-                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                        .requestMatchers("/api/admin/**", "/admin/**").hasRole("ADMIN")
 
                         .anyRequest().authenticated()
                 )

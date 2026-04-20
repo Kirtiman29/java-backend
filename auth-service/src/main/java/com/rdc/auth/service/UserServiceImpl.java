@@ -1,9 +1,16 @@
 package com.rdc.auth.service;
 
 import com.rdc.auth.dto.SignupRequest;
+import com.rdc.auth.dto.UpdateProfileRequest;
+import com.rdc.auth.dto.UserProfileResponse;
+import com.rdc.auth.dto.TwoFactorSetupResponse;
 import com.rdc.auth.entity.RefreshToken;
 import com.rdc.auth.entity.User;
 import com.rdc.auth.entity.VerificationToken;
+import com.google.zxing.BarcodeFormat;
+import com.google.zxing.client.j2se.MatrixToImageWriter;
+import com.google.zxing.common.BitMatrix;
+import com.google.zxing.qrcode.QRCodeWriter;
 import com.rdc.auth.repository.RefreshTokenRepository;
 import com.rdc.auth.repository.UserRepository;
 import com.rdc.auth.repository.VerificationTokenRepository;
@@ -14,7 +21,18 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import jakarta.transaction.Transactional;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.ResponseEntity;
 
+import com.warrenstrange.googleauth.GoogleAuthenticator;
+import com.warrenstrange.googleauth.GoogleAuthenticatorKey;
+
+import java.io.ByteArrayOutputStream;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.*;
 
@@ -31,12 +49,23 @@ public class UserServiceImpl implements UserService {
     private final PasswordEncoder passwordEncoder;
     private final SmtpEmailService emailService;
     private final JwtUtil jwtUtil;
+    // We will initialize GoogleAuthenticator locally
+    private final GoogleAuthenticator gAuth = new GoogleAuthenticator();
+
+    // We need RestTemplate to talk to subscription service
+    private final RestTemplate restTemplate = new RestTemplate();
 
     @Value("${frontend.url}")
     private String frontendUrl;
 
     @Value("${app.backend.url}")
     private String backendUrl;
+
+    @Value("${service.subscription.url:http://localhost:8094}")
+    private String subscriptionServiceUrl;
+
+    @Value("${internal.service.key:ORDER_PAYMENT_BRIDGE_KEY}")
+    private String internalServiceKey;
 
     /* =========================
        REFRESH TOKEN METHODS
@@ -234,6 +263,44 @@ public class UserServiceImpl implements UserService {
         if (!user.getRole().equalsIgnoreCase(requiredRole)) {
             throw new IllegalArgumentException("UNAUTHORIZED_ROLE");
         }
+
+        if (user.isTwoFactorEnabled()) {
+            throw new IllegalArgumentException("2FA_REQUIRED");
+        }
+
+        return jwtUtil.generateToken(user);
+    }
+
+    @Override
+    public String authenticateWith2FA(String email, String password, String code, String requiredRole) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new IllegalArgumentException("INVALID_CREDENTIALS"));
+
+        if (!user.isEnabled()) throw new IllegalArgumentException("USER_DISABLED");
+        if (!user.isVerified()) throw new IllegalArgumentException("EMAIL_NOT_VERIFIED");
+        if (!passwordEncoder.matches(password, user.getPasswordHash())) {
+            throw new IllegalArgumentException("INVALID_CREDENTIALS");
+        }
+        if (!user.getRole().equalsIgnoreCase(requiredRole)) {
+            throw new IllegalArgumentException("UNAUTHORIZED_ROLE");
+        }
+
+        if (!user.isTwoFactorEnabled() || user.getTwoFactorSecret() == null) {
+            throw new IllegalArgumentException("2FA_NOT_ENABLED");
+        }
+
+        int otpCode;
+        try {
+            otpCode = Integer.parseInt(code);
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("INVALID_2FA_CODE");
+        }
+
+        boolean isCodeValid = gAuth.authorize(user.getTwoFactorSecret(), otpCode);
+        if (!isCodeValid) {
+            throw new IllegalArgumentException("INVALID_2FA_CODE");
+        }
+
         return jwtUtil.generateToken(user);
     }
 
@@ -422,5 +489,206 @@ public class UserServiceImpl implements UserService {
         userRepository.save(user);
 
         return jwtUtil.generateToken(user);
+    }
+
+    /* =========================
+       USER PROFILE METHODS
+       ========================= */
+
+    @Override
+    public UserProfileResponse getUserProfile(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("USER_NOT_FOUND"));
+
+        UserProfileResponse response = UserProfileResponse.builder()
+                .id(user.getId())
+                .email(user.getEmail())
+                .displayName(user.getDisplayName())
+                .role(user.getRole())
+                .isVerified(user.isVerified())
+                .isTwoFactorEnabled(user.isTwoFactorEnabled())
+                .build();
+
+        // Fetch subscription and credit data from subscription-service
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("X-INTERNAL-KEY", internalServiceKey);
+            HttpEntity<Void> entity = new HttpEntity<>(headers);
+
+            String summaryUrl = subscriptionServiceUrl + "/api/internal/subscriptions/users/" + userId + "/summary";
+            ResponseEntity<Map> subResponse = restTemplate.exchange(summaryUrl, HttpMethod.GET, entity, Map.class);
+
+            if (subResponse.getStatusCode() == org.springframework.http.HttpStatus.OK && subResponse.getBody() != null) {
+                Map<String, Object> body = subResponse.getBody();
+
+                // Parse Subscription
+                if (body.containsKey("planName") && body.get("planName") != null) {
+                    UserProfileResponse.SubscriptionDetails subDetails = UserProfileResponse.SubscriptionDetails.builder()
+                            .planName((String) body.get("planName"))
+                            .status((String) body.get("status"))
+                            .build();
+
+                    if (body.get("expiresAt") != null) {
+                        // Handle potential different numeric formats from JSON parser
+                        Object expiresObj = body.get("expiresAt");
+                        if (expiresObj instanceof Number) {
+                            subDetails.setExpiresAt(((Number) expiresObj).longValue());
+                        }
+                    }
+                    response.setSubscription(subDetails);
+                }
+
+                // Parse Credits
+                if (body.containsKey("totalCredits") && body.get("totalCredits") != null) {
+                    UserProfileResponse.CreditDetails creditDetails = UserProfileResponse.CreditDetails.builder()
+                            .totalCredits(((Number) body.get("totalCredits")).intValue())
+                            .usedCredits(((Number) body.get("usedCredits")).intValue())
+                            .build();
+                    response.setCredits(creditDetails);
+                }
+            }
+        } catch (Exception e) {
+            log.error("Failed to fetch subscription details for user {}: {}", userId, e.getMessage());
+            // We don't throw an error here, just return the profile without subscription details
+        }
+
+        return response;
+    }
+
+    @Override
+    @Transactional
+    public UserProfileResponse updateProfile(Long userId, UpdateProfileRequest request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("USER_NOT_FOUND"));
+
+        if (request.getDisplayName() != null && !request.getDisplayName().trim().isEmpty()) {
+            user.setDisplayName(request.getDisplayName().trim());
+        }
+
+        if (request.getEmail() != null && !request.getEmail().trim().isEmpty() && !user.getEmail().equals(request.getEmail())) {
+            // Check if new email is already taken
+            if (userRepository.findByEmail(request.getEmail().trim()).isPresent()) {
+                throw new IllegalArgumentException("EMAIL_ALREADY_IN_USE");
+            }
+            user.setEmail(request.getEmail().trim());
+            user.setVerified(false); // Require re-verification
+            // Trigger verification email here if desired
+            resendVerificationEmail(user.getEmail());
+        }
+
+        if (request.getNewPassword() != null && !request.getNewPassword().isEmpty()) {
+            if (request.getOldPassword() == null || !passwordEncoder.matches(request.getOldPassword(), user.getPasswordHash())) {
+                throw new IllegalArgumentException("INVALID_OLD_PASSWORD");
+            }
+            user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
+        }
+
+        userRepository.save(user);
+        return getUserProfile(userId);
+    }
+
+    @Override
+    @Transactional
+    public TwoFactorSetupResponse setupTwoFactorAuth(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("USER_NOT_FOUND"));
+
+        if (user.isTwoFactorEnabled()) {
+            throw new IllegalArgumentException("2FA_ALREADY_ENABLED");
+        }
+
+        GoogleAuthenticatorKey key = gAuth.createCredentials();
+        String secret = key.getKey();
+
+        user.setTwoFactorSecret(secret);
+        userRepository.save(user);
+
+        // Provisioning URI for authenticator apps such as Google Authenticator and Authy.
+        String issuer = "RDC E-commerce";
+        String accountName = user.getEmail();
+        String provisioningUri = String.format("otpauth://totp/%s:%s?secret=%s&issuer=%s",
+                encodeOtpAuthComponent(issuer),
+                encodeOtpAuthComponent(accountName),
+                secret,
+                encodeOtpAuthComponent(issuer));
+
+        return TwoFactorSetupResponse.builder()
+                .secret(secret)
+                .qrCodeImageUri(generateQrCodeDataUri(provisioningUri))
+                .provisioningUri(provisioningUri)
+                .build();
+    }
+
+    private String generateQrCodeDataUri(String content) {
+        try {
+            QRCodeWriter qrCodeWriter = new QRCodeWriter();
+            BitMatrix bitMatrix = qrCodeWriter.encode(content, BarcodeFormat.QR_CODE, 240, 240);
+
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+            MatrixToImageWriter.writeToStream(bitMatrix, "PNG", outputStream);
+
+            return "data:image/png;base64," + Base64.getEncoder().encodeToString(outputStream.toByteArray());
+        } catch (Exception e) {
+            log.error("Failed to generate 2FA QR code: {}", e.getMessage());
+            throw new IllegalStateException("QR_CODE_GENERATION_FAILED", e);
+        }
+    }
+
+    private String encodeOtpAuthComponent(String value) {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8).replace("+", "%20");
+    }
+
+    @Override
+    @Transactional
+    public boolean verifyTwoFactorAuth(Long userId, String code) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("USER_NOT_FOUND"));
+
+        if (user.getTwoFactorSecret() == null) {
+            throw new IllegalArgumentException("2FA_NOT_SETUP");
+        }
+
+        int otpCode;
+        try {
+            otpCode = Integer.parseInt(code);
+        } catch (NumberFormatException e) {
+            return false;
+        }
+
+        boolean isCodeValid = gAuth.authorize(user.getTwoFactorSecret(), otpCode);
+
+        if (isCodeValid && !user.isTwoFactorEnabled()) {
+            user.setTwoFactorEnabled(true);
+            userRepository.save(user);
+        }
+
+        return isCodeValid;
+    }
+
+    @Override
+    @Transactional
+    public void disableTwoFactorAuth(Long userId, String code) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("USER_NOT_FOUND"));
+
+        if (!user.isTwoFactorEnabled()) {
+            throw new IllegalArgumentException("2FA_NOT_ENABLED");
+        }
+
+        int otpCode;
+        try {
+            otpCode = Integer.parseInt(code);
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("INVALID_2FA_CODE");
+        }
+
+        boolean isCodeValid = gAuth.authorize(user.getTwoFactorSecret(), otpCode);
+        if (!isCodeValid) {
+            throw new IllegalArgumentException("INVALID_2FA_CODE");
+        }
+
+        user.setTwoFactorEnabled(false);
+        user.setTwoFactorSecret(null);
+        userRepository.save(user);
     }
 }

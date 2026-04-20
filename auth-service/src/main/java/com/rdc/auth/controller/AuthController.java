@@ -22,7 +22,7 @@ import java.util.Collections;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/auth")
+@RequestMapping({"/api/auth", "/auth"})
 @RequiredArgsConstructor
 @Slf4j
 public class AuthController {
@@ -146,12 +146,12 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody LoginRequest req) {
-        return processLogin(req.getEmail(), req.getPassword(), "USER");
+        return processLogin(req.getEmail(), req.getPassword(), req.getTwoFactorCode(), "USER");
     }
 
     @PostMapping("/admin/login")
     public ResponseEntity<?> adminLogin(@RequestBody LoginRequest req) {
-        return processLogin(req.getEmail(), req.getPassword(), "ADMIN");
+        return processLogin(req.getEmail(), req.getPassword(), req.getTwoFactorCode(), "ADMIN");
     }
 
     @PostMapping("/password/request-reset")
@@ -254,9 +254,14 @@ public class AuthController {
         return ResponseEntity.status(HttpStatus.FOUND).location(URI.create(redirectUrl)).build();
     }
 
-    private ResponseEntity<?> processLogin(String email, String password, String role) {
+    private ResponseEntity<?> processLogin(String email, String password, String twoFactorCode, String role) {
         try {
-            String accessToken = userService.authenticate(email, password, role);
+            String accessToken;
+            if (twoFactorCode != null && !twoFactorCode.trim().isEmpty()) {
+                accessToken = userService.authenticateWith2FA(email, password, twoFactorCode, role);
+            } else {
+                accessToken = userService.authenticate(email, password, role);
+            }
 
             if ("ADMIN".equals(role)) {
                 userService.generateAndSendOtp(email, "ADMIN");
@@ -279,6 +284,11 @@ public class AuthController {
             if ("EMAIL_NOT_VERIFIED".equals(e.getMessage())) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN)
                         .body(Map.of("error", "EMAIL_NOT_VERIFIED"));
+            }
+
+            if ("2FA_REQUIRED".equals(e.getMessage())) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(Map.of("status", "2FA_REQUIRED", "message", "Two-factor authentication required."));
             }
 
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
