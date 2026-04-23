@@ -59,7 +59,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/assets/resume-upload").permitAll()
                         .requestMatchers("/api/assets/internal/**").permitAll()
                         .requestMatchers(HttpMethod.DELETE, "/api/assets/internal/**").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/assets/upload").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/assets/upload").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/assets/internal/upload").permitAll() // NEW: For admin-service uploads
+                        .requestMatchers(HttpMethod.POST, "/api/assets/ai-upload").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/assets").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/assets/**").hasRole("ADMIN")
                         .anyRequest().authenticated()

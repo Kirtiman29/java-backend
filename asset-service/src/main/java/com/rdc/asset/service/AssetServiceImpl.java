@@ -1,6 +1,7 @@
 package com.rdc.asset.service;
 
 import com.rdc.asset.dto.AssetDto;
+import com.rdc.asset.dto.AiAssetUploadResponse;
 import com.rdc.asset.entity.Asset;
 import com.rdc.asset.model.AssetType;
 import com.rdc.asset.repo.AssetRepository;
@@ -14,6 +15,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
@@ -83,6 +85,56 @@ public class AssetServiceImpl implements AssetService {
         log.info("Asset metadata saved with UUID: {}", savedAsset.getUuid());
 
         return mapToDto(savedAsset);
+    }
+    
+    @Override
+    @Transactional
+    public AiAssetUploadResponse uploadAiInput(MultipartFile file, String title, Long userId) throws Exception {
+        if (file == null || file.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "File is required");
+        }
+
+        String originalFilename = file.getOriginalFilename();
+        String safeTitle = (title == null || title.isBlank()) ? originalFilename : title;
+
+        String assetUuid = UUID.randomUUID().toString();
+
+        String extension = getExtension(originalFilename);
+        String storagePath = "ai-input/" + assetUuid + (extension != null ? "." + extension : "");
+
+        log.info("Uploading AI input asset: {} to path: {}", safeTitle, storagePath);
+        storageProvider.write(storagePath, file.getInputStream());
+
+        Asset asset = Asset.builder()
+                .uuid(assetUuid)
+                .title(safeTitle)
+                .filename(storagePath)
+                .originalFilename(originalFilename)
+                .contentType(file.getContentType())
+                .sizeBytes(file.getSize())
+                .assetType(AssetType.IMAGE) // Using IMAGE as default for AI inputs
+                .sellerId(userId) // Storing userId in sellerId for now as per current schema
+                .build();
+
+        assetRepo.save(asset);
+
+        String publicUrl = "/api/assets/download/" + assetUuid;
+
+        return AiAssetUploadResponse.builder()
+                .assetUuid(assetUuid)
+                .title(safeTitle)
+                .url(publicUrl)
+                .message("AI input uploaded successfully")
+                .build();
+    }
+    
+    private String getExtension(String filename) {
+        if (filename == null) return null;
+        int dotIndex = filename.lastIndexOf('.');
+        if (dotIndex > 0 && dotIndex < filename.length() - 1) {
+            return filename.substring(dotIndex + 1);
+        }
+        return null;
     }
 
     @Override

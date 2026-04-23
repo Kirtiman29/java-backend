@@ -1,6 +1,7 @@
 package com.rdc.asset.controller;
 
 import com.rdc.asset.dto.AssetDto;
+import com.rdc.asset.dto.AiAssetUploadResponse;
 import com.rdc.asset.entity.Asset;
 import com.rdc.asset.model.AssetType;
 import com.rdc.asset.repo.AssetRepository;
@@ -11,6 +12,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.*;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
@@ -35,7 +38,7 @@ public class AssetController {
         return ResponseEntity.ok(assetService.getAllAssets());
     }
 
-    @PostMapping("/upload")
+    @PostMapping({"/upload", "/internal/upload"})
     public ResponseEntity<AssetDto> uploadAsset(
             @RequestParam("file") MultipartFile file,
             @RequestParam("title") String title,
@@ -44,6 +47,18 @@ public class AssetController {
 
         AssetDto result = assetService.uploadAndCreateAsset(file, title, sellerId, type);
         return new ResponseEntity<>(result, HttpStatus.CREATED);
+    }
+    
+    @PostMapping("/ai-upload")
+    public ResponseEntity<AiAssetUploadResponse> uploadAiInput(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "title", required = false) String title,
+            @AuthenticationPrincipal Jwt jwt
+    ) throws Exception {
+        Long userId = Long.parseLong(jwt.getSubject());
+
+        AiAssetUploadResponse response = assetService.uploadAiInput(file, title, userId);
+        return ResponseEntity.ok(response);
     }
 
     @PostMapping("/resume-upload")

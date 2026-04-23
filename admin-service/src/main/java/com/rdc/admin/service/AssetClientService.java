@@ -45,7 +45,7 @@ public class AssetClientService {
     }
 
     public AssetResponse upload(MultipartFile file, AssetType type) {
-        String url = assetServiceBaseUrl + "/api/assets/upload";
+        String url = assetServiceBaseUrl + "/api/assets/internal/upload";
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.MULTIPART_FORM_DATA);

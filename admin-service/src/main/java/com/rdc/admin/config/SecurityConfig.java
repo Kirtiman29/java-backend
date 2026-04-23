@@ -108,6 +108,9 @@ public class SecurityConfig {
 
                         /* ADMIN LOGIN */
                         .requestMatchers("/api/admin/login").permitAll()
+                        
+                        /* AI TOOLS API */
+                        .requestMatchers("/api/ai/use").authenticated()
 
                         /* ADMIN PROTECTED APIs */
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
