@@ -143,21 +143,29 @@
     <tr>
         <td>
             <strong style="color:#666; text-transform: uppercase; font-size: 10px;">Bill To</strong><br/>
-            <strong th:text="${order.customerName}"></strong><br/>
+            <div th:if="${order.purchaseType == 'SUBSCRIPTION_DOWNLOAD'}">
+                <strong th:text="${order.customerName}"></strong><br/>
+                <span>Subscription design download</span><br/>
+                <strong>Email:</strong> <span th:text="${order.customerEmail}"></span>
+            </div>
 
-            <span th:if="${order.organizationName != null && !order.organizationName.isEmpty()}" th:text="${order.organizationName}"></span><br th:if="${order.organizationName != null && !order.organizationName.isEmpty()}"/>
+            <div th:unless="${order.purchaseType == 'SUBSCRIPTION_DOWNLOAD'}">
+                <strong th:text="${order.customerName}"></strong><br/>
 
-            <span th:text="${order.addressOne}"></span><br/>
-            <span th:if="${order.addressTwo != null && !order.addressTwo.isEmpty()}" th:text="${order.addressTwo}"></span><br th:if="${order.addressTwo != null && !order.addressTwo.isEmpty()}"/>
+                <span th:if="${order.organizationName != null && !order.organizationName.isEmpty()}" th:text="${order.organizationName}"></span><br th:if="${order.organizationName != null && !order.organizationName.isEmpty()}"/>
 
-            <span th:text="${order.city}"></span>, <span th:text="${order.billingState}"></span> <span th:text="${order.pincode}"></span><br/>
-            India<br/>
+                <span th:text="${order.addressOne}"></span><br/>
+                <span th:if="${order.addressTwo != null && !order.addressTwo.isEmpty()}" th:text="${order.addressTwo}"></span><br th:if="${order.addressTwo != null && !order.addressTwo.isEmpty()}"/>
 
-            <div style="margin-top: 5px;">
-                <strong>Phone:</strong> <span th:text="${order.customerPhone}"></span><br/>
-                <strong>Email:</strong> <span th:text="${order.customerEmail}"></span><br/>
-                <strong th:if="${order.customerGstin != null && !order.customerGstin.isEmpty()}">GSTIN:</strong>
-                <span th:text="${order.customerGstin}"></span>
+                <span th:text="${order.city}"></span>, <span th:text="${order.billingState}"></span> <span th:text="${order.pincode}"></span><br/>
+                India<br/>
+
+                <div style="margin-top: 5px;">
+                    <strong>Phone:</strong> <span th:text="${order.customerPhone}"></span><br/>
+                    <strong>Email:</strong> <span th:text="${order.customerEmail}"></span><br/>
+                    <strong th:if="${order.customerGstin != null && !order.customerGstin.isEmpty()}">GSTIN:</strong>
+                    <span th:text="${order.customerGstin}"></span>
+                </div>
             </div>
         </td>
         <td style="text-align:right;">
@@ -172,7 +180,7 @@
                 </tr>
                 <tr>
                     <td style="color:#666;padding-right:15px;">Place of Supply:</td>
-                    <td th:text="${order.billingState}"></td>
+                    <td th:text="${order.purchaseType == 'SUBSCRIPTION_DOWNLOAD' ? 'Digital Subscription' : order.billingState}"></td>
                 </tr>
             </table>
         </td>
@@ -266,9 +274,16 @@
 
 <div class="footer">
     <strong>Terms &amp; Conditions</strong><br/>
-    1. <strong>Exclusivity:</strong> This design is sold with exclusive rights and has been permanently removed from the RDC Archive.<br/>
-    2. <strong>Non-Refundable:</strong> Due to the digital nature of assets, purchases are non-refundable once master files are accessed.<br/>
-    3. <strong>Usage:</strong> Master files provided are intended for industrial production. Please check color profiles before bulk printing.
+    <div th:if="${order.purchaseType == 'SUBSCRIPTION_DOWNLOAD'}">
+        1. <strong>Subscription Fulfillment:</strong> This design access is fulfilled against an active subscription quota.<br/>
+        2. <strong>TIFF Delivery:</strong> TIFF files are shared manually by the RDC team after request review.<br/>
+        3. <strong>Usage:</strong> Please verify color profiles and production settings before bulk printing.
+    </div>
+    <div th:unless="${order.purchaseType == 'SUBSCRIPTION_DOWNLOAD'}">
+        1. <strong>Exclusivity:</strong> This design is sold with exclusive rights and has been permanently removed from the RDC Archive.<br/>
+        2. <strong>Non-Refundable:</strong> Due to the digital nature of assets, purchases are non-refundable once master files are accessed.<br/>
+        3. <strong>Usage:</strong> Master files provided are intended for industrial production. Please check color profiles before bulk printing.
+    </div>
 </div>
 
 </body>

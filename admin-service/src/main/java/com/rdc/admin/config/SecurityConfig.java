@@ -112,6 +112,9 @@ public class SecurityConfig {
                         /* AI TOOLS API */
                         .requestMatchers("/api/ai/use").authenticated()
 
+                        /* STATIC / GENERATED AI OUTPUT FILES */
+                        .requestMatchers("/storage/**").permitAll()
+
                         /* ADMIN PROTECTED APIs */
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
 

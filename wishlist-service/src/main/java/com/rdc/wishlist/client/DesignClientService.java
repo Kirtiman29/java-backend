@@ -3,13 +3,20 @@ package com.rdc.wishlist.client;
 import com.rdc.wishlist.dto.DesignDto;
 import com.rdc.wishlist.exception.DesignNotAvailableException;
 import com.rdc.wishlist.exception.DesignNotFoundException;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 @Component
 @RequiredArgsConstructor
@@ -21,47 +28,47 @@ public class DesignClientService {
     @Value("${service.design.url}")
     private String designServiceUrl;
 
-    /**
-     * Fetches design metadata from the public endpoint of the Admin Service.
-     * No internal headers required for public access.
-     */
     public DesignDto getDesignById(Long designId) {
-
         String url = designServiceUrl + "/api/public/designs/" + designId;
-
-        log.debug("📡 Requesting metadata from Admin Service: {}", url);
+        log.debug("Requesting metadata from Admin Service: {}", url);
 
         try {
-            // Updated to use direct GET since it's a public endpoint
-            DesignDto design = restTemplate.getForObject(url, DesignDto.class);
+            HttpHeaders headers = new HttpHeaders();
+            String token = getAuthorizationHeader();
+            if (token != null) {
+                headers.set("Authorization", token);
+            }
 
+            ResponseEntity<DesignDto> response = restTemplate.exchange(
+                    url,
+                    HttpMethod.GET,
+                    new HttpEntity<>(headers),
+                    DesignDto.class
+            );
+
+            DesignDto design = response.getBody();
             if (design == null) {
                 throw new DesignNotFoundException("Design not found: " + designId);
             }
 
             return design;
-
         } catch (HttpClientErrorException e) {
-
             if (e.getStatusCode() == HttpStatus.NOT_FOUND) {
                 throw new DesignNotFoundException("Design metadata not found for ID: " + designId);
             }
+            if (e.getStatusCode() == HttpStatus.FORBIDDEN || e.getStatusCode() == HttpStatus.BAD_REQUEST) {
+                throw new DesignNotAvailableException("Design is not available for this user.");
+            }
 
-            log.error("❌ Admin Service error ({}): {}", e.getStatusCode(), e.getResponseBodyAsString());
+            log.error("Admin Service error ({}): {}", e.getStatusCode(), e.getResponseBodyAsString());
             throw new RuntimeException("Communication failure with Admin Service");
-
         } catch (Exception e) {
-
-            log.error("❌ Critical fetch failure: {}", e.getMessage());
+            log.error("Critical fetch failure: {}", e.getMessage());
             throw new RuntimeException("Internal Service Communication Error");
         }
     }
 
-    /**
-     * Validates if a design is eligible to be added to a wishlist.
-     */
     public void validateDesignForWishlist(Long designId) {
-
         DesignDto design = getDesignById(designId);
 
         String designTitle = design.getTitle() != null ? design.getTitle() : "ID: " + designId;
@@ -75,5 +82,17 @@ public class DesignClientService {
             throw new DesignNotAvailableException(
                     "Design '" + designTitle + "' is currently inactive.");
         }
+    }
+
+    private String getAuthorizationHeader() {
+        ServletRequestAttributes attributes =
+                (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+
+        if (attributes != null) {
+            HttpServletRequest request = attributes.getRequest();
+            return request.getHeader("Authorization");
+        }
+
+        return null;
     }
 }

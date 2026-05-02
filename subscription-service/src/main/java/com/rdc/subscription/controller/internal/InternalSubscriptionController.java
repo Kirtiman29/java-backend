@@ -1,7 +1,9 @@
 package com.rdc.subscription.controller.internal;
 
 import com.rdc.subscription.dto.internal.*;
+import com.rdc.subscription.dto.SubscriptionSummaryResponse;
 import com.rdc.subscription.service.EntitlementService;
+import com.rdc.subscription.service.SubscriptionQueryService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -13,6 +15,7 @@ import org.springframework.web.bind.annotation.*;
 public class InternalSubscriptionController {
 
     private final EntitlementService entitlementService;
+    private final SubscriptionQueryService subscriptionQueryService;
 
     @PostMapping("/validate-ai")
     public ResponseEntity<AiValidationResponse> validateAi(
@@ -40,5 +43,10 @@ public class InternalSubscriptionController {
             @Valid @RequestBody ConsumeDesignRequest request
     ) {
         return ResponseEntity.ok(entitlementService.consumeDesignUsage(request));
+    }
+
+    @GetMapping("/users/{userId}/summary")
+    public ResponseEntity<SubscriptionSummaryResponse> getSubscriptionSummary(@PathVariable Long userId) {
+        return ResponseEntity.ok(subscriptionQueryService.getSubscriptionSummary(userId));
     }
 }

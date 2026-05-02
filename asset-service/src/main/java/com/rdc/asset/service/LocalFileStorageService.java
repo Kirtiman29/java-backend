@@ -4,6 +4,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import java.io.*;
 import java.nio.file.*;
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 
 @Service
@@ -12,6 +13,12 @@ public class LocalFileStorageService implements StorageProvider {
 
     @Value("${app.storage.location:./data/uploads}")
     private String storageLocation;
+
+    @PostConstruct
+    void logResolvedStorageLocation() {
+        Path resolved = Paths.get(storageLocation).toAbsolutePath().normalize();
+        log.info("Asset storage root resolved to: {}", resolved);
+    }
 
     @Override
     public void write(String path, InputStream data) throws IOException {

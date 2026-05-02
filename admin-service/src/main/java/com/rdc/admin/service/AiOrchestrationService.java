@@ -19,7 +19,7 @@ public class AiOrchestrationService {
     private final FastApiClient fastApiClient;
 
     public AiToolResponse executeTool(Long userId, AiToolRequest request) {
-        int cost = aiToolCostService.getCost(request.getToolName());
+        int cost = aiToolCostService.getCost(request.getToolName(), request.getParams());
 
         SubscriptionAiValidationResponse validation =
                 subscriptionServiceClient.validateAi(userId, request.getToolName(), cost);
@@ -34,7 +34,7 @@ public class AiOrchestrationService {
         FastApiExecuteRequest fastApiRequest = FastApiExecuteRequest.builder()
                 .requestId(UUID.randomUUID().toString())
                 .userId(userId)
-                .toolName(request.getToolName())
+                .toolName(mapToolName(request.getToolName()))
                 .inputUrl(request.getInputUrl())
                 .params(request.getParams())
                 .build();
@@ -59,5 +59,12 @@ public class AiOrchestrationService {
                 .outputData(fastApiResponse.getOutputData())
                 .remainingCredits(consume != null ? consume.getAvailableCredits() : null)
                 .build();
+    }
+
+    private String mapToolName(String toolName) {
+        if ("IMAGE_TO_IMAGE".equals(toolName)) {
+            return "TEXTILE_GENERATOR";
+        }
+        return toolName;
     }
 }

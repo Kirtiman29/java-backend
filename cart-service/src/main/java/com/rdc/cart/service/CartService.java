@@ -17,5 +17,7 @@ public interface CartService {
 
     void clearCart(Long userId);
 
+    void removeDesignFromAllCarts(Long designId);
+
     long getCartItemCount(Long userId);
 }

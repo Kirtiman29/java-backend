@@ -6,6 +6,8 @@ import com.rdc.order.dto.CartItemDto;
 import com.rdc.order.dto.OrderItemResponse;
 import com.rdc.order.dto.OrderRequest;
 import com.rdc.order.dto.OrderResponse;
+import com.rdc.order.dto.SubscriptionDownloadOrderRequest;
+import com.rdc.order.dto.SubscriptionDownloadOrderResponse;
 import com.rdc.order.entity.Order;
 import com.rdc.order.entity.OrderItem;
 import com.rdc.order.exception.EmptyCartException;
@@ -18,12 +20,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Service
@@ -44,6 +48,12 @@ public class OrderServiceImpl implements OrderService {
 
     @Value("${service.admin.url}")
     private String adminServiceUrl;
+
+    @Value("${service.cart.url}")
+    private String cartServiceUrl;
+
+    @Value("${service.wishlist.url}")
+    private String wishlistServiceUrl;
 
     // Define company state for GST logic
     private static final String COMPANY_STATE = "MAHARASHTRA";
@@ -120,6 +130,50 @@ public class OrderServiceImpl implements OrderService {
         return mapToResponse(saved);
     }
 
+    @Override
+    public SubscriptionDownloadOrderResponse createSubscriptionDownloadOrder(SubscriptionDownloadOrderRequest request) {
+        Map<String, Object> userMeta = authServiceClient.getUserMetadata(request.getUserId());
+        String email = userMeta != null ? (String) userMeta.get("email") : null;
+        String name = userMeta != null ? (String) userMeta.get("name") : "Industrial User";
+
+        Order order = Order.builder()
+                .userId(request.getUserId())
+                .status(OrderStatus.PAID.name())
+                .purchaseType("SUBSCRIPTION_DOWNLOAD")
+                .customerName(name)
+                .customerEmail(email)
+                .invoiceType("SUBSCRIPTION")
+                .transactionId("SUB-" + request.getUserId() + "-" + request.getDesignId() + "-" + System.currentTimeMillis())
+                .paymentMode("SUBSCRIPTION")
+                .subTotalCents(0L)
+                .cgstCents(0L)
+                .sgstCents(0L)
+                .grandTotalCents(0L)
+                .totalAmountCents(0L)
+                .build();
+
+        order.addItem(OrderItem.builder()
+                .designId(request.getDesignId())
+                .designIdentifier(request.getDesignIdentifier())
+                .assetUuid(request.getAssetUuid())
+                .designTitle(request.getDesignTitle())
+                .priceCents(0L)
+                .quantity(1)
+                .build());
+
+        Order saved = orderRepository.saveAndFlush(order);
+
+        if (email != null && !email.isBlank()) {
+            orderEmailService.sendSubscriptionDownloadConfirmation(saved, email, name, request.getRemainingDesigns());
+        }
+
+        return SubscriptionDownloadOrderResponse.builder()
+                .orderId(saved.getId())
+                .status(saved.getStatus())
+                .purchaseType(saved.getPurchaseType())
+                .build();
+    }
+
     /* ================= FULFILLMENT & STATUS ================= */
 
     @Override
@@ -139,11 +193,7 @@ public class OrderServiceImpl implements OrderService {
             // ✅ FIX: Clear cart only when payment is successful
             cartServiceClient.clearCart(order.getUserId());
 
-            List<OrderItem> items = order.getItems();
-            items.forEach(item -> {
-                markDesignAsSoldInternal(item.getDesignId());
-                purgeDesignInternal(item.getDesignId(), orderId);
-            });
+            fulfillExclusiveDesignPurchase(order);
 
             try {
                 Map<String, Object> userMeta = authServiceClient.getUserMetadata(order.getUserId());
@@ -178,6 +228,45 @@ public class OrderServiceImpl implements OrderService {
         } catch (Exception e) { log.error("❌ Purge failed: {}", e.getMessage()); }
     }
 
+    private void fulfillExclusiveDesignPurchase(Order order) {
+        if (order.getItems() == null || order.getItems().isEmpty()) {
+            return;
+        }
+
+        order.getItems().stream()
+                .map(OrderItem::getDesignId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .forEach(designId -> {
+                    markDesignAsSoldInternal(designId);
+                    purgeDesignInternal(designId, order.getId());
+                    removeDesignFromAllCartsInternal(designId);
+                    removeDesignFromAllWishlistsInternal(designId);
+                });
+    }
+
+    private void removeDesignFromAllCartsInternal(Long designId) {
+        try {
+            String url = cartServiceUrl + "/api/cart/internal/design/" + designId;
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("X-INTERNAL-KEY", internalServiceKey);
+            restTemplate.exchange(url, HttpMethod.DELETE, new HttpEntity<>(headers), Void.class);
+        } catch (Exception e) {
+            log.error("âŒ Failed to remove design {} from carts: {}", designId, e.getMessage());
+        }
+    }
+
+    private void removeDesignFromAllWishlistsInternal(Long designId) {
+        try {
+            String url = wishlistServiceUrl + "/api/wishlist/internal/design/" + designId;
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("X-INTERNAL-KEY", internalServiceKey);
+            restTemplate.exchange(url, HttpMethod.DELETE, new HttpEntity<>(headers), Void.class);
+        } catch (Exception e) {
+            log.error("âŒ Failed to remove design {} from wishlists: {}", designId, e.getMessage());
+        }
+    }
+
     /* ================= MAPPING & READS ================= */
 
     private OrderResponse mapToResponse(Order order) {
@@ -185,6 +274,7 @@ public class OrderServiceImpl implements OrderService {
                 .id(order.getId())
                 .userId(order.getUserId())
                 .status(order.getStatus())
+                .purchaseType(order.getPurchaseType())
                 .createdAt(order.getCreatedAt())
                 .updatedAt(order.getUpdatedAt())
                 .subTotalCents(order.getSubTotalCents())
@@ -250,6 +340,9 @@ public class OrderServiceImpl implements OrderService {
     @Override @Transactional(readOnly = true)
     public boolean hasUserPaidForAsset(Long userId, String assetUuid) {
         List<Order> paidOrders = orderRepository.findByUserIdAndStatus(userId, OrderStatus.PAID.name());
-        return paidOrders.stream().flatMap(o -> o.getItems().stream()).anyMatch(i -> assetUuid.equals(i.getAssetUuid()));
+        return paidOrders.stream()
+                .filter(order -> !"SUBSCRIPTION_DOWNLOAD".equalsIgnoreCase(order.getPurchaseType()))
+                .flatMap(o -> o.getItems().stream())
+                .anyMatch(i -> assetUuid.equals(i.getAssetUuid()));
     }
 }

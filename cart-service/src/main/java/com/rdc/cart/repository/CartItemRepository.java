@@ -36,6 +36,10 @@ public interface CartItemRepository extends JpaRepository<CartItem, Long> {
     @Query("UPDATE CartItem c SET c.deleted = true, c.updatedAt = CURRENT_TIMESTAMP WHERE c.userId = :userId AND c.deleted = false")
     int softDeleteAllByUserId(@Param("userId") Long userId);
 
+    @Modifying
+    @Query("UPDATE CartItem c SET c.deleted = true, c.updatedAt = CURRENT_TIMESTAMP WHERE c.designId = :designId AND c.deleted = false")
+    int softDeleteAllByDesignId(@Param("designId") Long designId);
+
     /**
      * Count active items in user's cart[cite: 291].
      */

@@ -16,6 +16,7 @@ public class OrderResponse {
     private Long id;
     private Long userId;
     private String status;
+    private String purchaseType;
     private Instant createdAt;
     private Instant updatedAt;
 

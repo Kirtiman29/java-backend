@@ -76,6 +76,12 @@ public class Design {
     @Column(name = "asset_id")
     private Long assetId;
 
+    @Column(name = "subscription_only")
+    private Boolean subscriptionOnly = false;
+
+    @Column(name = "download_tiff_uuid", length = 128)
+    private String downloadTiffUuid;
+
     // Many-to-Many Join Table Relationship
     @ManyToMany
     @JoinTable(

@@ -39,6 +39,7 @@ public class DesignUpdateRequest {
     private Boolean editorsPick;
     private Boolean newArrival;
     private Boolean luxury;
+    private Boolean subscriptionOnly;
 
     private List<String> tags = new ArrayList<>();
 

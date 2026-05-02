@@ -18,9 +18,11 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 import com.rdc.admin.util.CsvParserUtil;
 import org.springframework.web.multipart.MultipartFile;
@@ -210,6 +212,7 @@ public class DesignService {
         update.setEditorsPick(req.getEditorsPick());
         update.setNewArrival(req.getNewArrival());
         update.setLuxury(req.getLuxury());
+        update.setSubscriptionOnly(req.getSubscriptionOnly());
         update.setDiscountPercent(req.getDiscountPercent());
         update.setSpecialOffer(req.getSpecialOffer());
         if (req.getCoverAssetUuid() != null && !req.getCoverAssetUuid().isBlank()) {
@@ -269,6 +272,8 @@ public class DesignService {
         design.setEditorsPick(Boolean.TRUE.equals(request.getEditorsPick()));
         design.setNewArrival(Boolean.TRUE.equals(request.getNewArrival()));
         design.setLuxury(Boolean.TRUE.equals(request.getLuxury()));
+        design.setSubscriptionOnly(Boolean.TRUE.equals(request.getSubscriptionOnly()));
+        design.setDownloadTiffUuid(request.getDownloadTiffUuid());
         design.setDiscountPercent(request.getDiscountPercent() != null ? request.getDiscountPercent() : 0);
         design.setSpecialOffer(Boolean.TRUE.equals(request.getSpecialOffer()));
         design.setFinalPriceCents(pricingService.calculateFinalPrice(design));
@@ -350,6 +355,8 @@ public class DesignService {
         if (request.getEditorsPick() != null) design.setEditorsPick(request.getEditorsPick());
         if (request.getNewArrival() != null) design.setNewArrival(request.getNewArrival());
         if (request.getLuxury() != null) design.setLuxury(request.getLuxury());
+        if (request.getSubscriptionOnly() != null) design.setSubscriptionOnly(request.getSubscriptionOnly());
+        if (request.getDownloadTiffUuid() != null) design.setDownloadTiffUuid(request.getDownloadTiffUuid());
         if (request.getSpecialOffer() != null) design.setSpecialOffer(request.getSpecialOffer());
 
         updateDesignMedia(design.getId(), request);
@@ -375,9 +382,18 @@ public class DesignService {
         String sku = design.getDesignIdentifier();
 
         List<DesignMedia> mediaList = mediaRepository.findByDesignId(designId);
-        List<String> assetUuids = mediaList.stream()
+        Set<String> assetUuids = mediaList.stream()
                 .map(DesignMedia::getAssetUuid)
-                .toList();
+                .filter(uuid -> uuid != null && !uuid.isBlank())
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+
+        if (design.getAssetUuid() != null && !design.getAssetUuid().isBlank()) {
+            assetUuids.add(design.getAssetUuid());
+        }
+
+        if (design.getDownloadTiffUuid() != null && !design.getDownloadTiffUuid().isBlank()) {
+            assetUuids.add(design.getDownloadTiffUuid());
+        }
 
         for (String uuid : assetUuids) {
             try {

@@ -51,6 +51,7 @@ public class DesignMapper {
                 .editorsPick(design.getEditorsPick())
                 .newArrival(design.getNewArrival())
                 .luxury(design.getLuxury())
+                .subscriptionOnly(Boolean.TRUE.equals(design.getSubscriptionOnly()))
 
                 // Categories Mapping
                 .categories(

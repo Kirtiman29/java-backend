@@ -25,4 +25,6 @@ public class SubscriptionSummaryResponse {
     private Integer creditLimit;
     private Integer availableCredits;
     private Integer usedDesigns;
+    private Integer remainingDesigns;
+    private java.math.BigDecimal pricePerDesign;
 }

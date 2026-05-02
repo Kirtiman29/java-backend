@@ -68,6 +68,8 @@ public class SecurityConfig {
                         // Using /check/** handles both /check/1 and /check/1/
                         .requestMatchers("/api/wishlist/check/**").permitAll()
 
+                        .requestMatchers("/api/wishlist/internal/**").permitAll()
+
                         // 4. Protect main wishlist endpoints
                         // We use both the path and the sub-paths to handle trailing slashes
                         .requestMatchers("/api/wishlist", "/api/wishlist/**").hasRole("USER")

@@ -174,6 +174,15 @@ public class CartServiceImpl implements CartService {
         cartItemRepository.softDeleteAllByUserId(userId);
     }
 
+    @Override
+    @Transactional
+    public void removeDesignFromAllCarts(Long designId) {
+
+        log.info("Removing design {} from all active carts", designId);
+
+        cartItemRepository.softDeleteAllByDesignId(designId);
+    }
+
     /**
      * Cart count
      */

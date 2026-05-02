@@ -82,7 +82,9 @@ public class SubscriptionCommandService {
         DesignUsage usage = DesignUsage.builder()
                 .userId(userId)
                 .subscription(savedSubscription)
+                .totalAllowed(plan.getDesignLimit())
                 .usedCount(0)
+                .remainingCount(plan.getDesignLimit())
                 .periodStart(start)
                 .periodEnd(end)
                 .build();

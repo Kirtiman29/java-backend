@@ -1,5 +1,7 @@
 package com.rdc.admin.client;
 
+import com.rdc.admin.dto.subscription.SubscriptionDesignValidationResponse;
+import com.rdc.admin.dto.subscription.SubscriptionSummaryResponse;
 import com.rdc.admin.dto.ai.SubscriptionAiValidationRequest;
 import com.rdc.admin.dto.ai.SubscriptionAiValidationResponse;
 import lombok.RequiredArgsConstructor;
@@ -65,6 +67,68 @@ public class SubscriptionServiceClient {
                 HttpMethod.POST,
                 entity,
                 SubscriptionAiValidationResponse.class
+        );
+
+        return response.getBody();
+    }
+
+    public SubscriptionDesignValidationResponse validateDesign(Long userId) {
+        return exchangeDesign(userId, "/api/internal/subscriptions/validate-design");
+    }
+
+    public SubscriptionDesignValidationResponse consumeDesign(Long userId) {
+        return exchangeDesign(userId, "/api/internal/subscriptions/consume-design");
+    }
+
+    public SubscriptionSummaryResponse getSubscriptionSummary(Long userId) {
+        String url = subscriptionServiceUrl + "/api/internal/subscriptions/users/" + userId + "/summary";
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("X-INTERNAL-KEY", internalServiceKey);
+
+        HttpEntity<Void> entity = new HttpEntity<>(headers);
+
+        ResponseEntity<SubscriptionSummaryResponse> response = restTemplate.exchange(
+                url,
+                HttpMethod.GET,
+                entity,
+                SubscriptionSummaryResponse.class
+        );
+
+        return response.getBody();
+    }
+
+    public boolean hasActiveDesignAccess(Long userId) {
+        if (userId == null) {
+            return false;
+        }
+
+        SubscriptionSummaryResponse summary = getSubscriptionSummary(userId);
+        if (summary == null || summary.getSubscriptionId() == null) {
+            return false;
+        }
+
+        String planType = summary.getPlanType();
+        return "DESIGN".equalsIgnoreCase(planType) || "COMBO".equalsIgnoreCase(planType);
+    }
+
+    private SubscriptionDesignValidationResponse exchangeDesign(Long userId, String path) {
+        String url = subscriptionServiceUrl + path;
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("X-INTERNAL-KEY", internalServiceKey);
+
+        HttpEntity<java.util.Map<String, Long>> entity = new HttpEntity<>(
+                java.util.Map.of("userId", userId),
+                headers
+        );
+
+        ResponseEntity<SubscriptionDesignValidationResponse> response = restTemplate.exchange(
+                url,
+                HttpMethod.POST,
+                entity,
+                SubscriptionDesignValidationResponse.class
         );
 
         return response.getBody();

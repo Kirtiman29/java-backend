@@ -41,6 +41,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/actuator/**").permitAll()
+                        .requestMatchers("/api/internal/orders/**").permitAll()
                         .requestMatchers("/api/orders/internal/**").permitAll()
                         .requestMatchers("/api/webhooks/**").permitAll()
                         .anyRequest().authenticated()

@@ -20,6 +20,10 @@ public class SubscriptionQueryService {
     private final DesignUsageRepository designUsageRepository;
 
     public SubscriptionSummaryResponse getMySubscription(Long userId) {
+        return getSubscriptionSummary(userId);
+    }
+
+    public SubscriptionSummaryResponse getSubscriptionSummary(Long userId) {
         Subscription subscription = subscriptionRepository
                 .findFirstByUserIdAndStatusOrderByCreatedAtDesc(userId, SubscriptionStatus.ACTIVE)
                 .orElse(null);
@@ -36,6 +40,8 @@ public class SubscriptionQueryService {
                     .creditLimit(0)
                     .availableCredits(0)
                     .usedDesigns(0)
+                    .remainingDesigns(0)
+                    .pricePerDesign(null)
                     .build();
         }
 
@@ -57,6 +63,10 @@ public class SubscriptionQueryService {
                 .creditLimit(subscription.getPlan().getCreditLimit())
                 .availableCredits(wallet != null ? wallet.getAvailableCredits() : 0)
                 .usedDesigns(designUsage != null ? designUsage.getUsedCount() : 0)
+                .remainingDesigns(designUsage != null
+                        ? Math.max(subscription.getPlan().getDesignLimit() - designUsage.getUsedCount(), 0)
+                        : subscription.getPlan().getDesignLimit())
+                .pricePerDesign(subscription.getPlan().getPricePerDesign())
                 .build();
     }
 }

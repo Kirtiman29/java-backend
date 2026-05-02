@@ -15,6 +15,7 @@ public class PlanResponse {
     private PlanType planType;
     private BillingCycle billingCycle;
     private BigDecimal price;
+    private BigDecimal pricePerDesign;
     private Integer designLimit;
     private Integer creditLimit;
 }

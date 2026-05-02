@@ -32,6 +32,7 @@ public class DesignResponse {
     private Boolean editorsPick;
     private Boolean newArrival;
     private Boolean luxury;
+    private Boolean subscriptionOnly;
 
     private List<DesignMediaDto> media;
     private LocalDateTime createdAt;

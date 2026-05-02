@@ -35,6 +35,9 @@ public class Plan {
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal price;
 
+    @Column(precision = 10, scale = 2)
+    private BigDecimal pricePerDesign;
+
     @Column(nullable = false)
     private Integer designLimit;
 

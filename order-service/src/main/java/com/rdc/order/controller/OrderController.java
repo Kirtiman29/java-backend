@@ -166,6 +166,9 @@ public class OrderController {
         if (!"PAID".equals(order.getStatus())) {
             throw new ResponseStatusException(HttpStatus.PAYMENT_REQUIRED, "Order must be PAID to download assets.");
         }
+        if ("SUBSCRIPTION_DOWNLOAD".equalsIgnoreCase(order.getPurchaseType())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "TIFF files for subscription downloads are shared manually.");
+        }
 
         String secureUrl = assetServiceBaseUrl + "/api/assets/download/" + orderId;
         log.info("📡 Secure asset download link generated for Order #{} via: {}", orderId, assetServiceBaseUrl);

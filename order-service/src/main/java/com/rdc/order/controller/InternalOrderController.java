@@ -1,6 +1,8 @@
 package com.rdc.order.controller;
 
 import com.rdc.order.dto.OrderResponse;
+import com.rdc.order.dto.SubscriptionDownloadOrderRequest;
+import com.rdc.order.dto.SubscriptionDownloadOrderResponse;
 import com.rdc.order.service.OrderService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -71,6 +73,15 @@ public class InternalOrderController {
 
         boolean allowed = orderService.hasUserPaidForAsset(userId, assetUuid);
         return ResponseEntity.ok(Map.of("allowed", allowed));
+    }
+
+    @PostMapping("/subscription-downloads")
+    public ResponseEntity<SubscriptionDownloadOrderResponse> createSubscriptionDownloadOrder(
+            @RequestBody SubscriptionDownloadOrderRequest request,
+            @RequestHeader(value = "X-INTERNAL-KEY", required = false) String key) {
+
+        validateKey(key);
+        return ResponseEntity.ok(orderService.createSubscriptionDownloadOrder(request));
     }
 
     private void validateKey(String key) {

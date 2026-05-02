@@ -7,5 +7,6 @@ public interface WishlistService {
     void addToWishlist(Long userId, Long designId);
     List<WishlistResponse> getUserWishlist(Long userId);
     void removeFromWishlist(Long userId, Long designId);
+    void removeDesignFromAllWishlists(Long designId);
     boolean isWishlisted(Long userId, Long designId);
 }

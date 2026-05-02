@@ -130,13 +130,15 @@ public class EntitlementService {
                     .build();
         }
 
-        DesignUsage usage = designUsageRepository
-                .findFirstByUserIdAndSubscriptionIdOrderByUpdatedAtDesc(request.getUserId(), subscription.getId())
-                .orElse(null);
+        DesignUsage usage = getOrCreateDesignUsage(request.getUserId(), subscription);
 
         int used = usage != null ? usage.getUsedCount() : 0;
         int limit = subscription.getPlan().getDesignLimit();
         int remaining = Math.max(limit - used, 0);
+
+        usage.setTotalAllowed(limit);
+        usage.setRemainingCount(remaining);
+        designUsageRepository.save(usage);
 
         if (used >= limit) {
             return DesignValidationResponse.builder()
@@ -169,9 +171,7 @@ public class EntitlementService {
             throw new RuntimeException("Current plan does not include design access");
         }
 
-        DesignUsage usage = designUsageRepository
-                .findFirstByUserIdAndSubscriptionIdOrderByUpdatedAtDesc(request.getUserId(), subscription.getId())
-                .orElseThrow(() -> new RuntimeException("Design usage record not found"));
+        DesignUsage usage = getOrCreateDesignUsage(request.getUserId(), subscription);
 
         int limit = subscription.getPlan().getDesignLimit();
         if (usage.getUsedCount() >= limit) {
@@ -179,6 +179,8 @@ public class EntitlementService {
         }
 
         usage.setUsedCount(usage.getUsedCount() + 1);
+        usage.setTotalAllowed(limit);
+        usage.setRemainingCount(Math.max(limit - usage.getUsedCount(), 0));
         designUsageRepository.save(usage);
 
         int remaining = Math.max(limit - usage.getUsedCount(), 0);
@@ -196,5 +198,21 @@ public class EntitlementService {
         return subscriptionRepository
                 .findFirstByUserIdAndStatusOrderByCreatedAtDesc(userId, SubscriptionStatus.ACTIVE)
                 .orElse(null);
+    }
+
+    private DesignUsage getOrCreateDesignUsage(Long userId, Subscription subscription) {
+        return designUsageRepository
+                .findFirstByUserIdAndSubscriptionIdOrderByUpdatedAtDesc(userId, subscription.getId())
+                .orElseGet(() -> designUsageRepository.save(
+                        DesignUsage.builder()
+                                .userId(userId)
+                                .subscription(subscription)
+                                .totalAllowed(subscription.getPlan().getDesignLimit())
+                                .usedCount(0)
+                                .remainingCount(subscription.getPlan().getDesignLimit())
+                                .periodStart(subscription.getStartDate())
+                                .periodEnd(subscription.getEndDate())
+                                .build()
+                ));
     }
 }

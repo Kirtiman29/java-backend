@@ -33,6 +33,7 @@ public class DesignCreateRequest {
     private Boolean editorsPick = false;
     private Boolean newArrival = true;
     private Boolean luxury = false;
+    private Boolean subscriptionOnly = false;
 
     @NotBlank
     private String designIdentifier;

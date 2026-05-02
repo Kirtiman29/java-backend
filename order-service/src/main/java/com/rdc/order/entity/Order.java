@@ -22,6 +22,9 @@ public class Order {
     @Column(name = "status", nullable = false, length = 32)
     private String status;
 
+    @Column(name = "purchase_type", length = 50)
+    private String purchaseType;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private Instant createdAt;

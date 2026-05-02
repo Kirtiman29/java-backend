@@ -28,6 +28,7 @@ public class PlanService {
                 .planType(plan.getPlanType())
                 .billingCycle(plan.getBillingCycle())
                 .price(plan.getPrice())
+                .pricePerDesign(plan.getPricePerDesign())
                 .designLimit(plan.getDesignLimit())
                 .creditLimit(plan.getCreditLimit())
                 .build();
