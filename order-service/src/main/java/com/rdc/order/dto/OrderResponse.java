@@ -22,10 +22,14 @@ public class OrderResponse {
 
     // Detailed Totals
     private Long subTotalCents;
+    private Long subtotalAmountCents;
+    private Long discountAmountCents;
     private Long cgstCents;
     private Long sgstCents;
     private Long igstCents;
     private Long grandTotalCents;
+    private Long finalAmountCents;
+    private String couponCode;
 
     // Billing Details
     private String customerName;

@@ -2,6 +2,7 @@ package com.rdc.order.service;
 
 import com.rdc.order.client.AuthServiceClient;
 import com.rdc.order.client.CartServiceClient;
+import com.rdc.order.coupon.service.CouponService;
 import com.rdc.order.dto.CartItemDto;
 import com.rdc.order.dto.OrderItemResponse;
 import com.rdc.order.dto.OrderRequest;
@@ -41,6 +42,7 @@ public class OrderServiceImpl implements OrderService {
     private final CartServiceClient cartServiceClient;
     private final OrderEmailService orderEmailService;
     private final AuthServiceClient authServiceClient;
+    private final CouponService couponService;
     private final RestTemplate restTemplate;
 
     @Value("${internal.service.key}")
@@ -55,22 +57,15 @@ public class OrderServiceImpl implements OrderService {
     @Value("${service.wishlist.url}")
     private String wishlistServiceUrl;
 
-    // Define company state for GST logic
-    private static final String COMPANY_STATE = "MAHARASHTRA";
-
-    /* ================= WRITE METHODS ================= */
-
     @Override
     public OrderResponse createOrder(OrderRequest request) {
         Long userId = request.getUserId();
 
-        // 1. Fetch items from cart
         List<CartItemDto> cartItems = cartServiceClient.getCartItems(userId);
         if (cartItems == null || cartItems.isEmpty()) {
             throw new EmptyCartException("Cart is empty.");
         }
 
-        // 2. Initialize Order with Billing Info
         Order order = Order.builder()
                 .userId(userId)
                 .status(OrderStatus.CREATED.name())
@@ -86,8 +81,7 @@ public class OrderServiceImpl implements OrderService {
                 .customerGstin(request.getCustomerGstin())
                 .build();
 
-        // 3. Process Items and calculate Subtotal
-        long subtotalCents = 0L;
+        long subtotalAmountCents = 0L;
         for (CartItemDto item : cartItems) {
             order.addItem(OrderItem.builder()
                     .designId(item.getDesignId())
@@ -97,36 +91,52 @@ public class OrderServiceImpl implements OrderService {
                     .assetUuid(item.getAssetUuid())
                     .designTitle(item.getDesignTitle())
                     .build());
+
             long roundedPrice = Math.round(item.getPriceCents() / 100.0) * 100;
-            subtotalCents += roundedPrice * item.getQuantity();
+            subtotalAmountCents += roundedPrice * item.getQuantity();
         }
 
-        // 4. 🔥 CORE GST LOGIC
-        order.setSubTotalCents(Math.round(subtotalCents / 1.18));
-        long gst = subtotalCents - order.getSubTotalCents();
-        order.setCgstCents(gst / 2);
-        order.setSgstCents(gst / 2);
-        order.setGrandTotalCents(subtotalCents);
+        long discountAmountCents = 0L;
+        long finalAmountCents = subtotalAmountCents;
+        String appliedCouponCode = null;
+
+        if (request.getCouponCode() != null && !request.getCouponCode().isBlank()) {
+            CouponService.OrderCouponApplication couponApplication =
+                    couponService.applyCouponToOrder(userId, request.getCouponCode(), subtotalAmountCents);
+            discountAmountCents = couponApplication.discountAmountCents();
+            finalAmountCents = couponApplication.finalAmountCents();
+            appliedCouponCode = couponApplication.couponCode();
+        }
+
+        order.setSubtotalAmountCents(subtotalAmountCents);
+        order.setDiscountAmountCents(discountAmountCents);
+        order.setCouponCode(appliedCouponCode);
+        order.setFinalAmountCents(finalAmountCents);
+        order.setSubTotalCents(Math.round(finalAmountCents / 1.18));
+
+        long gstCents = finalAmountCents - order.getSubTotalCents();
+        order.setCgstCents(gstCents / 2);
+        order.setSgstCents(gstCents / 2);
+        order.setGrandTotalCents(finalAmountCents);
 
         if (order.getGrandTotalCents() == null || order.getGrandTotalCents() <= 0) {
-            throw new RuntimeException("❌ Order total calculation failed");
+            throw new RuntimeException("Order total calculation failed");
         }
 
-        // ✅ FIX: Set total amount for DB stability
         order.setTotalAmountCents(order.getGrandTotalCents());
 
-        // 5. Determine B2B vs B2C
         String invoiceType = (request.getCustomerGstin() != null && !request.getCustomerGstin().isBlank())
                 ? "B2B" : "B2C";
         order.setInvoiceType(invoiceType);
 
-        // 6. Save to database
         Order saved = orderRepository.saveAndFlush(order);
-
-        // 7. 🔥 REMOVED: cartServiceClient.clearCart(userId);
-        // Moved to updateStatus to prevent losing cart on payment failure.
-
-        log.info("✅ Order #{} created. Type: {}, Total: ₹{}", saved.getId(), invoiceType, saved.getGrandTotalCents()/100.0);
+        log.info(
+                "Order #{} created. Type: {}, Total: {}, Coupon: {}",
+                saved.getId(),
+                invoiceType,
+                saved.getGrandTotalCents() / 100.0,
+                saved.getCouponCode()
+        );
         return mapToResponse(saved);
     }
 
@@ -146,9 +156,12 @@ public class OrderServiceImpl implements OrderService {
                 .transactionId("SUB-" + request.getUserId() + "-" + request.getDesignId() + "-" + System.currentTimeMillis())
                 .paymentMode("SUBSCRIPTION")
                 .subTotalCents(0L)
+                .subtotalAmountCents(0L)
+                .discountAmountCents(0L)
                 .cgstCents(0L)
                 .sgstCents(0L)
                 .grandTotalCents(0L)
+                .finalAmountCents(0L)
                 .totalAmountCents(0L)
                 .build();
 
@@ -163,10 +176,6 @@ public class OrderServiceImpl implements OrderService {
 
         Order saved = orderRepository.saveAndFlush(order);
 
-        if (email != null && !email.isBlank()) {
-            orderEmailService.sendSubscriptionDownloadConfirmation(saved, email, name, request.getRemainingDesigns());
-        }
-
         return SubscriptionDownloadOrderResponse.builder()
                 .orderId(saved.getId())
                 .status(saved.getStatus())
@@ -174,14 +183,14 @@ public class OrderServiceImpl implements OrderService {
                 .build();
     }
 
-    /* ================= FULFILLMENT & STATUS ================= */
-
     @Override
     public void updateStatus(Long orderId, String status, String transactionId, String paymentMode) {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new OrderNotFoundException("Order not found"));
 
-        if (OrderStatus.PAID.name().equals(order.getStatus())) return;
+        if (OrderStatus.PAID.name().equals(order.getStatus())) {
+            return;
+        }
 
         order.setStatus(status);
         order.setTransactionId(transactionId);
@@ -189,24 +198,30 @@ public class OrderServiceImpl implements OrderService {
         Order updatedOrder = orderRepository.save(order);
 
         if (OrderStatus.PAID.name().equals(status)) {
+            couponService.recordCouponUsage(
+                    updatedOrder.getCouponCode(),
+                    updatedOrder.getUserId(),
+                    updatedOrder.getId(),
+                    updatedOrder.getDiscountAmountCents() == null ? 0L : updatedOrder.getDiscountAmountCents()
+            );
 
-            // ✅ FIX: Clear cart only when payment is successful
-            cartServiceClient.clearCart(order.getUserId());
-
-            fulfillExclusiveDesignPurchase(order);
+            cartServiceClient.clearCart(updatedOrder.getUserId());
+            fulfillExclusiveDesignPurchase(updatedOrder);
 
             try {
-                Map<String, Object> userMeta = authServiceClient.getUserMetadata(order.getUserId());
-                String email = (order.getCustomerEmail() != null) ? order.getCustomerEmail() : (String) userMeta.get("email");
-                String name = (order.getCustomerName() != null) ? order.getCustomerName() : (String) userMeta.get("name");
+                Map<String, Object> userMeta = authServiceClient.getUserMetadata(updatedOrder.getUserId());
+                String email = updatedOrder.getCustomerEmail() != null
+                        ? updatedOrder.getCustomerEmail()
+                        : userMeta != null ? (String) userMeta.get("email") : null;
+                String name = updatedOrder.getCustomerName() != null
+                        ? updatedOrder.getCustomerName()
+                        : userMeta != null ? (String) userMeta.get("name") : null;
                 orderEmailService.sendOrderConfirmation(updatedOrder, email, name);
-            } catch (Exception e) {
-                log.error("❌ Fulfillment Email failed: {}", e.getMessage());
+            } catch (Exception ex) {
+                log.error("Fulfillment email failed: {}", ex.getMessage());
             }
         }
     }
-
-    /* ================= INTERNAL BRIDGES ================= */
 
     @Override
     public void markDesignAsSoldInternal(Long designId) {
@@ -215,7 +230,9 @@ public class OrderServiceImpl implements OrderService {
             HttpHeaders headers = new HttpHeaders();
             headers.set("X-INTERNAL-KEY", internalServiceKey);
             restTemplate.postForEntity(url, new HttpEntity<>(headers), Void.class);
-        } catch (Exception e) { log.error("❌ Lock failed: {}", e.getMessage()); }
+        } catch (Exception ex) {
+            log.error("Design lock failed for {}: {}", designId, ex.getMessage());
+        }
     }
 
     @Override
@@ -225,7 +242,9 @@ public class OrderServiceImpl implements OrderService {
             HttpHeaders headers = new HttpHeaders();
             headers.set("X-INTERNAL-KEY", internalServiceKey);
             restTemplate.postForEntity(url, new HttpEntity<>(headers), Void.class);
-        } catch (Exception e) { log.error("❌ Purge failed: {}", e.getMessage()); }
+        } catch (Exception ex) {
+            log.error("Design purge failed for {}: {}", designId, ex.getMessage());
+        }
     }
 
     private void fulfillExclusiveDesignPurchase(Order order) {
@@ -251,8 +270,8 @@ public class OrderServiceImpl implements OrderService {
             HttpHeaders headers = new HttpHeaders();
             headers.set("X-INTERNAL-KEY", internalServiceKey);
             restTemplate.exchange(url, HttpMethod.DELETE, new HttpEntity<>(headers), Void.class);
-        } catch (Exception e) {
-            log.error("âŒ Failed to remove design {} from carts: {}", designId, e.getMessage());
+        } catch (Exception ex) {
+            log.error("Failed to remove design {} from carts: {}", designId, ex.getMessage());
         }
     }
 
@@ -262,12 +281,10 @@ public class OrderServiceImpl implements OrderService {
             HttpHeaders headers = new HttpHeaders();
             headers.set("X-INTERNAL-KEY", internalServiceKey);
             restTemplate.exchange(url, HttpMethod.DELETE, new HttpEntity<>(headers), Void.class);
-        } catch (Exception e) {
-            log.error("âŒ Failed to remove design {} from wishlists: {}", designId, e.getMessage());
+        } catch (Exception ex) {
+            log.error("Failed to remove design {} from wishlists: {}", designId, ex.getMessage());
         }
     }
-
-    /* ================= MAPPING & READS ================= */
 
     private OrderResponse mapToResponse(Order order) {
         return OrderResponse.builder()
@@ -278,16 +295,25 @@ public class OrderServiceImpl implements OrderService {
                 .createdAt(order.getCreatedAt())
                 .updatedAt(order.getUpdatedAt())
                 .subTotalCents(order.getSubTotalCents())
+                .subtotalAmountCents(order.getSubtotalAmountCents())
+                .discountAmountCents(order.getDiscountAmountCents())
                 .cgstCents(order.getCgstCents())
                 .sgstCents(order.getSgstCents())
                 .igstCents(order.getIgstCents())
                 .grandTotalCents(order.getGrandTotalCents())
+                .finalAmountCents(order.getFinalAmountCents())
+                .couponCode(order.getCouponCode())
                 .customerName(order.getCustomerName())
                 .customerEmail(order.getCustomerEmail())
                 .customerPhone(order.getCustomerPhone())
                 .billingState(order.getBillingState())
+                .city(order.getCity())
                 .customerGstin(order.getCustomerGstin())
                 .invoiceType(order.getInvoiceType())
+                .addressOne(order.getAddressOne())
+                .addressTwo(order.getAddressTwo())
+                .pincode(order.getPincode())
+                .organizationName(order.getOrganizationName())
                 .items(order.getItems() == null ? List.of() :
                         order.getItems().stream()
                                 .map(item -> OrderItemResponse.builder()
@@ -300,32 +326,41 @@ public class OrderServiceImpl implements OrderService {
                                         .priceCents(item.getPriceCents())
                                         .totalPriceCents((long) item.getPriceCents() * item.getQuantity())
                                         .build())
-                                .collect(Collectors.toList())
-                )
+                                .collect(Collectors.toList()))
                 .build();
     }
 
-    @Override @Transactional(readOnly = true)
+    @Override
+    @Transactional(readOnly = true)
     public List<OrderResponse> getAllOrders() {
         return orderRepository.findAll().stream().map(this::mapToResponse).collect(Collectors.toList());
     }
 
-    @Override @Transactional(readOnly = true)
+    @Override
+    @Transactional(readOnly = true)
     public OrderResponse getOrderByIdAdmin(Long orderId) {
-        return orderRepository.findById(orderId).map(this::mapToResponse).orElseThrow(() -> new OrderNotFoundException("Order not found"));
+        return orderRepository.findById(orderId)
+                .map(this::mapToResponse)
+                .orElseThrow(() -> new OrderNotFoundException("Order not found"));
     }
 
-    @Override @Transactional(readOnly = true)
+    @Override
+    @Transactional(readOnly = true)
     public List<OrderResponse> getOrdersByUser(Long userId) {
-        return orderRepository.findByUserIdOrderByCreatedAtDesc(userId).stream().map(this::mapToResponse).collect(Collectors.toList());
+        return orderRepository.findByUserIdOrderByCreatedAtDesc(userId)
+                .stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
     }
 
-    @Override @Transactional(readOnly = true)
+    @Override
+    @Transactional(readOnly = true)
     public OrderResponse getOrderByIdInternal(Long orderId) {
         return orderRepository.findById(orderId).map(this::mapToResponse).orElseThrow();
     }
 
-    @Override @Transactional(readOnly = true)
+    @Override
+    @Transactional(readOnly = true)
     public OrderResponse getOrderById(Long orderId, Long userId) {
         return orderRepository.findByIdAndUserId(orderId, userId).map(this::mapToResponse).orElseThrow();
     }
@@ -337,12 +372,13 @@ public class OrderServiceImpl implements OrderService {
         orderRepository.save(order);
     }
 
-    @Override @Transactional(readOnly = true)
+    @Override
+    @Transactional(readOnly = true)
     public boolean hasUserPaidForAsset(Long userId, String assetUuid) {
         List<Order> paidOrders = orderRepository.findByUserIdAndStatus(userId, OrderStatus.PAID.name());
         return paidOrders.stream()
                 .filter(order -> !"SUBSCRIPTION_DOWNLOAD".equalsIgnoreCase(order.getPurchaseType()))
-                .flatMap(o -> o.getItems().stream())
-                .anyMatch(i -> assetUuid.equals(i.getAssetUuid()));
+                .flatMap(order -> order.getItems().stream())
+                .anyMatch(item -> assetUuid.equals(item.getAssetUuid()));
     }
 }

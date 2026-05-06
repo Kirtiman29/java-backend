@@ -18,5 +18,14 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     @Query("SELECT o FROM Order o LEFT JOIN FETCH o.items WHERE o.userId = :userId ORDER BY o.createdAt DESC")
     List<Order> findByUserIdOrderByCreatedAtDesc(@Param("userId") Long userId);
 
+    @Query("""
+            SELECT COUNT(o)
+            FROM Order o
+            WHERE o.userId = :userId
+              AND o.status = 'PAID'
+              AND (o.purchaseType IS NULL OR UPPER(o.purchaseType) <> 'SUBSCRIPTION_DOWNLOAD')
+            """)
+    long countPaidOrdersByUserId(@Param("userId") Long userId);
+
     Optional<Order> findByIdAndUserId(Long id, Long userId);
 }

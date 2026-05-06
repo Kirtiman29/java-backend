@@ -82,6 +82,13 @@ public class Order {
     @Column(name = "invoice_subtotal_cents")
     private Long subTotalCents;
 
+    @Column(name = "subtotal_amount_cents")
+    private Long subtotalAmountCents;
+
+    @Column(name = "discount_amount_cents")
+    @Builder.Default
+    private Long discountAmountCents = 0L;
+
     @Column(name = "invoice_cgst_cents")
     private Long cgstCents;
 
@@ -102,6 +109,12 @@ public class Order {
 
     @Column(name = "payment_mode")
     private String paymentMode;
+
+    @Column(name = "coupon_code")
+    private String couponCode;
+
+    @Column(name = "final_amount_cents")
+    private Long finalAmountCents;
 
     @Column(name = "total_amount_cents")
     private Long totalAmountCents;

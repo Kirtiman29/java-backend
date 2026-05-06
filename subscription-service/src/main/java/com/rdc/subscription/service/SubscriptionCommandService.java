@@ -17,12 +17,15 @@ import com.rdc.subscription.repository.PlanRepository;
 import com.rdc.subscription.repository.SubscriptionRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class SubscriptionCommandService {
 
     private final PlanRepository planRepository;
@@ -30,6 +33,8 @@ public class SubscriptionCommandService {
     private final CreditWalletRepository creditWalletRepository;
     private final CreditTransactionRepository creditTransactionRepository;
     private final DesignUsageRepository designUsageRepository;
+    private final AuthServiceClient authServiceClient;
+    private final SubscriptionInvoiceEmailService subscriptionInvoiceEmailService;
 
     @Transactional
     public PurchaseSubscriptionResponse createSubscriptionForUser(Long userId, PurchaseSubscriptionRequest request) {
@@ -91,6 +96,8 @@ public class SubscriptionCommandService {
 
         designUsageRepository.save(usage);
 
+        sendSubscriptionInvoiceIfPossible(userId, plan, start);
+
         return PurchaseSubscriptionResponse.builder()
                 .planId(plan.getId())
                 .planName(plan.getName())
@@ -103,5 +110,24 @@ public class SubscriptionCommandService {
             case MONTHLY -> start.plusMonths(1);
             case YEARLY -> start.plusYears(1);
         };
+    }
+
+    private void sendSubscriptionInvoiceIfPossible(Long userId, Plan plan, LocalDateTime activatedAt) {
+        try {
+            Map<String, Object> userMeta = authServiceClient.getUserMetadata(userId);
+            if (userMeta == null) {
+                return;
+            }
+
+            String email = (String) userMeta.get("email");
+            if (email == null || email.isBlank()) {
+                return;
+            }
+
+            String name = (String) userMeta.getOrDefault("name", "Customer");
+            subscriptionInvoiceEmailService.sendSubscriptionInvoice(email, name, plan, activatedAt);
+        } catch (Exception ex) {
+            log.error("Failed to trigger subscription invoice email for user {} and plan {}: {}", userId, plan.getId(), ex.getMessage(), ex);
+        }
     }
 }

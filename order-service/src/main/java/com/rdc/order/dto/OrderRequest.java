@@ -42,5 +42,7 @@ public class OrderRequest {
     @NotBlank(message = "Pincode is required")
     private String pincode;
 
+    private String couponCode;
+
     private List<OrderItemRequest> items;
 }

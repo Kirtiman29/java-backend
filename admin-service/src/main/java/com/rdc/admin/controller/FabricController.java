@@ -40,9 +40,10 @@ public class FabricController {
     @PostMapping("/api/admin/fabrics/bulk")
     public ResponseEntity<BulkUploadResponse> bulkUpload(
             @RequestParam("csv") MultipartFile csv,
-            @RequestParam(value = "files", required = false) MultipartFile[] assets) {
+            @RequestParam(value = "files", required = false) MultipartFile[] files,
+            @RequestParam(value = "attachment", required = false) MultipartFile[] attachments) {
         try {
-            return ResponseEntity.ok(fabricService.processBulk(csv.getInputStream(), assets));
+            return ResponseEntity.ok(fabricService.processBulk(csv.getInputStream(), mergeFiles(files, attachments)));
         } catch (java.io.IOException e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
@@ -56,5 +57,19 @@ public class FabricController {
     @GetMapping("/api/public/fabrics/{id}")
     public ResponseEntity<FabricResponse> getById(@PathVariable Long id) {
         return ResponseEntity.ok(fabricService.getById(id));
+    }
+
+    private MultipartFile[] mergeFiles(MultipartFile[] files, MultipartFile[] attachments) {
+        if (files == null || files.length == 0) {
+            return attachments;
+        }
+        if (attachments == null || attachments.length == 0) {
+            return files;
+        }
+
+        MultipartFile[] merged = new MultipartFile[files.length + attachments.length];
+        System.arraycopy(files, 0, merged, 0, files.length);
+        System.arraycopy(attachments, 0, merged, files.length, attachments.length);
+        return merged;
     }
 }

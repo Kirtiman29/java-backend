@@ -105,7 +105,7 @@ public class DesignDownloadService {
         );
 
         if (order == null || order.getOrderId() == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Unable to generate subscription invoice");
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Unable to record subscription download order");
         }
 
         DesignDownloadRequest request = designDownloadRequestRepository.save(
