@@ -15,7 +15,9 @@ public interface FabricService {
     List<FabricResponse> getAll();
     List<FabricResponse> getAllAdmin();
     FabricResponse getById(Long id);
+    FabricResponse getBySlug(String slug);
     void delete(Long id);
     void updateStock(Long id, Double meters);
+    int backfillMissingSlugs();
     BulkUploadResponse processBulk(InputStream csvStream, MultipartFile[] assets);
 }

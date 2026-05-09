@@ -6,6 +6,7 @@ import com.rdc.admin.dto.BlogUpdateRequest;
 import com.rdc.admin.entity.BlogPost;
 import com.rdc.admin.exception.ResourceNotFoundException;
 import com.rdc.admin.repository.BlogPostRepository;
+import com.rdc.admin.util.SlugUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -13,19 +14,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.text.Normalizer;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Locale;
-import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
 public class BlogServiceImpl implements BlogService {
 
     private static final int WORDS_PER_MINUTE = 200;
-    private static final Pattern NON_LATIN = Pattern.compile("[^\\w-]");
-    private static final Pattern WHITESPACE = Pattern.compile("[\\s]+");
 
     private final BlogPostRepository blogPostRepository;
     private final AssetClientService assetClientService;
@@ -65,8 +61,10 @@ public class BlogServiceImpl implements BlogService {
         if (request.getTitle() != null) {
             post.setTitle(cleanRequired(request.getTitle(), "Title is required"));
         }
-        if (request.getSlug() != null) {
+        if (hasText(request.getSlug())) {
             post.setSlug(resolveUniqueSlug(request.getSlug(), post.getTitle(), id));
+        } else if (post.getSlug() == null || post.getSlug().isBlank()) {
+            post.setSlug(resolveUniqueSlug(null, post.getTitle(), id));
         }
         if (request.getExcerpt() != null) post.setExcerpt(clean(request.getExcerpt()));
         if (request.getContent() != null) {
@@ -151,6 +149,23 @@ public class BlogServiceImpl implements BlogService {
         blogPostRepository.delete(post);
     }
 
+    @Override
+    @Transactional
+    public int backfillMissingSlugs() {
+        int updated = 0;
+
+        for (BlogPost post : blogPostRepository.findAll()) {
+            if (post.getSlug() != null && !post.getSlug().isBlank()) {
+                continue;
+            }
+            post.setSlug(resolveUniqueSlug(null, post.getTitle(), post.getId()));
+            blogPostRepository.save(post);
+            updated++;
+        }
+
+        return updated;
+    }
+
     private BlogResponse mapToResponse(BlogPost post) {
         LocalDateTime publishedAt = post.getPublishedAt();
 
@@ -205,34 +220,31 @@ public class BlogServiceImpl implements BlogService {
     }
 
     private String resolveUniqueSlug(String requestedSlug, String title, Long currentId) {
-        String baseSlug = slugify(cleanOrDefault(requestedSlug, title));
+        String sanitizedRequested = sanitizeSlug(requestedSlug);
+        if (sanitizedRequested != null) {
+            blogPostRepository.findBySlug(sanitizedRequested).ifPresent(post -> {
+                if (currentId == null || !post.getId().equals(currentId)) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Slug already exists");
+                }
+            });
+            return sanitizedRequested;
+        }
+
+        String baseSlug = SlugUtil.generateSlug(cleanOrDefault(requestedSlug, title));
+        if (baseSlug.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Slug source is required");
+        }
+
         String candidate = baseSlug;
         int counter = 2;
-
         while (blogPostRepository.findBySlug(candidate)
                 .filter(post -> currentId == null || !post.getId().equals(currentId))
                 .isPresent()) {
-            candidate = baseSlug + "-" + counter;
+            candidate = SlugUtil.withSuffix(baseSlug, counter);
             counter++;
         }
 
         return candidate;
-    }
-
-    private String slugify(String input) {
-        String normalized = Normalizer.normalize(input, Normalizer.Form.NFD);
-        String slug = WHITESPACE.matcher(normalized).replaceAll("-");
-        slug = NON_LATIN.matcher(slug).replaceAll("");
-        slug = slug.toLowerCase(Locale.ENGLISH).replaceAll("-{2,}", "-");
-        slug = trimDash(slug);
-        return slug.isBlank() ? "blog-post" : slug;
-    }
-
-    private String trimDash(String value) {
-        String result = value;
-        while (result.startsWith("-")) result = result.substring(1);
-        while (result.endsWith("-")) result = result.substring(0, result.length() - 1);
-        return result;
     }
 
     private String cleanRequired(String value, String message) {
@@ -248,7 +260,24 @@ public class BlogServiceImpl implements BlogService {
         return cleaned == null || cleaned.isBlank() ? cleanRequired(fallback, "Slug source is required") : cleaned;
     }
 
+    private String sanitizeSlug(String value) {
+        String cleaned = clean(value);
+        if (cleaned == null || cleaned.isBlank()) {
+            return null;
+        }
+
+        String sanitized = SlugUtil.generateSlug(cleaned);
+        if (!SlugUtil.isValidSlug(sanitized)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid slug format");
+        }
+        return sanitized;
+    }
+
     private String clean(String value) {
         return value == null ? null : value.trim();
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 }

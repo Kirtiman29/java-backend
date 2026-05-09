@@ -59,6 +59,11 @@ public class FabricController {
         return ResponseEntity.ok(fabricService.getById(id));
     }
 
+    @GetMapping("/api/public/fabrics/slug/{slug}")
+    public ResponseEntity<FabricResponse> getBySlug(@PathVariable String slug) {
+        return ResponseEntity.ok(fabricService.getBySlug(slug));
+    }
+
     private MultipartFile[] mergeFiles(MultipartFile[] files, MultipartFile[] attachments) {
         if (files == null || files.length == 0) {
             return attachments;

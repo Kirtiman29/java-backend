@@ -6,6 +6,7 @@ import com.rdc.admin.dto.CategoryUpdateRequest;
 import com.rdc.admin.entity.Category;
 import com.rdc.admin.exception.ResourceNotFoundException;
 import com.rdc.admin.repository.CategoryRepository;
+import com.rdc.admin.util.SlugUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -33,6 +34,7 @@ public class CategoryService {
         return CategoryResponse.builder()
                 .id(category.getId())
                 .name(category.getName())
+                .slug(category.getSlug())
                 .description(category.getDescription())
                 .imageUrl(category.getImageUrl())
                 .createdAt(category.getCreatedAt())
@@ -64,6 +66,7 @@ public class CategoryService {
 
         Category newCategory = Category.builder()
                 .name(request.getName())
+                .slug(resolveSlug(request.getSlug(), request.getName(), null))
                 .description(request.getDescription())
                 .imageUrl(resolvedImageUrl)
                 .build();
@@ -82,6 +85,12 @@ public class CategoryService {
         return toResponse(getCategoryEntityById(id));
     }
 
+    public CategoryResponse getCategoryBySlug(String slug) {
+        return categoryRepository.findBySlug(slug)
+                .map(this::toResponse)
+                .orElseThrow(() -> new ResourceNotFoundException("Category not found: " + slug));
+    }
+
     @Transactional
     public CategoryResponse updateCategory(Long id, CategoryUpdateRequest request) {
         Category existingCategory = getCategoryEntityById(id);
@@ -93,6 +102,12 @@ public class CategoryService {
                 }
                 existingCategory.setName(request.getName());
             }
+        }
+
+        if (hasText(request.getSlug())) {
+            existingCategory.setSlug(resolveSlug(request.getSlug(), existingCategory.getName(), id));
+        } else if (existingCategory.getSlug() == null || existingCategory.getSlug().isBlank()) {
+            existingCategory.setSlug(resolveSlug(null, existingCategory.getName(), id));
         }
 
 
@@ -115,5 +130,62 @@ public class CategoryService {
     public void deleteCategory(Long id) {
         Category existingCategory = getCategoryEntityById(id);
         categoryRepository.delete(existingCategory);
+    }
+
+    @Transactional
+    public int backfillMissingSlugs() {
+        int updated = 0;
+
+        for (Category category : categoryRepository.findAllBySlugIsNull()) {
+            category.setSlug(resolveSlug(null, category.getName(), category.getId()));
+            categoryRepository.save(category);
+            updated++;
+        }
+
+        return updated;
+    }
+
+    private String resolveSlug(String requestedSlug, String fallback, Long currentId) {
+        String sanitizedRequested = sanitizeSlug(requestedSlug);
+        if (sanitizedRequested != null) {
+            categoryRepository.findBySlug(sanitizedRequested).ifPresent(existing -> {
+                if (currentId == null || !existing.getId().equals(currentId)) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Slug already exists");
+                }
+            });
+            return sanitizedRequested;
+        }
+
+        String baseSlug = SlugUtil.generateSlug(fallback);
+        if (baseSlug.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Slug source is required");
+        }
+
+        String candidate = baseSlug;
+        int counter = 2;
+        while (categoryRepository.findBySlug(candidate)
+                .filter(existing -> currentId == null || !existing.getId().equals(currentId))
+                .isPresent()) {
+            candidate = SlugUtil.withSuffix(baseSlug, counter);
+            counter++;
+        }
+
+        return candidate;
+    }
+
+    private String sanitizeSlug(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+
+        String sanitized = SlugUtil.generateSlug(value);
+        if (!SlugUtil.isValidSlug(sanitized)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid slug format");
+        }
+        return sanitized;
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 }

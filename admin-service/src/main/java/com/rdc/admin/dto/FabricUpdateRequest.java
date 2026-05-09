@@ -9,6 +9,7 @@ import java.util.List;
 public class FabricUpdateRequest {
 
     private String fabricIdentifier;
+    private String slug;
     private String title;
     private String description;
 

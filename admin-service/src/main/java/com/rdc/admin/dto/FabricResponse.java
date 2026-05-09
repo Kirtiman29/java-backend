@@ -12,6 +12,7 @@ public class FabricResponse {
 
     private Long id;
     private String fabricIdentifier;
+    private String slug;
     private String title;
     private String description;
 

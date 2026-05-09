@@ -19,6 +19,9 @@ public class Fabric {
     @Column(name = "fabric_identifier", unique = true, length = 100)
     private String fabricIdentifier;
 
+    @Column(unique = true, length = 255)
+    private String slug;
+
     private String title;
 
     @Column(columnDefinition = "TEXT")

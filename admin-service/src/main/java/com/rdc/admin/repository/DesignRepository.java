@@ -54,6 +54,12 @@ public interface DesignRepository extends JpaRepository<Design, Long> {
 
     List<Design> findByDraftFalseAndActiveTrue();
 
+    Optional<Design> findBySlug(String slug);
+
+    boolean existsBySlug(String slug);
+
+    List<Design> findAllBySlugIsNull();
+
     // Change Segment type to String here
     @Query("SELECT d FROM Design d WHERE d.segment = :segment AND d.active = true AND d.draft = false")
     List<Design> findBySegmentAndActiveTrue(@Param("segment") String segment);

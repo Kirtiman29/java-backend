@@ -7,6 +7,7 @@ import java.util.ArrayList;
 @Data
 public class DesignUpdateRequest {
     // Basic Info
+    private String slug;
     private String title;
     private String description;
     private List<String> segments = new ArrayList<>();

@@ -10,12 +10,15 @@ import com.rdc.admin.repository.CategoryRepository;
 import com.rdc.admin.repository.FabricMediaRepository;
 import com.rdc.admin.repository.FabricRepository;
 import com.rdc.admin.util.CsvParserUtil;
+import com.rdc.admin.util.SlugUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.io.InputStream;
 import java.util.*;
@@ -66,6 +69,11 @@ public class FabricServiceImpl implements FabricService {
         }
 
         if (req.getTitle() != null) fabric.setTitle(req.getTitle());
+        if (hasText(req.getSlug())) {
+            fabric.setSlug(resolveSlug(req.getSlug(), req.getTitle() != null ? req.getTitle() : fabric.getTitle(), fabric.getFabricIdentifier(), id));
+        } else if (fabric.getSlug() == null || fabric.getSlug().isBlank()) {
+            fabric.setSlug(resolveSlug(null, req.getTitle() != null ? req.getTitle() : fabric.getTitle(), fabric.getFabricIdentifier(), id));
+        }
         if (req.getDescription() != null) fabric.setDescription(req.getDescription());
         if (req.getPricePerMeter() != null) fabric.setPricePerMeter(req.getPricePerMeter());
         if (req.getStockMeters() != null) fabric.setStockMeters(req.getStockMeters());
@@ -117,6 +125,14 @@ public class FabricServiceImpl implements FabricService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public FabricResponse getBySlug(String slug) {
+        Fabric fabric = fabricRepository.findBySlug(slug)
+                .orElseThrow(() -> new ResourceNotFoundException("Fabric not found: " + slug));
+        return mapToResponse(fabric);
+    }
+
+    @Override
     @Transactional
     public void delete(Long id) {
         Fabric fabric = fabricRepository.findById(id)
@@ -150,6 +166,20 @@ public class FabricServiceImpl implements FabricService {
 
         fabric.setStockMeters(fabric.getStockMeters() - meters);
         fabricRepository.save(fabric);
+    }
+
+    @Override
+    @Transactional
+    public int backfillMissingSlugs() {
+        int updated = 0;
+
+        for (Fabric fabric : fabricRepository.findAllBySlugIsNull()) {
+            fabric.setSlug(resolveSlug(null, fabric.getTitle(), fabric.getFabricIdentifier(), fabric.getId()));
+            fabricRepository.save(fabric);
+            updated++;
+        }
+
+        return updated;
     }
 
     @Override
@@ -226,6 +256,7 @@ public class FabricServiceImpl implements FabricService {
     private FabricUpdateRequest mapToUpdate(FabricCreateRequest req) {
         FabricUpdateRequest update = new FabricUpdateRequest();
         update.setFabricIdentifier(req.getFabricIdentifier());
+        update.setSlug(req.getSlug());
         update.setTitle(req.getTitle());
         update.setDescription(req.getDescription());
         update.setPricePerMeter(req.getPricePerMeter());
@@ -286,6 +317,7 @@ public class FabricServiceImpl implements FabricService {
 
     private void applyCreateFields(Fabric fabric, FabricCreateRequest req) {
         fabric.setFabricIdentifier(clean(req.getFabricIdentifier()));
+        fabric.setSlug(resolveSlug(req.getSlug(), req.getTitle(), req.getFabricIdentifier(), null));
         fabric.setTitle(clean(req.getTitle()));
         fabric.setDescription(clean(req.getDescription()));
         fabric.setPricePerMeter(req.getPricePerMeter());
@@ -401,6 +433,7 @@ public class FabricServiceImpl implements FabricService {
         return FabricResponse.builder()
                 .id(fabric.getId())
                 .fabricIdentifier(fabric.getFabricIdentifier())
+                .slug(fabric.getSlug())
                 .title(fabric.getTitle())
                 .description(fabric.getDescription())
                 .pricePerMeter(fabric.getPricePerMeter())
@@ -430,5 +463,55 @@ public class FabricServiceImpl implements FabricService {
         }
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private String resolveSlug(String requestedSlug, String title, String fallback, Long currentId) {
+        String sanitizedRequested = sanitizeSlug(requestedSlug);
+        if (sanitizedRequested != null) {
+            fabricRepository.findBySlug(sanitizedRequested).ifPresent(existing -> {
+                if (currentId == null || !existing.getId().equals(currentId)) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Slug already exists");
+                }
+            });
+            return sanitizedRequested;
+        }
+
+        String baseSlug = SlugUtil.generateSlug(firstNonBlank(title, fallback));
+        if (baseSlug.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Slug source is required");
+        }
+
+        String candidate = baseSlug;
+        int counter = 2;
+        while (fabricRepository.findBySlug(candidate)
+                .filter(existing -> currentId == null || !existing.getId().equals(currentId))
+                .isPresent()) {
+            candidate = SlugUtil.withSuffix(baseSlug, counter);
+            counter++;
+        }
+
+        return candidate;
+    }
+
+    private String sanitizeSlug(String value) {
+        String cleaned = clean(value);
+        if (cleaned == null) {
+            return null;
+        }
+
+        String sanitized = SlugUtil.generateSlug(cleaned);
+        if (!SlugUtil.isValidSlug(sanitized)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid slug format");
+        }
+        return sanitized;
+    }
+
+    private String firstNonBlank(String primary, String fallback) {
+        String cleanedPrimary = clean(primary);
+        return cleanedPrimary != null ? cleanedPrimary : clean(fallback);
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 }

@@ -64,4 +64,9 @@ public class BlogController {
     public ResponseEntity<BlogResponse> getPublishedBySlug(@PathVariable String slug) {
         return ResponseEntity.ok(blogService.getPublishedBySlug(slug));
     }
+
+    @GetMapping("/api/public/blogs/slug/{slug}")
+    public ResponseEntity<BlogResponse> getPublishedBySlugSafe(@PathVariable String slug) {
+        return ResponseEntity.ok(blogService.getPublishedBySlug(slug));
+    }
 }

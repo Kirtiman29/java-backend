@@ -22,5 +22,7 @@ public interface BlogService {
 
     BlogResponse getPublishedBySlug(String slug);
 
+    int backfillMissingSlugs();
+
     void delete(Long id);
 }

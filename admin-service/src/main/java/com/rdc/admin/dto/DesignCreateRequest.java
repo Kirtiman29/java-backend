@@ -13,6 +13,7 @@ import lombok.AllArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class DesignCreateRequest {
+    private String slug;
     private String title;
     private String description;
     private Long basePriceCents;

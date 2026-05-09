@@ -20,6 +20,9 @@ public class Design {
     @Column(nullable = false)
     private String title;
 
+    @Column(unique = true, length = 255)
+    private String slug;
+
     @Column(columnDefinition = "TEXT")
     private String description;
 

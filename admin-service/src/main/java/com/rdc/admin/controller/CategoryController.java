@@ -23,6 +23,11 @@ public class CategoryController {
         return ResponseEntity.ok(categories);
     }
 
+    @GetMapping("/api/public/categories/slug/{slug}")
+    public ResponseEntity<CategoryResponse> getCategoryBySlug(@PathVariable String slug) {
+        return ResponseEntity.ok(categoryService.getCategoryBySlug(slug));
+    }
+
     @PostMapping("/api/admin/categories")
     public ResponseEntity<CategoryResponse> createCategory(@Valid @RequestBody CategoryCreateRequest request) {
         CategoryResponse newCategory = categoryService.createCategory(request);

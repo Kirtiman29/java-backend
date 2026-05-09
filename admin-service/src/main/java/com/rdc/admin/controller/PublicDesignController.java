@@ -178,6 +178,24 @@ public class PublicDesignController {
         return ResponseEntity.ok(response);
     }
 
+    @GetMapping("/slug/{slug}")
+    public ResponseEntity<DesignResponse> getDesignBySlug(
+            @PathVariable String slug,
+            @AuthenticationPrincipal Jwt jwt
+    ) {
+        DesignResponse response = designService.getDesignBySlug(slug);
+
+        if (response == null || Boolean.TRUE.equals(response.getDraft())) {
+            return ResponseEntity.notFound().build();
+        }
+
+        if (!isVisibleToUser(response.getSubscriptionOnly(), hasSubscriptionAccess(jwt))) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Active design subscription required");
+        }
+
+        return ResponseEntity.ok(response);
+    }
+
     @PostMapping("/download/{designId}")
     public ResponseEntity<DesignDownloadResponse> downloadDesign(
             @PathVariable Long designId,

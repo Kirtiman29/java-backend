@@ -13,6 +13,7 @@ import java.time.LocalDateTime;
 public class DesignResponse {
 
     private Long id;
+    private String slug;
     private String title;
     private String description;
     private Long basePriceCents;

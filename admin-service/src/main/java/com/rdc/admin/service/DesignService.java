@@ -8,6 +8,7 @@ import com.rdc.admin.repository.DesignDeletionRecordRepository;
 import com.rdc.admin.repository.DesignMediaRepository;
 import com.rdc.admin.repository.DesignRepository;
 import com.rdc.admin.util.DesignMapper;
+import com.rdc.admin.util.SlugUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -55,6 +56,13 @@ public class DesignService {
     public DesignResponse getDesignById(Long id) {
         Design design = repository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Design", id));
+        return mapper.toResponse(design, mediaRepository.findByDesignId(design.getId()));
+    }
+
+    @Transactional(readOnly = true)
+    public DesignResponse getDesignBySlug(String slug) {
+        Design design = repository.findBySlug(slug)
+                .orElseThrow(() -> new ResourceNotFoundException("Design not found: " + slug));
         return mapper.toResponse(design, mediaRepository.findByDesignId(design.getId()));
     }
 
@@ -194,6 +202,7 @@ public class DesignService {
     private DesignUpdateRequest mapToUpdate(DesignCreateRequest req) {
         DesignUpdateRequest update = new DesignUpdateRequest();
         update.setDesignIdentifier(req.getDesignIdentifier());
+        update.setSlug(req.getSlug());
         update.setTitle(req.getTitle());
         update.setDescription(req.getDescription());
         update.setBasePriceCents(req.getBasePriceCents());
@@ -240,6 +249,7 @@ public class DesignService {
 
         Design design = new Design();
         design.setTitle(request.getTitle());
+        design.setSlug(resolveSlug(request.getSlug(), request.getTitle(), request.getDesignIdentifier(), null));
         design.setDescription(request.getDescription());
         design.setDesignIdentifier(request.getDesignIdentifier());
         design.setBasePriceCents(request.getBasePriceCents());
@@ -308,6 +318,12 @@ public class DesignService {
 
         if (request.getDesignIdentifier() != null && !request.getDesignIdentifier().isBlank()) {
             design.setDesignIdentifier(request.getDesignIdentifier());
+        }
+
+        if (hasText(request.getSlug())) {
+            design.setSlug(resolveSlug(request.getSlug(), design.getTitle(), design.getDesignIdentifier(), id));
+        } else if (design.getSlug() == null || design.getSlug().isBlank()) {
+            design.setSlug(resolveSlug(null, design.getTitle(), design.getDesignIdentifier(), id));
         }
 
         String newCoverUuid = request.getCoverAssetUuid();
@@ -439,6 +455,19 @@ public class DesignService {
         log.info("✅ Design and associated assets deleted permanently");
     }
 
+    @Transactional
+    public int backfillMissingSlugs() {
+        int updated = 0;
+
+        for (Design design : repository.findAllBySlugIsNull()) {
+            design.setSlug(resolveSlug(null, design.getTitle(), design.getDesignIdentifier(), design.getId()));
+            repository.save(design);
+            updated++;
+        }
+
+        return updated;
+    }
+
     /* ================= MEDIA ================= */
 
     private void updateDesignMedia(Long designId, DesignUpdateRequest request) {
@@ -495,5 +524,63 @@ public class DesignService {
                 .mediaRole(role)
                 .sortOrder(order)
                 .build());
+    }
+
+    private String resolveSlug(String requestedSlug, String title, String fallback, Long currentId) {
+        String sanitizedRequested = sanitizeSlug(requestedSlug);
+        if (sanitizedRequested != null) {
+            repository.findBySlug(sanitizedRequested).ifPresent(existing -> {
+                if (currentId == null || !existing.getId().equals(currentId)) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Slug already exists");
+                }
+            });
+            return sanitizedRequested;
+        }
+
+        String baseSlug = SlugUtil.generateSlug(firstNonBlank(title, fallback));
+        if (baseSlug.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Slug source is required");
+        }
+
+        String candidate = baseSlug;
+        int counter = 2;
+        while (repository.findBySlug(candidate)
+                .filter(existing -> currentId == null || !existing.getId().equals(currentId))
+                .isPresent()) {
+            candidate = SlugUtil.withSuffix(baseSlug, counter);
+            counter++;
+        }
+
+        return candidate;
+    }
+
+    private String sanitizeSlug(String value) {
+        String cleaned = clean(value);
+        if (cleaned == null) {
+            return null;
+        }
+
+        String sanitized = SlugUtil.generateSlug(cleaned);
+        if (!SlugUtil.isValidSlug(sanitized)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid slug format");
+        }
+        return sanitized;
+    }
+
+    private String firstNonBlank(String primary, String fallback) {
+        String cleanedPrimary = clean(primary);
+        return cleanedPrimary != null ? cleanedPrimary : clean(fallback);
+    }
+
+    private String clean(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 }
