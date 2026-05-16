@@ -65,6 +65,7 @@ public class DesignMapper {
                                                 .slug(cat.getSlug())
                                                 .description(cat.getDescription())
                                                 .imageUrl(cat.getImageUrl())
+                                                .scope(cat.getScope())
                                                 .build())
                                         .collect(Collectors.toList())
                                 : new ArrayList<>()

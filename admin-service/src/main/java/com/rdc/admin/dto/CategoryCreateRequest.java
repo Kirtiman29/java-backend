@@ -1,5 +1,6 @@
 package com.rdc.admin.dto;
 
+import com.rdc.admin.entity.CategoryScope;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
@@ -11,4 +12,5 @@ public class CategoryCreateRequest {
     private String slug;
     private String imageUuid;
     private String description;
+    private CategoryScope scope;
 }

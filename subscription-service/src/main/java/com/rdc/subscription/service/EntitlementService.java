@@ -24,6 +24,7 @@ public class EntitlementService {
     private final CreditWalletRepository creditWalletRepository;
     private final CreditTransactionRepository creditTransactionRepository;
     private final DesignUsageRepository designUsageRepository;
+    private final NotificationServiceClient notificationServiceClient;
 
     public AiValidationResponse validateAiUsage(AiValidationRequest request) {
         Subscription subscription = getActiveSubscription(request.getUserId());
@@ -98,6 +99,8 @@ public class EntitlementService {
                 .build();
 
         creditTransactionRepository.save(txn);
+
+        maybeCreateCreditLowNotification(subscription, wallet.getAvailableCredits());
 
         return AiValidationResponse.builder()
                 .allowed(true)
@@ -185,6 +188,8 @@ public class EntitlementService {
 
         int remaining = Math.max(limit - usage.getUsedCount(), 0);
 
+        maybeCreateDesignLimitLowNotification(subscription, remaining);
+
         return DesignValidationResponse.builder()
                 .allowed(true)
                 .message("Design usage consumed successfully")
@@ -194,9 +199,49 @@ public class EntitlementService {
                 .build();
     }
 
+    private void maybeCreateCreditLowNotification(Subscription subscription, int remainingCredits) {
+        if (remainingCredits > 20) {
+            return;
+        }
+
+        notificationServiceClient.createUserNotification(
+                InternalNotificationRequest.builder()
+                        .userId(subscription.getUserId())
+                        .title("AI Credits Running Low")
+                        .message("You have only " + remainingCredits + " AI credits left. Recharge or upgrade your plan.")
+                        .type("CREDIT_LOW")
+                        .targetUrl("/subscriptions")
+                        .referenceKey("credit-low-" + subscription.getId())
+                        .expiresAt(subscription.getEndDate())
+                        .build()
+        );
+    }
+
+    private void maybeCreateDesignLimitLowNotification(Subscription subscription, int remainingDesigns) {
+        if (remainingDesigns > 2) {
+            return;
+        }
+
+        notificationServiceClient.createUserNotification(
+                InternalNotificationRequest.builder()
+                        .userId(subscription.getUserId())
+                        .title("Design Limit Running Low")
+                        .message("You have only " + remainingDesigns + " design downloads left in your active plan.")
+                        .type("DESIGN_LIMIT_LOW")
+                        .targetUrl("/subscriptions")
+                        .referenceKey("design-limit-low-" + subscription.getId())
+                        .expiresAt(subscription.getEndDate())
+                        .build()
+        );
+    }
+
     private Subscription getActiveSubscription(Long userId) {
         return subscriptionRepository
-                .findFirstByUserIdAndStatusOrderByCreatedAtDesc(userId, SubscriptionStatus.ACTIVE)
+                .findFirstByUserIdAndStatusAndEndDateAfterOrderByCreatedAtDesc(
+                        userId,
+                        SubscriptionStatus.ACTIVE,
+                        java.time.LocalDateTime.now()
+                )
                 .orElse(null);
     }
 

@@ -4,6 +4,7 @@ import com.rdc.admin.dto.CategoryCreateRequest;
 import com.rdc.admin.dto.CategoryResponse;
 import com.rdc.admin.dto.CategoryUpdateRequest;
 import com.rdc.admin.entity.Category;
+import com.rdc.admin.entity.CategoryScope;
 import com.rdc.admin.exception.ResourceNotFoundException;
 import com.rdc.admin.repository.CategoryRepository;
 import com.rdc.admin.util.SlugUtil;
@@ -37,6 +38,7 @@ public class CategoryService {
                 .slug(category.getSlug())
                 .description(category.getDescription())
                 .imageUrl(category.getImageUrl())
+                .scope(category.getScope())
                 .createdAt(category.getCreatedAt())
                 .updatedAt(category.getUpdatedAt())
                 .build();
@@ -69,14 +71,16 @@ public class CategoryService {
                 .slug(resolveSlug(request.getSlug(), request.getName(), null))
                 .description(request.getDescription())
                 .imageUrl(resolvedImageUrl)
+                .scope(request.getScope() != null ? request.getScope() : CategoryScope.BOTH)
                 .build();
 
         Category savedCategory = categoryRepository.save(newCategory);
         return toResponse(savedCategory);
     }
 
-    public List<CategoryResponse> getAllCategories() {
+    public List<CategoryResponse> getAllCategories(CategoryScope scope) {
         return categoryRepository.findAll().stream()
+                .filter(category -> scope == null || supportsScope(category.getScope(), scope))
                 .map(this::toResponse)
                 .collect(Collectors.toList());
     }
@@ -120,6 +124,10 @@ public class CategoryService {
 
         if (request.getDescription() != null) {
             existingCategory.setDescription(request.getDescription());
+        }
+
+        if (request.getScope() != null) {
+            existingCategory.setScope(request.getScope());
         }
 
         Category updatedCategory = categoryRepository.save(existingCategory);
@@ -187,5 +195,14 @@ public class CategoryService {
 
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private boolean supportsScope(CategoryScope categoryScope, CategoryScope requestedScope) {
+        CategoryScope effectiveScope = categoryScope != null ? categoryScope : CategoryScope.BOTH;
+        return switch (requestedScope) {
+            case DESIGN -> effectiveScope.supportsDesign();
+            case FABRIC -> effectiveScope.supportsFabric();
+            case BOTH -> effectiveScope == CategoryScope.BOTH;
+        };
     }
 }

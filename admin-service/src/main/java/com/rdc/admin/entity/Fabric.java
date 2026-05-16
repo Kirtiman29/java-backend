@@ -28,7 +28,11 @@ public class Fabric {
     private String description;
 
     private Double pricePerMeter;
+    private Double pricePerSwatch;
+    private Double pricePerQuarter;
+    private Double pricePerYard;
     private Double stockMeters;
+    private Integer stockQuantity;
 
     private String material;
     private Double width;
@@ -42,5 +46,7 @@ public class Fabric {
     @Column(name = "asset_uuid", length = 128)
     private String assetUuid;
 
+    private Boolean specialOffer = false;
+    private Integer discountPercent = 0;
     private Boolean active = true;
 }

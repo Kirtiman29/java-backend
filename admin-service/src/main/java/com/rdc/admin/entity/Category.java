@@ -30,6 +30,11 @@ public class Category {
     private String imageUrl;
 
     @Builder.Default
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private CategoryScope scope = CategoryScope.BOTH;
+
+    @Builder.Default
     private Boolean active = true;
 
     @Builder.Default

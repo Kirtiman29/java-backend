@@ -1,5 +1,6 @@
 package com.rdc.admin.dto;
 
+import com.rdc.admin.entity.CategoryScope;
 import lombok.Builder;
 import lombok.Data;
 import java.time.LocalDateTime;
@@ -17,6 +18,7 @@ public class CategoryDto {
     private String slug;
     private String description;
     private String imageUrl;
+    private CategoryScope scope;
     private boolean active;
     private int sortOrder;
     private LocalDateTime createdAt;

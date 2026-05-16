@@ -17,7 +17,15 @@ public class FabricResponse {
     private String description;
 
     private Double pricePerMeter;
+    private Double pricePerSwatch;
+    private Double pricePerQuarter;
+    private Double pricePerYard;
+    private Double finalPricePerMeter;
+    private Double finalPricePerSwatch;
+    private Double finalPricePerQuarter;
+    private Double finalPricePerYard;
     private Double stockMeters;
+    private Integer stockQuantity;
 
     private String material;
     private Double width;
@@ -25,6 +33,8 @@ public class FabricResponse {
     private String length;
 
     private Long categoryId;
+    private Integer discountPercent;
+    private Boolean specialOffer;
     private String assetUuid;
     @Builder.Default
     private List<FabricMediaDto> media = new ArrayList<>();

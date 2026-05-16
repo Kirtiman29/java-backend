@@ -1,5 +1,6 @@
 package com.rdc.admin.dto;
 
+import com.rdc.admin.entity.CategoryScope;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -16,6 +17,7 @@ public class CategoryResponse {
     private String slug;
     private String description;
     private String imageUrl;
+    private CategoryScope scope;
 
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

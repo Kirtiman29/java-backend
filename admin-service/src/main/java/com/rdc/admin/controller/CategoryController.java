@@ -3,6 +3,7 @@ package com.rdc.admin.controller;
 import com.rdc.admin.dto.CategoryCreateRequest;
 import com.rdc.admin.dto.CategoryResponse;
 import com.rdc.admin.dto.CategoryUpdateRequest;
+import com.rdc.admin.entity.CategoryScope;
 import com.rdc.admin.service.CategoryService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -18,8 +19,9 @@ public class CategoryController {
     private final CategoryService categoryService;
 
     @GetMapping("/api/categories/public")
-    public ResponseEntity<List<CategoryResponse>> getAllCategoriesPublic() {
-        List<CategoryResponse> categories = categoryService.getAllCategories();
+    public ResponseEntity<List<CategoryResponse>> getAllCategoriesPublic(
+            @RequestParam(required = false) CategoryScope scope) {
+        List<CategoryResponse> categories = categoryService.getAllCategories(scope);
         return ResponseEntity.ok(categories);
     }
 
@@ -35,8 +37,9 @@ public class CategoryController {
     }
 
     @GetMapping("/api/admin/categories")
-    public ResponseEntity<List<CategoryResponse>> getAllCategoriesAdmin() {
-        return ResponseEntity.ok(categoryService.getAllCategories());
+    public ResponseEntity<List<CategoryResponse>> getAllCategoriesAdmin(
+            @RequestParam(required = false) CategoryScope scope) {
+        return ResponseEntity.ok(categoryService.getAllCategories(scope));
     }
 
     @GetMapping("/api/admin/categories/{id}")

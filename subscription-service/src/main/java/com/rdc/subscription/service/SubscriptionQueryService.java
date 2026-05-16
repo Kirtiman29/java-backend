@@ -11,6 +11,8 @@ import com.rdc.subscription.repository.SubscriptionRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
+
 @Service
 @RequiredArgsConstructor
 public class SubscriptionQueryService {
@@ -25,7 +27,11 @@ public class SubscriptionQueryService {
 
     public SubscriptionSummaryResponse getSubscriptionSummary(Long userId) {
         Subscription subscription = subscriptionRepository
-                .findFirstByUserIdAndStatusOrderByCreatedAtDesc(userId, SubscriptionStatus.ACTIVE)
+                .findFirstByUserIdAndStatusAndEndDateAfterOrderByCreatedAtDesc(
+                        userId,
+                        SubscriptionStatus.ACTIVE,
+                        LocalDateTime.now()
+                )
                 .orElse(null);
 
         if (subscription == null) {

@@ -256,7 +256,7 @@ public class DesignService {
         design.setAssetUuid(request.getCoverAssetUuid());
 
         if (request.getCategoryIds() != null && !request.getCategoryIds().isEmpty()) {
-            List<Category> categories = categoryRepository.findAllById(request.getCategoryIds());
+            List<Category> categories = loadDesignCategories(request.getCategoryIds());
             design.getCategories().clear();
             design.getCategories().addAll(categories);
         }
@@ -339,7 +339,7 @@ public class DesignService {
         if (request.getDescription() != null) design.setDescription(request.getDescription());
 
         if (request.getCategoryIds() != null) {
-            List<Category> categories = categoryRepository.findAllById(request.getCategoryIds());
+            List<Category> categories = loadDesignCategories(request.getCategoryIds());
             design.getCategories().clear();
             design.getCategories().addAll(categories);
         }
@@ -524,6 +524,30 @@ public class DesignService {
                 .mediaRole(role)
                 .sortOrder(order)
                 .build());
+    }
+
+    private List<Category> loadDesignCategories(List<Long> categoryIds) {
+        List<Category> categories = categoryRepository.findAllById(categoryIds);
+        if (categories.size() != categoryIds.size()) {
+            Set<Long> foundIds = categories.stream()
+                    .map(Category::getId)
+                    .collect(Collectors.toSet());
+            Long missingId = categoryIds.stream()
+                    .filter(id -> !foundIds.contains(id))
+                    .findFirst()
+                    .orElse(null);
+            throw new ResourceNotFoundException("Category", missingId);
+        }
+
+        categories.forEach(category -> {
+            CategoryScope scope = category.getScope() != null ? category.getScope() : CategoryScope.BOTH;
+            if (!scope.supportsDesign()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Category " + category.getId() + " is not available for designs");
+            }
+        });
+
+        return categories;
     }
 
     private String resolveSlug(String requestedSlug, String title, String fallback, Long currentId) {

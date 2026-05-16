@@ -14,7 +14,11 @@ public class FabricCreateRequest {
     private String description;
 
     private Double pricePerMeter;
+    private Double pricePerSwatch;
+    private Double pricePerQuarter;
+    private Double pricePerYard;
     private Double stockMeters;
+    private Integer stockQuantity;
 
     private String material;
     private Double width;
@@ -22,6 +26,8 @@ public class FabricCreateRequest {
     private String length;
 
     private Long categoryId;
+    private Integer discountPercent;
+    private Boolean specialOffer;
     private String coverAssetUuid;
     private List<String> galleryUuids = new ArrayList<>();
     private Boolean active;

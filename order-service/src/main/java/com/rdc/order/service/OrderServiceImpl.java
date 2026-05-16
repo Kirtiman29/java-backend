@@ -2,7 +2,9 @@ package com.rdc.order.service;
 
 import com.rdc.order.client.AuthServiceClient;
 import com.rdc.order.client.CartServiceClient;
+import com.rdc.order.client.NotificationServiceClient;
 import com.rdc.order.coupon.service.CouponService;
+import com.rdc.order.dto.internal.InternalNotificationRequest;
 import com.rdc.order.dto.CartItemDto;
 import com.rdc.order.dto.OrderItemResponse;
 import com.rdc.order.dto.OrderRequest;
@@ -43,6 +45,7 @@ public class OrderServiceImpl implements OrderService {
     private final OrderEmailService orderEmailService;
     private final AuthServiceClient authServiceClient;
     private final CouponService couponService;
+    private final NotificationServiceClient notificationServiceClient;
     private final RestTemplate restTemplate;
 
     @Value("${internal.service.key}")
@@ -207,6 +210,7 @@ public class OrderServiceImpl implements OrderService {
 
             cartServiceClient.clearCart(updatedOrder.getUserId());
             fulfillExclusiveDesignPurchase(updatedOrder);
+            createPaymentSuccessNotification(updatedOrder);
 
             try {
                 Map<String, Object> userMeta = authServiceClient.getUserMetadata(updatedOrder.getUserId());
@@ -221,6 +225,19 @@ public class OrderServiceImpl implements OrderService {
                 log.error("Fulfillment email failed: {}", ex.getMessage());
             }
         }
+    }
+
+    private void createPaymentSuccessNotification(Order order) {
+        notificationServiceClient.createUserNotification(
+                InternalNotificationRequest.builder()
+                        .userId(order.getUserId())
+                        .title("Payment Successful")
+                        .message("Your payment for order #" + order.getId() + " was completed successfully.")
+                        .type("PAYMENT_SUCCESS")
+                        .targetUrl("/orders/" + order.getId())
+                        .referenceKey("order-payment-success-" + order.getId())
+                        .build()
+        );
     }
 
     @Override

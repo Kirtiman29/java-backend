@@ -4,6 +4,7 @@ import com.rdc.admin.client.OrderServiceClient;
 import com.rdc.admin.client.SubscriptionServiceClient;
 import com.rdc.admin.dto.DesignDownloadRequestResponse;
 import com.rdc.admin.dto.DesignDownloadResponse;
+import com.rdc.admin.dto.notification.CreateNotificationRequest;
 import com.rdc.admin.dto.order.SubscriptionDownloadOrderRequest;
 import com.rdc.admin.dto.order.SubscriptionDownloadOrderResponse;
 import com.rdc.admin.dto.subscription.SubscriptionDesignValidationResponse;
@@ -11,6 +12,7 @@ import com.rdc.admin.dto.subscription.SubscriptionSummaryResponse;
 import com.rdc.admin.entity.Design;
 import com.rdc.admin.entity.DesignDownloadRequest;
 import com.rdc.admin.entity.DesignDownloadStatus;
+import com.rdc.admin.entity.NotificationType;
 import com.rdc.admin.repository.DesignDownloadRequestRepository;
 import com.rdc.admin.repository.DesignRepository;
 import lombok.RequiredArgsConstructor;
@@ -38,6 +40,7 @@ public class DesignDownloadService {
     private final SubscriptionServiceClient subscriptionServiceClient;
     private final OrderServiceClient orderServiceClient;
     private final DesignService designService;
+    private final NotificationService notificationService;
     private final RestTemplate restTemplate;
 
     @Value("${service.cart.url}")
@@ -116,6 +119,17 @@ public class DesignDownloadService {
                         .designTitle(design.getTitle())
                         .orderId(order.getOrderId())
                         .status(DesignDownloadStatus.PENDING)
+                        .build()
+        );
+
+        notificationService.createUserNotification(
+                CreateNotificationRequest.builder()
+                        .userId(userId)
+                        .title("Design Download Request Pending")
+                        .message("Your download request for " + design.getTitle() + " is pending manual processing.")
+                        .type(NotificationType.DESIGN_DOWNLOAD)
+                        .targetUrl("/downloads/requests")
+                        .referenceKey("design-download-request-" + request.getId())
                         .build()
         );
 

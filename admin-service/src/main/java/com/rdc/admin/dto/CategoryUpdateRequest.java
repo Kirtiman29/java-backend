@@ -1,6 +1,6 @@
 package com.rdc.admin.dto;
 
-import jakarta.validation.constraints.NotBlank;
+import com.rdc.admin.entity.CategoryScope;
 import lombok.Data;
 
 @Data
@@ -10,4 +10,5 @@ public class CategoryUpdateRequest {
     private String slug;
     private String imageUuid;
     private String description;
+    private CategoryScope scope;
 }

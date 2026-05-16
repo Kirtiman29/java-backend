@@ -1,0 +1,15 @@
+package com.rdc.admin.entity;
+
+public enum NotificationType {
+    ORDER_PURCHASE,
+    PAYMENT_SUCCESS,
+    DESIGN_DOWNLOAD,
+    NEW_COLLECTION,
+    SPECIAL_OFFER,
+    CREDIT_LOW,
+    DESIGN_LIMIT_LOW,
+    SUBSCRIPTION_ACTIVATED,
+    SUBSCRIPTION_EXPIRING,
+    SUBSCRIPTION_EXPIRED,
+    SYSTEM
+}

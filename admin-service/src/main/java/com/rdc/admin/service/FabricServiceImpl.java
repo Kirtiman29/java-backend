@@ -2,6 +2,8 @@ package com.rdc.admin.service;
 
 import com.rdc.admin.dto.*;
 import com.rdc.admin.entity.AssetType;
+import com.rdc.admin.entity.Category;
+import com.rdc.admin.entity.CategoryScope;
 import com.rdc.admin.entity.Fabric;
 import com.rdc.admin.entity.FabricMedia;
 import com.rdc.admin.entity.MediaRole;
@@ -32,6 +34,7 @@ public class FabricServiceImpl implements FabricService {
     private final FabricRepository fabricRepository;
     private final FabricMediaRepository fabricMediaRepository;
     private final CategoryRepository categoryRepository;
+    private final FabricPricingService fabricPricingService;
     private final AssetClientService assetClientService;
 
     @Value("${service.asset.url}")
@@ -76,7 +79,11 @@ public class FabricServiceImpl implements FabricService {
         }
         if (req.getDescription() != null) fabric.setDescription(req.getDescription());
         if (req.getPricePerMeter() != null) fabric.setPricePerMeter(req.getPricePerMeter());
+        if (req.getPricePerSwatch() != null) fabric.setPricePerSwatch(req.getPricePerSwatch());
+        if (req.getPricePerQuarter() != null) fabric.setPricePerQuarter(req.getPricePerQuarter());
+        if (req.getPricePerYard() != null) fabric.setPricePerYard(req.getPricePerYard());
         if (req.getStockMeters() != null) fabric.setStockMeters(req.getStockMeters());
+        if (req.getStockQuantity() != null) fabric.setStockQuantity(req.getStockQuantity());
         if (req.getMaterial() != null) fabric.setMaterial(req.getMaterial());
         if (req.getWidth() != null) fabric.setWidth(req.getWidth());
         if (req.getGsm() != null) fabric.setGsm(req.getGsm());
@@ -85,6 +92,8 @@ public class FabricServiceImpl implements FabricService {
             validateCategory(req.getCategoryId());
             fabric.setCategoryId(req.getCategoryId());
         }
+        if (req.getDiscountPercent() != null) fabric.setDiscountPercent(req.getDiscountPercent());
+        if (req.getSpecialOffer() != null) fabric.setSpecialOffer(req.getSpecialOffer());
         if (req.getActive() != null) fabric.setActive(req.getActive());
 
         if (req.getCoverAssetUuid() != null) {
@@ -260,12 +269,18 @@ public class FabricServiceImpl implements FabricService {
         update.setTitle(req.getTitle());
         update.setDescription(req.getDescription());
         update.setPricePerMeter(req.getPricePerMeter());
+        update.setPricePerSwatch(req.getPricePerSwatch());
+        update.setPricePerQuarter(req.getPricePerQuarter());
+        update.setPricePerYard(req.getPricePerYard());
         update.setStockMeters(req.getStockMeters());
+        update.setStockQuantity(req.getStockQuantity());
         update.setMaterial(req.getMaterial());
         update.setWidth(req.getWidth());
         update.setGsm(req.getGsm());
         update.setLength(req.getLength());
         update.setCategoryId(req.getCategoryId());
+        update.setDiscountPercent(req.getDiscountPercent());
+        update.setSpecialOffer(req.getSpecialOffer());
         update.setActive(req.getActive());
         if (req.getCoverAssetUuid() != null && !req.getCoverAssetUuid().isBlank()) {
             update.setCoverAssetUuid(req.getCoverAssetUuid());
@@ -321,13 +336,19 @@ public class FabricServiceImpl implements FabricService {
         fabric.setTitle(clean(req.getTitle()));
         fabric.setDescription(clean(req.getDescription()));
         fabric.setPricePerMeter(req.getPricePerMeter());
+        fabric.setPricePerSwatch(req.getPricePerSwatch());
+        fabric.setPricePerQuarter(req.getPricePerQuarter());
+        fabric.setPricePerYard(req.getPricePerYard());
         fabric.setStockMeters(req.getStockMeters());
+        fabric.setStockQuantity(req.getStockQuantity());
         fabric.setMaterial(clean(req.getMaterial()));
         fabric.setWidth(req.getWidth());
         fabric.setGsm(req.getGsm());
         fabric.setLength(clean(req.getLength()));
         fabric.setCategoryId(req.getCategoryId());
         fabric.setAssetUuid(clean(req.getCoverAssetUuid()));
+        fabric.setDiscountPercent(req.getDiscountPercent() != null ? req.getDiscountPercent() : 0);
+        fabric.setSpecialOffer(Boolean.TRUE.equals(req.getSpecialOffer()));
         fabric.setActive(req.getActive() != null ? req.getActive() : Boolean.TRUE);
     }
 
@@ -405,8 +426,12 @@ public class FabricServiceImpl implements FabricService {
         if (categoryId == null) {
             return;
         }
-        if (!categoryRepository.existsById(categoryId)) {
-            throw new ResourceNotFoundException("Category", categoryId);
+        Category category = categoryRepository.findById(categoryId)
+                .orElseThrow(() -> new ResourceNotFoundException("Category", categoryId));
+        CategoryScope scope = category.getScope() != null ? category.getScope() : CategoryScope.BOTH;
+        if (!scope.supportsFabric()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Category " + categoryId + " is not available for fabrics");
         }
     }
 
@@ -437,12 +462,22 @@ public class FabricServiceImpl implements FabricService {
                 .title(fabric.getTitle())
                 .description(fabric.getDescription())
                 .pricePerMeter(fabric.getPricePerMeter())
+                .pricePerSwatch(fabric.getPricePerSwatch())
+                .pricePerQuarter(fabric.getPricePerQuarter())
+                .pricePerYard(fabric.getPricePerYard())
+                .finalPricePerMeter(fabricPricingService.calculateFinalPriceForMeter(fabric))
+                .finalPricePerSwatch(fabricPricingService.calculateFinalPriceForSwatch(fabric))
+                .finalPricePerQuarter(fabricPricingService.calculateFinalPriceForQuarter(fabric))
+                .finalPricePerYard(fabricPricingService.calculateFinalPriceForYard(fabric))
                 .stockMeters(fabric.getStockMeters())
+                .stockQuantity(fabric.getStockQuantity())
                 .material(fabric.getMaterial())
                 .width(fabric.getWidth())
                 .gsm(fabric.getGsm())
                 .length(fabric.getLength())
                 .categoryId(fabric.getCategoryId())
+                .discountPercent(fabric.getDiscountPercent())
+                .specialOffer(fabric.getSpecialOffer())
                 .assetUuid(fabric.getAssetUuid())
                 .media(media)
                 .active(fabric.getActive())

@@ -92,12 +92,22 @@ public class CsvParserUtil {
                     req.setTitle(getSafe(row, "title", "Title"));
                     req.setDescription(getSafe(row, "description", "Description"));
                     req.setPricePerMeter(parseDouble(getSafe(row, "pricePerMeter", "Price Per Meter")));
+                    req.setPricePerSwatch(parseDouble(getSafe(row, "pricePerSwatch", "Price Per Swatch")));
+                    req.setPricePerQuarter(parseDouble(getSafe(row, "pricePerQuarter", "Price Per Quarter")));
+                    req.setPricePerYard(parseDouble(getSafe(row, "pricePerYard", "Price Per Yard")));
                     req.setStockMeters(parseDouble(getSafe(row, "stockMeters", "Stock Meters")));
+                    req.setStockQuantity(parseIntegerOrNull(getSafe(row, "stockQuantity", "Stock Quantity")));
                     req.setMaterial(getSafe(row, "material", "Material"));
                     req.setWidth(parseDouble(getSafe(row, "width", "Width")));
                     req.setGsm(parseIntegerOrNull(getSafe(row, "gsm", "GSM")));
                     req.setLength(getSafe(row, "length", "Length"));
                     req.setCategoryId(parseLongOrNull(getSafe(row, "categoryId", "Category ID")));
+                    req.setDiscountPercent(parseIntegerOrNull(getSafe(row, "discountPercent", "Discount %")));
+
+                    String specialOfferValue = getSafe(row, "specialOffer", "Special Offer");
+                    if (!specialOfferValue.isBlank()) {
+                        req.setSpecialOffer(Boolean.parseBoolean(specialOfferValue));
+                    }
 
                     String activeValue = getSafe(row, "active", "Active");
                     if (!activeValue.isBlank()) {

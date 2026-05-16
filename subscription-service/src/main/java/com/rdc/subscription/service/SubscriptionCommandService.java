@@ -2,6 +2,7 @@ package com.rdc.subscription.service;
 
 import com.rdc.subscription.dto.PurchaseSubscriptionRequest;
 import com.rdc.subscription.dto.PurchaseSubscriptionResponse;
+import com.rdc.subscription.dto.internal.InternalNotificationRequest;
 import com.rdc.subscription.entity.CreditTransaction;
 import com.rdc.subscription.entity.CreditWallet;
 import com.rdc.subscription.entity.DesignUsage;
@@ -35,6 +36,7 @@ public class SubscriptionCommandService {
     private final DesignUsageRepository designUsageRepository;
     private final AuthServiceClient authServiceClient;
     private final SubscriptionInvoiceEmailService subscriptionInvoiceEmailService;
+    private final NotificationServiceClient notificationServiceClient;
 
     @Transactional
     public PurchaseSubscriptionResponse createSubscriptionForUser(Long userId, PurchaseSubscriptionRequest request) {
@@ -42,6 +44,7 @@ public class SubscriptionCommandService {
                 .orElseThrow(() -> new RuntimeException("Active plan not found"));
 
         subscriptionRepository.findFirstByUserIdAndStatusOrderByCreatedAtDesc(userId, SubscriptionStatus.ACTIVE)
+                .filter(existing -> existing.getEndDate().isAfter(LocalDateTime.now()))
                 .ifPresent(existing -> {
                     throw new RuntimeException("User already has an active subscription");
                 });
@@ -95,6 +98,18 @@ public class SubscriptionCommandService {
                 .build();
 
         designUsageRepository.save(usage);
+
+        notificationServiceClient.createUserNotification(
+                InternalNotificationRequest.builder()
+                        .userId(userId)
+                        .title("Subscription Activated")
+                        .message("Your " + plan.getName() + " plan is now active.")
+                        .type("SUBSCRIPTION_ACTIVATED")
+                        .targetUrl("/subscriptions")
+                        .referenceKey("subscription-activated-" + savedSubscription.getId())
+                        .expiresAt(end)
+                        .build()
+        );
 
         sendSubscriptionInvoiceIfPossible(userId, plan, start);
 
