@@ -18,6 +18,20 @@ class AiToolCostServiceTest {
     }
 
     @Test
+    void shouldUseGeminiImageToImageBaseCostWhenOutputCountMissing() {
+        int cost = service.getCost("GEMINI_IMAGE_TO_IMAGE", Map.of());
+
+        assertEquals(12, cost);
+    }
+
+    @Test
+    void shouldMultiplyGeminiImageMixCostByNumImagesAlias() {
+        int cost = service.getCost("GEMINI_IMAGE_MIX", Map.of("num_images", 2));
+
+        assertEquals(30, cost);
+    }
+
+    @Test
     void shouldUsePatternGeneratorBaseCostForSingleOutputWhenCountMissing() {
         int cost = service.getCost("PATTERN_GENERATOR", Map.of());
 

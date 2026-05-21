@@ -21,6 +21,8 @@ public class AiToolCostService {
     private static final Set<String> COUNT_BASED_TOOLS = Set.of(
             "TEXTILE_GENERATOR",
             "GEMINI_TEXT_TO_IMAGE",
+            "GEMINI_IMAGE_TO_IMAGE",
+            "GEMINI_IMAGE_MIX",
             "IMAGE_TO_IMAGE",
             "SDXL_IMAGE_TO_IMAGE",
             "PATTERN_GENERATOR",
@@ -54,17 +56,19 @@ public class AiToolCostService {
             "mode"
     };
 
-    private static final Map<String, Integer> TOOL_COSTS = Map.of(
-            "UPSCALE", 5,
-            "TEXTILE_GENERATOR", 10,
-            "GEMINI_TEXT_TO_IMAGE", 10,
-            "IMAGE_TO_IMAGE", 10,
-            "SDXL_IMAGE_TO_IMAGE", 10,
-            "PATTERN_GENERATOR", 7,
-            "COLOR_SEPARATION", 4,
-            "COLORWAY", 4,
-            "IMAGE_MIX", 8,
-            "PROMPT_ENHANCER", 2
+    private static final Map<String, Integer> TOOL_COSTS = Map.ofEntries(
+            Map.entry("UPSCALE", 5),
+            Map.entry("TEXTILE_GENERATOR", 10),
+            Map.entry("GEMINI_TEXT_TO_IMAGE", 10),
+            Map.entry("GEMINI_IMAGE_TO_IMAGE", 12),
+            Map.entry("GEMINI_IMAGE_MIX", 15),
+            Map.entry("IMAGE_TO_IMAGE", 10),
+            Map.entry("SDXL_IMAGE_TO_IMAGE", 10),
+            Map.entry("PATTERN_GENERATOR", 7),
+            Map.entry("COLOR_SEPARATION", 4),
+            Map.entry("COLORWAY", 4),
+            Map.entry("IMAGE_MIX", 8),
+            Map.entry("PROMPT_ENHANCER", 2)
     );
 
     public int getCost(String toolName, Map<String, Object> params) {

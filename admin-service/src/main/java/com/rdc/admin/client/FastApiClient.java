@@ -41,4 +41,18 @@ public class FastApiClient {
 
         return response.getBody();
     }
+
+    public String resolveUrl(String urlOrPath) {
+        if (urlOrPath == null || urlOrPath.isBlank()) {
+            return null;
+        }
+
+        String trimmed = urlOrPath.trim();
+        if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+            return trimmed;
+        }
+
+        String baseUrl = fastApiBaseUrl.replaceAll("/+$", "");
+        return trimmed.startsWith("/") ? baseUrl + trimmed : baseUrl + "/" + trimmed;
+    }
 }
