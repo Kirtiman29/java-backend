@@ -10,6 +10,7 @@ import org.springframework.http.HttpStatus;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -17,9 +18,11 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class AiOrchestrationService {
 
+    private static final String UPSCALE = "UPSCALE";
     private static final String GEMINI_TEXT_TO_IMAGE = "GEMINI_TEXT_TO_IMAGE";
     private static final String GEMINI_IMAGE_TO_IMAGE = "GEMINI_IMAGE_TO_IMAGE";
     private static final String GEMINI_IMAGE_MIX = "GEMINI_IMAGE_MIX";
+    private static final List<String> SUPPORTED_UPSCALE_MODES = List.of("smart", "double", "textile");
 
     private static final List<String> GEMINI_IMAGE_ASPECT_RATIOS = List.of(
             "1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"
@@ -34,6 +37,10 @@ public class AiOrchestrationService {
     private final FastApiClient fastApiClient;
 
     public AiToolResponse executeTool(Long userId, AiToolRequest request) {
+        return executeTool(userId, null, request);
+    }
+
+    public AiToolResponse executeTool(Long userId, String authToken, AiToolRequest request) {
         validateRequest(request);
 
         Map<String, Object> params = request.getParams() != null ? request.getParams() : Collections.emptyMap();
@@ -55,6 +62,7 @@ public class AiOrchestrationService {
                 .toolName(mapToolName(request.getToolName()))
                 .inputUrl(request.getInputUrl())
                 .params(params)
+                .authToken(authToken)
                 .build();
 
         FastApiExecuteResponse fastApiResponse = fastApiClient.execute(fastApiRequest);
@@ -98,6 +106,7 @@ public class AiOrchestrationService {
 
         Map<String, Object> params = request.getParams() != null ? request.getParams() : Collections.emptyMap();
         switch (request.getToolName()) {
+            case UPSCALE -> validateUpscale(request, params);
             case GEMINI_TEXT_TO_IMAGE -> validateGeminiTextToImage(params);
             case GEMINI_IMAGE_TO_IMAGE -> validateGeminiImageToImage(request, params);
             case GEMINI_IMAGE_MIX -> validateGeminiImageMix(params);
@@ -105,6 +114,49 @@ public class AiOrchestrationService {
                 // No extra gateway validation needed for other tools.
             }
         }
+    }
+
+    private void validateUpscale(AiToolRequest request, Map<String, Object> params) {
+        if (isBlank(request.getInputUrl())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "inputUrl is required for upscale.");
+        }
+
+        String mode = getString(params, "mode");
+        if (isBlank(mode)) {
+            mode = getString(params, "model");
+        }
+        if (isBlank(mode)) {
+            mode = getString(params, "upscaleModel");
+        }
+        if (isBlank(mode)) {
+            mode = getString(params, "upscale_model");
+        }
+        if (isBlank(mode)) {
+            mode = getString(params, "modelType");
+        }
+        if (isBlank(mode)) {
+            mode = getString(params, "model_type");
+        }
+        if (isBlank(mode)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "upscale mode is required. Allowed: " + String.join(", ", SUPPORTED_UPSCALE_MODES)
+            );
+        }
+
+        String normalized = mode.trim().toLowerCase(Locale.ROOT).replace("-", "_").replace(" ", "_");
+        if ("double".equals(normalized)
+                || "double_upscale".equals(normalized)
+                || "textile".equals(normalized)
+                || "smart".equals(normalized)
+                || "smart_upscale".equals(normalized)) {
+            return;
+        }
+
+        throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Unsupported upscale mode. Allowed: " + String.join(", ", SUPPORTED_UPSCALE_MODES)
+        );
     }
 
     private void validateGeminiTextToImage(Map<String, Object> params) {
@@ -154,6 +206,9 @@ public class AiOrchestrationService {
                 response.getOutputUrl(),
                 nestedString(response.getOutputData(), "outputUrl"),
                 nestedString(response.getOutputData(), "output_url"),
+                nestedString(nestedMap(response.getOutputData(), "output"), "url"),
+                nestedString(nestedMap(response.getOutputData(), "artifacts"), "finalUrl"),
+                nestedString(nestedMap(nestedMap(response.getOutputData(), "artifacts"), "final"), "url"),
                 firstStringFromList(response.getOutputData(), "image_urls"),
                 firstStringFromList(response.getOutputData(), "imageUrls"),
                 firstGeneratedImageUrl(response.getOutputData(), "generated_images"),
@@ -207,6 +262,16 @@ public class AiOrchestrationService {
 
         Object value = data.get(key);
         return value instanceof String text && !text.isBlank() ? text : null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> nestedMap(Map<String, Object> data, String key) {
+        if (data == null) {
+            return null;
+        }
+
+        Object value = data.get(key);
+        return value instanceof Map<?, ?> mapValue ? (Map<String, Object>) mapValue : null;
     }
 
     private List<String> getStringList(Map<String, Object> params, String key) {

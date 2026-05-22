@@ -39,10 +39,13 @@ class AiToolCostServiceTest {
     }
 
     @Test
-    void shouldChargeStandardUpscaleWhenNoModelProvided() {
-        int cost = service.getCost("UPSCALE", Map.of());
+    void shouldRejectUpscaleWhenModeMissing() {
+        ResponseStatusException exception = org.junit.jupiter.api.Assertions.assertThrows(
+                ResponseStatusException.class,
+                () -> service.getCost("UPSCALE", Map.of())
+        );
 
-        assertEquals(5, cost);
+        assertEquals("upscale mode is required. Allowed: smart, double, textile", exception.getReason());
     }
 
     @Test
@@ -67,16 +70,19 @@ class AiToolCostServiceTest {
     }
 
     @Test
-    void shouldChargeBatchUpscaleWhenBatchFlagIsTrue() {
+    void shouldIgnoreBatchFlagAndChargeBasedOnSelectedModel() {
         int cost = service.getCost("UPSCALE", Map.of("batch", true, "model", "textile"));
 
-        assertEquals(50, cost);
+        assertEquals(10, cost);
     }
 
     @Test
-    void shouldChargeBatchUpscaleWhenBatchFlagUsesSupportedStringAlias() {
-        int cost = service.getCost("UPSCALE", Map.of("is_batch", "yes"));
+    void shouldRejectUnsupportedUpscaleMode() {
+        ResponseStatusException exception = org.junit.jupiter.api.Assertions.assertThrows(
+                ResponseStatusException.class,
+                () -> service.getCost("UPSCALE", Map.of("mode", "normal"))
+        );
 
-        assertEquals(50, cost);
+        assertEquals("Unsupported upscale mode. Allowed: smart, double, textile", exception.getReason());
     }
 }

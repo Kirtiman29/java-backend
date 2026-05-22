@@ -22,6 +22,6 @@ public class AiController {
             @RequestBody AiToolRequest request
     ) {
         Long userId = Long.parseLong(jwt.getSubject());
-        return ResponseEntity.ok(aiOrchestrationService.executeTool(userId, request));
+        return ResponseEntity.ok(aiOrchestrationService.executeTool(userId, jwt.getTokenValue(), request));
     }
 }

@@ -12,11 +12,9 @@ import java.util.Set;
 public class AiToolCostService {
 
     private static final String UPSCALE = "UPSCALE";
-    private static final int STANDARD_UPSCALE_COST = 5;
     private static final int TEXTILE_UPSCALE_COST = 10;
     private static final int DOUBLE_UPSCALE_COST = 15;
     private static final int SMART_UPSCALE_COST = 20;
-    private static final int BATCH_UPSCALE_COST = 50;
 
     private static final Set<String> COUNT_BASED_TOOLS = Set.of(
             "TEXTILE_GENERATOR",
@@ -90,22 +88,8 @@ public class AiToolCostService {
 
     private int resolveUpscaleCost(Map<String, Object> params) {
         String model = getStringParam(params, UPSCALE_MODEL_KEYS);
-
-        boolean batch = getBooleanParam(
-                params,
-                "batch",
-                "isBatch",
-                "is_batch",
-                "batchUpscale",
-                "batch_upscale"
-        );
-
-        if (batch) {
-            return BATCH_UPSCALE_COST;
-        }
-
         if (model == null || model.isBlank()) {
-            return STANDARD_UPSCALE_COST;
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "upscale mode is required. Allowed: smart, double, textile");
         }
 
         String normalized = model.trim().toLowerCase(Locale.ROOT)
@@ -124,39 +108,12 @@ public class AiToolCostService {
             return TEXTILE_UPSCALE_COST;
         }
 
-        return STANDARD_UPSCALE_COST;
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported upscale mode. Allowed: smart, double, textile");
     }
 
     private int resolveOutputCount(Map<String, Object> params) {
         Integer count = getIntegerParam(params, OUTPUT_COUNT_KEYS);
         return count == null || count < 1 ? 1 : count;
-    }
-
-    private boolean getBooleanParam(Map<String, Object> params, String... keys) {
-        if (params == null || params.isEmpty()) {
-            return false;
-        }
-
-        for (String key : keys) {
-            Object value = params.get(key);
-
-            if (value instanceof Boolean bool) {
-                return bool;
-            }
-
-            if (value instanceof String text) {
-                String normalized = text.trim().toLowerCase(Locale.ROOT);
-                if ("true".equals(normalized) || "yes".equals(normalized) || "1".equals(normalized)) {
-                    return true;
-                }
-            }
-
-            if (value instanceof Number number) {
-                return number.intValue() == 1;
-            }
-        }
-
-        return false;
     }
 
     private Integer getIntegerParam(Map<String, Object> params, String... keys) {

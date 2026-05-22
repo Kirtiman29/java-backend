@@ -13,4 +13,5 @@ public class FastApiExecuteRequest {
     private String toolName;
     private String inputUrl;
     private Map<String, Object> params;
+    private String authToken;
 }

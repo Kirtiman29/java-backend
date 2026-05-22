@@ -66,6 +66,76 @@ class AiOrchestrationServiceTest {
     }
 
     @Test
+    void shouldAllowSmartUpscaleMode() {
+        AiToolRequest request = new AiToolRequest();
+        request.setToolName("UPSCALE");
+        request.setInputUrl("http://127.0.0.1:8000/input/source.png");
+        request.setParams(Map.of("mode", "smart"));
+
+        SubscriptionAiValidationResponse validation = new SubscriptionAiValidationResponse();
+        validation.setAllowed(true);
+
+        SubscriptionAiValidationResponse consume = new SubscriptionAiValidationResponse();
+        consume.setAllowed(true);
+        consume.setAvailableCredits(123);
+
+        FastApiExecuteResponse fastApiResponse = new FastApiExecuteResponse();
+        fastApiResponse.setSuccess(true);
+        fastApiResponse.setMessage("Image upscaled successfully.");
+        fastApiResponse.setOutputData(Map.of(
+                "output", Map.of(
+                        "url", "http://127.0.0.1:8000/files/upscale/result.png"
+                ),
+                "mode", "smart"
+        ));
+
+        when(subscriptionServiceClient.validateAi(1L, "UPSCALE", 20)).thenReturn(validation);
+        when(fastApiClient.execute(any())).thenReturn(fastApiResponse);
+        when(subscriptionServiceClient.consumeAi(1L, "UPSCALE", 20)).thenReturn(consume);
+
+        AiToolResponse response = service.executeTool(1L, request);
+
+        assertTrue(response.isSuccess());
+        assertEquals("http://127.0.0.1:8000/files/upscale/result.png", response.getOutputUrl());
+        assertEquals(123, response.getRemainingCredits());
+    }
+
+    @Test
+    void shouldRejectUpscaleWhenInputUrlMissing() {
+        AiToolRequest request = new AiToolRequest();
+        request.setToolName("UPSCALE");
+        request.setParams(Map.of("mode", "smart"));
+
+        ResponseStatusException exception = assertThrows(
+                ResponseStatusException.class,
+                () -> service.executeTool(1L, request)
+        );
+
+        assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
+        assertEquals("inputUrl is required for upscale.", exception.getReason());
+        verify(subscriptionServiceClient, never()).validateAi(any(), any(), any());
+        verify(fastApiClient, never()).execute(any());
+    }
+
+    @Test
+    void shouldRejectUpscaleWhenModeMissing() {
+        AiToolRequest request = new AiToolRequest();
+        request.setToolName("UPSCALE");
+        request.setInputUrl("http://127.0.0.1:8000/input/source.png");
+        request.setParams(Map.of());
+
+        ResponseStatusException exception = assertThrows(
+                ResponseStatusException.class,
+                () -> service.executeTool(1L, request)
+        );
+
+        assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
+        assertEquals("upscale mode is required. Allowed: smart, double, textile", exception.getReason());
+        verify(subscriptionServiceClient, never()).validateAi(any(), any(), any());
+        verify(fastApiClient, never()).execute(any());
+    }
+
+    @Test
     void shouldNormalizeGeminiImageMixOutputUrlAfterSuccessfulExecution() {
         AiToolRequest request = new AiToolRequest();
         request.setToolName("GEMINI_IMAGE_MIX");
