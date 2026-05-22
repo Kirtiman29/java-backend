@@ -12,5 +12,6 @@ public interface PlanRepository extends JpaRepository<Plan, Long> {
     List<Plan> findByIsActiveTrue();
     List<Plan> findByPlanTypeAndIsActiveTrue(PlanType planType);
     Optional<Plan> findByIdAndIsActiveTrue(Long id);
+    Optional<Plan> findByNameAndPlanTypeAndBillingCycle(String name, PlanType planType, BillingCycle billingCycle);
     List<Plan> findByBillingCycleAndIsActiveTrue(BillingCycle billingCycle);
 }

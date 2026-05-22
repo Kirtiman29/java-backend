@@ -2,10 +2,12 @@ package com.rdc.subscription.service;
 
 import com.rdc.subscription.dto.PlanResponse;
 import com.rdc.subscription.entity.Plan;
+import com.rdc.subscription.enums.PlanType;
 import com.rdc.subscription.repository.PlanRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.util.Comparator;
 import java.util.List;
 
 @Service
@@ -17,8 +19,27 @@ public class PlanService {
     public List<PlanResponse> getActivePlans() {
         return planRepository.findByIsActiveTrue()
                 .stream()
+                .sorted(Comparator
+                        .comparingInt((Plan plan) -> planTypeOrder(plan.getPlanType()))
+                        .thenComparingInt(this::primaryLimit)
+                        .thenComparing(Plan::getName, String.CASE_INSENSITIVE_ORDER))
                 .map(this::mapToResponse)
                 .toList();
+    }
+
+    private int planTypeOrder(PlanType planType) {
+        return switch (planType) {
+            case AI -> 0;
+            case DESIGN -> 1;
+            case COMBO -> 2;
+        };
+    }
+
+    private int primaryLimit(Plan plan) {
+        return switch (plan.getPlanType()) {
+            case AI -> plan.getCreditLimit() != null ? plan.getCreditLimit() : 0;
+            case DESIGN, COMBO -> plan.getDesignLimit() != null ? plan.getDesignLimit() : 0;
+        };
     }
 
     private PlanResponse mapToResponse(Plan plan) {
