@@ -28,7 +28,7 @@ public class AssetClientService {
     public void validateAsset(String uuid) {
         if (uuid == null || uuid.isBlank()) return;
 
-        String url = assetServiceBaseUrl + "/api/assets/internal/" + uuid;
+        String url = assetServiceBaseUrl + "/api/assets/internal/assets/" + uuid;
         log.info("Validating asset via internal bridge: {}", url);
 
         try {
@@ -65,7 +65,7 @@ public class AssetClientService {
         if (uuid == null || uuid.isBlank()) return;
 
         //Uses injected URL for authorized deletion
-        String url = assetServiceBaseUrl + "/api/assets/internal/" + uuid;
+        String url = assetServiceBaseUrl + "/api/assets/internal/assets/" + uuid;
         log.info("🗑️ Sending authorized internal delete request for UUID: {}", uuid);
 
         try {

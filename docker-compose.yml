@@ -28,6 +28,9 @@ services:
     container_name: auth-service
     env_file:
       - ./env/auth-service.env
+    environment:
+      DB_URL: jdbc:mysql://mysql:3306/auth_db?useSSL=false&allowPublicKeyRetrieval=true
+      SERVICE_SUBSCRIPTION_URL: http://subscription-service:8094
     ports:
       - "8081:8081"
     depends_on:
@@ -41,6 +44,14 @@ services:
     container_name: admin-service
     env_file:
       - ./env/admin-service.env
+    environment:
+      DB_URL: jdbc:mysql://mysql:3306/admin_db?useSSL=false&allowPublicKeyRetrieval=true
+      ASSET_SERVICE_URL: http://asset-service:8090
+      ORDER_SERVICE_URL: http://order-service:8095
+      CART_SERVICE_URL: http://cart-service:8091
+      WISHLIST_SERVICE_URL: http://wishlist-service:8093
+      PAYMENT_SERVICE_URL: http://payment-service:8092
+      SUBSCRIPTION_SERVICE_URL: http://subscription-service:8094
     ports:
       - "8080:8080"
     depends_on:
@@ -54,6 +65,10 @@ services:
     container_name: asset-service
     env_file:
       - ./env/asset-service.env
+    environment:
+      DB_URL: jdbc:mysql://mysql:3306/asset_db?useSSL=false&allowPublicKeyRetrieval=true
+      ORDER_SERVICE_URL: http://order-service:8095
+      ADMIN_SERVICE_URL: http://admin-service:8080
     ports:
       - "8090:8090"
     volumes:
@@ -69,6 +84,9 @@ services:
     container_name: cart-service
     env_file:
       - ./env/cart-service.env
+    environment:
+      DB_URL: jdbc:mysql://mysql:3306/cart_db?useSSL=false&allowPublicKeyRetrieval=true
+      ADMIN_SERVICE_URL: http://admin-service:8080
     ports:
       - "8091:8091"
     depends_on:
@@ -86,6 +104,15 @@ services:
     container_name: order-service
     env_file:
       - ./env/order-service.env
+    environment:
+      DB_URL: jdbc:mysql://mysql:3306/order_db
+      SERVICE_CART_URL: http://cart-service:8091
+      SERVICE_WISHLIST_URL: http://wishlist-service:8093
+      SERVICE_AUTH_URL: http://auth-service:8081
+      SERVICE_ADMIN_URL: http://admin-service:8080
+      SERVICE_PAYMENT_URL: http://payment-service:8092
+      SERVICE_SUBSCRIPTION_URL: http://subscription-service:8094
+      SERVICE_ASSET_URL: http://asset-service:8090
     ports:
       - "8095:8095"
     depends_on:
@@ -105,6 +132,10 @@ services:
     container_name: payment-service
     env_file:
       - ./env/payment-service.env
+    environment:
+      DB_URL: jdbc:mysql://mysql:3306/payment_db
+      ORDER_SERVICE_URL: http://order-service:8095
+      SUBSCRIPTION_SERVICE_URL: http://subscription-service:8094
     ports:
       - "8092:8092"
     depends_on:
@@ -115,11 +146,42 @@ services:
     networks:
       - rdc-network
 
+  subscription-service:
+    build: ./subscription-service
+    container_name: subscription-service
+    env_file:
+      - ./env/subscription-service.env
+    environment:
+      DB_URL: jdbc:mysql://mysql:3306/subscription_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
+      AUTH_SERVICE_URL: http://auth-service:8081
+      ORDER_SERVICE_URL: http://order-service:8095
+      PAYMENT_SERVICE_URL: http://payment-service:8092
+      ADMIN_SERVICE_URL: http://admin-service:8080
+    ports:
+      - "8094:8094"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+      admin-service:
+        condition: service_started
+      order-service:
+        condition: service_started
+      payment-service:
+        condition: service_started
+    networks:
+      - rdc-network
+
   wishlist-service:
     build: ./wishlist-service
     container_name: wishlist-service
     env_file:
       - ./env/wishlist-service.env
+    environment:
+      DB_URL: jdbc:mysql://mysql:3306/wishlist_db?useSSL=false&allowPublicKeyRetrieval=true
+      DESIGN_SERVICE_URL: http://admin-service:8080
+      ORDER_SERVICE_URL: http://order-service:8095
     ports:
       - "8093:8093"
     depends_on:

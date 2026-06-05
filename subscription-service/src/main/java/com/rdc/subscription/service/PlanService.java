@@ -2,6 +2,7 @@ package com.rdc.subscription.service;
 
 import com.rdc.subscription.dto.PlanResponse;
 import com.rdc.subscription.entity.Plan;
+import com.rdc.subscription.enums.BillingCycle;
 import com.rdc.subscription.enums.PlanType;
 import com.rdc.subscription.repository.PlanRepository;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +23,7 @@ public class PlanService {
                 .sorted(Comparator
                         .comparingInt((Plan plan) -> planTypeOrder(plan.getPlanType()))
                         .thenComparingInt(this::primaryLimit)
+                        .thenComparingInt(plan -> billingCycleOrder(plan.getBillingCycle()))
                         .thenComparing(Plan::getName, String.CASE_INSENSITIVE_ORDER))
                 .map(this::mapToResponse)
                 .toList();
@@ -39,6 +41,13 @@ public class PlanService {
         return switch (plan.getPlanType()) {
             case AI -> plan.getCreditLimit() != null ? plan.getCreditLimit() : 0;
             case DESIGN, COMBO -> plan.getDesignLimit() != null ? plan.getDesignLimit() : 0;
+        };
+    }
+
+    private int billingCycleOrder(BillingCycle billingCycle) {
+        return switch (billingCycle) {
+            case MONTHLY -> 0;
+            case YEARLY -> 1;
         };
     }
 

@@ -21,14 +21,22 @@ import java.util.List;
 public class PredefinedPlanCatalogInitializer implements ApplicationRunner {
 
     private static final List<PredefinedPlanDefinition> PREDEFINED_PLANS = List.of(
-            PredefinedPlanDefinition.ai("AI Credits 50", "500.00", 50),
-            PredefinedPlanDefinition.ai("AI Credits 100", "900.00", 100),
-            PredefinedPlanDefinition.ai("AI Credits 500", "4000.00", 500),
-            PredefinedPlanDefinition.ai("AI Credits 1000", "7000.00", 1000),
-            PredefinedPlanDefinition.design("Designs 10", "1000.00", 10),
-            PredefinedPlanDefinition.design("Designs 20", "1800.00", 20),
-            PredefinedPlanDefinition.design("Designs 50", "4000.00", 50),
-            PredefinedPlanDefinition.design("Designs 100", "7000.00", 100)
+            PredefinedPlanDefinition.ai("AI Credits 50", BillingCycle.MONTHLY, "500.00", 50),
+            PredefinedPlanDefinition.ai("AI Credits 100", BillingCycle.MONTHLY, "900.00", 100),
+            PredefinedPlanDefinition.ai("AI Credits 500", BillingCycle.MONTHLY, "4000.00", 500),
+            PredefinedPlanDefinition.ai("AI Credits 1000", BillingCycle.MONTHLY, "7000.00", 1000),
+            PredefinedPlanDefinition.ai("AI Credits 100", BillingCycle.YEARLY, "900.00", 100),
+            PredefinedPlanDefinition.ai("AI Credits 200", BillingCycle.YEARLY, "1800.00", 200),
+            PredefinedPlanDefinition.ai("AI Credits 500", BillingCycle.YEARLY, "4000.00", 500),
+            PredefinedPlanDefinition.ai("AI Credits 1000", BillingCycle.YEARLY, "7000.00", 1000),
+            PredefinedPlanDefinition.design("Designs 10", BillingCycle.MONTHLY, "15000.00", 10),
+            PredefinedPlanDefinition.design("Designs 20", BillingCycle.MONTHLY, "13000.00", 20),
+            PredefinedPlanDefinition.design("Designs 50", BillingCycle.MONTHLY, "50000.00", 50),
+            PredefinedPlanDefinition.design("Designs 100", BillingCycle.MONTHLY, "80000.00", 100),
+            PredefinedPlanDefinition.design("Designs 100", BillingCycle.YEARLY, "150000.00", 100),
+            PredefinedPlanDefinition.design("Designs 200", BillingCycle.YEARLY, "130000.00", 200),
+            PredefinedPlanDefinition.design("Designs 500", BillingCycle.YEARLY, "500000.00", 500),
+            PredefinedPlanDefinition.design("Designs 1000", BillingCycle.YEARLY, "800000.00", 1000)
     );
 
     private final PlanRepository planRepository;
@@ -122,11 +130,11 @@ public class PredefinedPlanCatalogInitializer implements ApplicationRunner {
             Integer designLimit,
             Integer creditLimit
     ) {
-        private static PredefinedPlanDefinition ai(String name, String price, int credits) {
+        private static PredefinedPlanDefinition ai(String name, BillingCycle billingCycle, String price, int credits) {
             return new PredefinedPlanDefinition(
                     name,
                     PlanType.AI,
-                    BillingCycle.MONTHLY,
+                    billingCycle,
                     new BigDecimal(price),
                     null,
                     0,
@@ -134,12 +142,12 @@ public class PredefinedPlanCatalogInitializer implements ApplicationRunner {
             );
         }
 
-        private static PredefinedPlanDefinition design(String name, String price, int designs) {
+        private static PredefinedPlanDefinition design(String name, BillingCycle billingCycle, String price, int designs) {
             BigDecimal planPrice = new BigDecimal(price);
             return new PredefinedPlanDefinition(
                     name,
                     PlanType.DESIGN,
-                    BillingCycle.MONTHLY,
+                    billingCycle,
                     planPrice,
                     planPrice.divide(BigDecimal.valueOf(designs), 2, RoundingMode.HALF_UP),
                     designs,

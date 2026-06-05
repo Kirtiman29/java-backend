@@ -73,6 +73,18 @@ PREPARE fabrics_stock_quantity_stmt FROM @fabrics_stock_quantity_sql;
 EXECUTE fabrics_stock_quantity_stmt;
 DEALLOCATE PREPARE fabrics_stock_quantity_stmt;
 
+SET @fabrics_special_offer_after_column = IF(
+    EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = DATABASE()
+          AND table_name = 'fabrics'
+          AND column_name = 'asset_uuid'
+    ),
+    'asset_uuid',
+    'active'
+);
+
 SET @fabrics_special_offer_sql = IF(
     EXISTS (
         SELECT 1
@@ -82,7 +94,10 @@ SET @fabrics_special_offer_sql = IF(
           AND column_name = 'special_offer'
     ),
     'SELECT 1',
-    'ALTER TABLE fabrics ADD COLUMN special_offer BOOLEAN NOT NULL DEFAULT FALSE AFTER asset_uuid'
+    CONCAT(
+        'ALTER TABLE fabrics ADD COLUMN special_offer BOOLEAN NOT NULL DEFAULT FALSE AFTER ',
+        @fabrics_special_offer_after_column
+    )
 );
 PREPARE fabrics_special_offer_stmt FROM @fabrics_special_offer_sql;
 EXECUTE fabrics_special_offer_stmt;

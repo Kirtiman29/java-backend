@@ -38,8 +38,19 @@ public class AssetController {
         return ResponseEntity.ok(assetService.getAllAssets());
     }
 
-    @PostMapping({"/upload", "/internal/upload"})
+    @PostMapping("/upload")
     public ResponseEntity<AssetDto> uploadAsset(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam("title") String title,
+            @RequestParam("sellerId") Long sellerId,
+            @RequestParam("type") AssetType type) throws Exception {
+
+        AssetDto result = assetService.uploadAndCreateAsset(file, title, sellerId, type);
+        return new ResponseEntity<>(result, HttpStatus.CREATED);
+    }
+
+    @PostMapping("/internal/upload")
+    public ResponseEntity<AssetDto> uploadInternalAsset(
             @RequestParam("file") MultipartFile file,
             @RequestParam("title") String title,
             @RequestParam("sellerId") Long sellerId,
@@ -76,7 +87,7 @@ public class AssetController {
         return new ResponseEntity<>(result, HttpStatus.CREATED);
     }
 
-    @RequestMapping(value = "/internal/{uuid}", method = {RequestMethod.HEAD, RequestMethod.DELETE})
+    @RequestMapping(value = "/internal/assets/{uuid}", method = {RequestMethod.HEAD, RequestMethod.DELETE})
     public ResponseEntity<Void> handleInternalAssetRequest(
             @PathVariable String uuid,
             @RequestHeader(value = "X-INTERNAL-KEY", required = false) String key,
