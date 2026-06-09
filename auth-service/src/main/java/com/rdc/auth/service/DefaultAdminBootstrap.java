@@ -22,7 +22,7 @@ public class DefaultAdminBootstrap implements ApplicationRunner {
     @Value("${app.default-admin.email:developer@ruchitadesigncompany.com}")
     private String defaultAdminEmail;
 
-    @Value("${app.default-admin.password:Admin@Rdc2026}")
+    @Value("${app.default-admin.password:Admin@Rdc2020}")
     private String defaultAdminPassword;
 
     @Override
