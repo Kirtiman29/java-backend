@@ -30,11 +30,11 @@ public class PredefinedPlanCatalogInitializer implements ApplicationRunner {
             PredefinedPlanDefinition.ai("AI Credits 500", BillingCycle.YEARLY, "4000.00", 500),
             PredefinedPlanDefinition.ai("AI Credits 1000", BillingCycle.YEARLY, "7000.00", 1000),
             PredefinedPlanDefinition.design("Designs 10", BillingCycle.MONTHLY, "15000.00", 10),
-            PredefinedPlanDefinition.design("Designs 20", BillingCycle.MONTHLY, "13000.00", 20),
+            PredefinedPlanDefinition.design("Designs 20", BillingCycle.MONTHLY, "26000.00", 20),
             PredefinedPlanDefinition.design("Designs 50", BillingCycle.MONTHLY, "50000.00", 50),
             PredefinedPlanDefinition.design("Designs 100", BillingCycle.MONTHLY, "80000.00", 100),
             PredefinedPlanDefinition.design("Designs 100", BillingCycle.YEARLY, "150000.00", 100),
-            PredefinedPlanDefinition.design("Designs 200", BillingCycle.YEARLY, "130000.00", 200),
+            PredefinedPlanDefinition.design("Designs 200", BillingCycle.YEARLY, "260000.00", 200),
             PredefinedPlanDefinition.design("Designs 500", BillingCycle.YEARLY, "500000.00", 500),
             PredefinedPlanDefinition.design("Designs 1000", BillingCycle.YEARLY, "800000.00", 1000)
     );
