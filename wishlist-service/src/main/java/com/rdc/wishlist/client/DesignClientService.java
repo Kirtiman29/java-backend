@@ -1,5 +1,6 @@
 package com.rdc.wishlist.client;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rdc.wishlist.dto.DesignDto;
 import com.rdc.wishlist.exception.DesignNotAvailableException;
 import com.rdc.wishlist.exception.DesignNotFoundException;
@@ -24,13 +25,14 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 public class DesignClientService {
 
     private final RestTemplate restTemplate;
+    private final ObjectMapper objectMapper;
 
     @Value("${service.design.url}")
     private String designServiceUrl;
 
     public DesignDto getDesignById(Long designId) {
         String url = designServiceUrl + "/api/public/designs/" + designId;
-        log.debug("Requesting metadata from Admin Service: {}", url);
+        log.info("Requesting design metadata: designId={}, url={}", designId, url);
 
         try {
             HttpHeaders headers = new HttpHeaders();
@@ -39,20 +41,31 @@ public class DesignClientService {
                 headers.set("Authorization", token);
             }
 
-            ResponseEntity<DesignDto> response = restTemplate.exchange(
+            ResponseEntity<String> response = restTemplate.exchange(
                     url,
                     HttpMethod.GET,
                     new HttpEntity<>(headers),
-                    DesignDto.class
+                    String.class
             );
 
-            DesignDto design = response.getBody();
+            String body = response.getBody();
+            log.info("Design metadata response: designId={}, status={}, body={}",
+                    designId, response.getStatusCode(), body);
+
+            if (body == null || body.isBlank()) {
+                throw new DesignNotFoundException("Design not found: " + designId);
+            }
+
+            DesignDto design = objectMapper.readValue(body, DesignDto.class);
             if (design == null) {
                 throw new DesignNotFoundException("Design not found: " + designId);
             }
 
             return design;
         } catch (HttpClientErrorException e) {
+            log.warn("Design metadata HTTP error: designId={}, url={}, status={}, body={}",
+                    designId, url, e.getStatusCode(), e.getResponseBodyAsString());
+
             if (e.getStatusCode() == HttpStatus.NOT_FOUND) {
                 throw new DesignNotFoundException("Design metadata not found for ID: " + designId);
             }
@@ -68,8 +81,17 @@ public class DesignClientService {
         }
     }
 
-    public void validateDesignForWishlist(Long designId) {
+    public DesignDto fetchDesignForWishlist(Long designId) {
         DesignDto design = getDesignById(designId);
+        validateDesignForWishlist(design, designId);
+        return design;
+    }
+
+    public void validateDesignForWishlist(Long designId) {
+        fetchDesignForWishlist(designId);
+    }
+
+    private void validateDesignForWishlist(DesignDto design, Long designId) {
 
         String designTitle = design.getTitle() != null ? design.getTitle() : "ID: " + designId;
 

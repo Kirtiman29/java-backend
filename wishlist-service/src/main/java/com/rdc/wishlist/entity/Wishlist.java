@@ -26,7 +26,16 @@ public class Wishlist {
     @Column(name = "design_id", nullable = false)
     private Long designId;
 
+    @Column(name = "design_identifier")
+    private String designIdentifier;
+
+    @Column(name = "design_title")
+    private String designTitle;
+
+    @Column(name = "asset_uuid")
+    private String assetUuid;
+
     @CreationTimestamp
-    @Column(name = "created_at", updatable = false)
+    @Column(name = "added_at", updatable = false)
     private Instant createdAt;
 }

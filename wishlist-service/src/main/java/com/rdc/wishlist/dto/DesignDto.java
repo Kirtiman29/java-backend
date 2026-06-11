@@ -8,6 +8,7 @@ import lombok.Data;
 @Data
 public class DesignDto {
     private Long id;
+    private String designIdentifier;
     private String title;
     private String slug;
     private String assetUuid;

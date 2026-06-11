@@ -32,12 +32,15 @@ public class WishlistServiceImpl implements WishlistService {
         log.info("Adding design {} to wishlist for user {}", designId, userId);
 
         try {
-            designClientService.validateDesignForWishlist(designId);
+            DesignDto design = designClientService.fetchDesignForWishlist(designId);
 
             if (!repository.existsByUserIdAndDesignId(userId, designId)) {
                 Wishlist item = Wishlist.builder()
                         .userId(userId)
                         .designId(designId)
+                        .designIdentifier(design.getDesignIdentifier())
+                        .designTitle(design.getTitle())
+                        .assetUuid(design.getAssetUuid())
                         .build();
                 repository.save(item);
                 log.info("Design {} successfully added to wishlist for user {}", designId, userId);
@@ -63,34 +66,78 @@ public class WishlistServiceImpl implements WishlistService {
 
     private WishlistResponse mapWishlistItem(Long userId, Wishlist item) {
         try {
+            log.info("Resolving wishlist item metadata: userId={}, designId={}", userId, item.getDesignId());
+
             DesignDto design = designClientService.getDesignById(item.getDesignId());
 
-            boolean purchased = orderClientService.hasUserPurchased(userId, design.getAssetUuid());
-            if (purchased) {
-                repository.deleteByUserIdAndDesignId(userId, item.getDesignId());
-                return null;
+            item.setDesignIdentifier(design.getDesignIdentifier());
+            item.setDesignTitle(design.getTitle());
+            item.setAssetUuid(design.getAssetUuid());
+
+            String assetUuid = firstNonBlank(design.getAssetUuid(), item.getAssetUuid());
+            if (assetUuid != null) {
+                boolean purchased = orderClientService.hasUserPurchased(userId, assetUuid);
+                if (purchased) {
+                    repository.deleteByUserIdAndDesignId(userId, item.getDesignId());
+                    return null;
+                }
             }
 
-            return WishlistResponse.builder()
-                    .designId(item.getDesignId())
-                    .title(design.getTitle() != null ? design.getTitle() : "Unknown Design")
-                    .slug(design.getSlug())
-                    .assetUuid(design.getAssetUuid() != null ? design.getAssetUuid() : "placeholder-uuid")
-                    .basePriceCents(design.getBasePriceCents() != null ? design.getBasePriceCents() : 0L)
-                    .finalPriceCents(design.getFinalPriceCents() != null ? design.getFinalPriceCents() : 0L)
-                    .discountPercent(design.getDiscountPercent() != null ? design.getDiscountPercent() : 0)
-                    .specialOffer(Boolean.TRUE.equals(design.getSpecialOffer()))
-                    .build();
+            return buildResponse(item, design);
         } catch (DesignNotFoundException | DesignNotAvailableException e) {
-            log.info("Cleaning stale wishlist entry for user {} and design {}: {}",
+            log.warn("Keeping wishlist entry for user {} and design {} after metadata lookup failure: {}",
                     userId, item.getDesignId(), e.getMessage());
-            repository.deleteByUserIdAndDesignId(userId, item.getDesignId());
-            return null;
+            return buildResponse(item, null);
         } catch (Exception e) {
-            log.warn("Skipping wishlist design {} due to temporary mapping error: {}",
-                    item.getDesignId(), e.getMessage());
-            return null;
+            log.warn("Keeping wishlist entry for user {} and design {} after temporary mapping error: {}",
+                    userId, item.getDesignId(), e.getMessage());
+            return buildResponse(item, null);
         }
+    }
+
+    private WishlistResponse buildResponse(Wishlist item, DesignDto design) {
+        String title = firstNonBlank(
+                design != null ? design.getTitle() : null,
+                item.getDesignTitle(),
+                "Unknown Design"
+        );
+        String slug = design != null ? design.getSlug() : null;
+        String assetUuid = firstNonBlank(
+                design != null ? design.getAssetUuid() : null,
+                item.getAssetUuid(),
+                "placeholder-uuid"
+        );
+
+        Long basePriceCents = design != null && design.getBasePriceCents() != null
+                ? design.getBasePriceCents()
+                : 0L;
+        Long finalPriceCents = design != null && design.getFinalPriceCents() != null
+                ? design.getFinalPriceCents()
+                : 0L;
+        Integer discountPercent = design != null && design.getDiscountPercent() != null
+                ? design.getDiscountPercent()
+                : 0;
+        boolean specialOffer = design != null && Boolean.TRUE.equals(design.getSpecialOffer());
+
+        return WishlistResponse.builder()
+                .designId(item.getDesignId())
+                .title(title)
+                .slug(slug)
+                .assetUuid(assetUuid)
+                .basePriceCents(basePriceCents)
+                .finalPriceCents(finalPriceCents)
+                .discountPercent(discountPercent)
+                .specialOffer(specialOffer)
+                .build();
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return null;
     }
 
     @Override
