@@ -1,6 +1,5 @@
 package com.rdc.wishlist.client;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rdc.wishlist.dto.DesignDto;
 import com.rdc.wishlist.exception.DesignNotAvailableException;
 import com.rdc.wishlist.exception.DesignNotFoundException;
@@ -25,7 +24,6 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 public class DesignClientService {
 
     private final RestTemplate restTemplate;
-    private final ObjectMapper objectMapper;
 
     @Value("${service.design.url}")
     private String designServiceUrl;
@@ -41,22 +39,17 @@ public class DesignClientService {
                 headers.set("Authorization", token);
             }
 
-            ResponseEntity<String> response = restTemplate.exchange(
+            ResponseEntity<DesignDto> response = restTemplate.exchange(
                     url,
                     HttpMethod.GET,
                     new HttpEntity<>(headers),
-                    String.class
+                    DesignDto.class
             );
 
-            String body = response.getBody();
+            DesignDto design = response.getBody();
             log.info("Design metadata response: designId={}, status={}, body={}",
-                    designId, response.getStatusCode(), body);
+                    designId, response.getStatusCode(), design);
 
-            if (body == null || body.isBlank()) {
-                throw new DesignNotFoundException("Design not found: " + designId);
-            }
-
-            DesignDto design = objectMapper.readValue(body, DesignDto.class);
             if (design == null) {
                 throw new DesignNotFoundException("Design not found: " + designId);
             }
