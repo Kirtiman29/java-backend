@@ -283,7 +283,7 @@ public class AuthController {
 
             if ("EMAIL_NOT_VERIFIED".equals(e.getMessage())) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                        .body(Map.of("error", "EMAIL_NOT_VERIFIED"));
+                        .body(Map.of("error", "EMAIL_NOT_VERIFIED", "message", "Please verify your email before logging in."));
             }
 
             if ("2FA_REQUIRED".equals(e.getMessage())) {

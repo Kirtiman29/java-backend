@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/api/ai")
+@RequestMapping({"/api/ai", "/ai"})
 public class AiController {
 
     private final AiOrchestrationService aiOrchestrationService;

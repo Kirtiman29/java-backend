@@ -54,6 +54,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/internal/subscriptions/**").permitAll()
                         .requestMatchers("/api/admin/subscriptions/**").hasRole("ADMIN")
                         .requestMatchers("/api/subscriptions/**").hasRole("USER")
+                        .requestMatchers("/api/bitmap/**").hasRole("USER")
                         .anyRequest().authenticated()
                 )
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt ->

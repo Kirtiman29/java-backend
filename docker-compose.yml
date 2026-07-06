@@ -47,6 +47,7 @@ services:
     environment:
       DB_URL: jdbc:mysql://mysql:3306/admin_db?useSSL=false&allowPublicKeyRetrieval=true
       ASSET_SERVICE_URL: http://asset-service:8090
+      AI_ASSET_SERVICE_URL: http://asset-service:8090
       ORDER_SERVICE_URL: http://order-service:8095
       CART_SERVICE_URL: http://cart-service:8091
       WISHLIST_SERVICE_URL: http://wishlist-service:8093

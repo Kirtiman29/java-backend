@@ -110,7 +110,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/admin/login").permitAll()
                         
                         /* AI TOOLS API */
-                        .requestMatchers("/api/ai/use").authenticated()
+                        .requestMatchers("/api/ai/use", "/ai/use").authenticated()
 
                         /* STATIC / GENERATED AI OUTPUT FILES */
                         .requestMatchers("/storage/**").permitAll()
