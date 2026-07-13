@@ -2,6 +2,7 @@ package com.rdc.admin.client;
 
 import com.rdc.admin.dto.ai.FastApiExecuteRequest;
 import com.rdc.admin.dto.ai.FastApiExecuteResponse;
+import com.rdc.admin.dto.ai.FastApiJobResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -10,11 +11,17 @@ import org.springframework.http.*;
 import org.springframework.stereotype.Component;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 import tools.jackson.databind.ObjectMapper;
 
+import java.net.InetAddress;
 import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.UnknownHostException;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
@@ -32,6 +39,9 @@ public class FastApiClient {
     @Value("${internal.service.key}")
     private String internalServiceKey;
 
+    @Value("${service.ai.asset.url:${service.asset.url}}")
+    private String aiAssetBaseUrl;
+
     @Value("${ai.upscale.url:}")
     private String aiUpscaleUrl;
 
@@ -43,18 +53,33 @@ public class FastApiClient {
         String url = fastApiBaseUrl.replaceAll("/+$", "") + "/internal/ai/execute";
         log.info("Routing AI tool {} to {}", request.getToolName(), url);
 
+        FastApiExecuteRequest forwardedRequest = FastApiExecuteRequest.builder()
+                .requestId(request.getRequestId())
+                .userId(request.getUserId())
+                .toolName(request.getToolName())
+                .inputUrl(resolveAiAssetUrl(request.getInputUrl()))
+                .params(resolveAiAssetUrls(request.getParams()))
+                .authToken(request.getAuthToken())
+                .build();
+
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("X-INTERNAL-KEY", internalServiceKey);
 
-        HttpEntity<FastApiExecuteRequest> entity = new HttpEntity<>(request, headers);
+        HttpEntity<FastApiExecuteRequest> entity = new HttpEntity<>(forwardedRequest, headers);
 
-        ResponseEntity<String> response = restTemplate.exchange(
-                url,
-                HttpMethod.POST,
-                entity,
-                String.class
-        );
+        ResponseEntity<String> response;
+        try {
+            response = restTemplate.exchange(
+                    url,
+                    HttpMethod.POST,
+                    entity,
+                    String.class
+            );
+        } catch (RestClientException exception) {
+            log.error("AI execution request to {} failed for tool {}: {}", url, request.getToolName(), exception.getMessage(), exception);
+            return failureResponse("Unable to reach AI execution service.");
+        }
 
         String responseBody = response.getBody();
         if (requestedOutputCount(request) > 1) {
@@ -74,12 +99,86 @@ public class FastApiClient {
             Map<String, Object> payload = objectMapper.readValue(responseBody, Map.class);
             return FastApiExecuteResponse.fromPayload(payload);
         } catch (Exception exception) {
-            throw new IllegalStateException("Unable to parse FastAPI response body", exception);
+            log.error("Unable to parse FastAPI response body for tool {}: {}", request.getToolName(), exception.getMessage(), exception);
+            return failureResponse("Unable to parse AI execution response.");
         }
     }
 
+    public FastApiJobResponse createJob(FastApiExecuteRequest request) {
+        String url = fastApiBaseUrl.replaceAll("/+$", "") + "/internal/ai/jobs";
+        log.info("Queueing AI tool {} at {}", request.getToolName(), url);
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("userId", request.getUserId());
+        body.put("featureName", request.getToolName());
+        body.put("inputUrl", resolveAiAssetUrl(request.getInputUrl()));
+        body.put("params", resolveAiAssetUrls(request.getParams()));
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("X-INTERNAL-KEY", internalServiceKey);
+
+        HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);
+
+        try {
+            ResponseEntity<String> response = restTemplate.exchange(
+                    url,
+                    HttpMethod.POST,
+                    entity,
+                    String.class
+            );
+            return parseJobResponse(response.getBody(), request.getToolName());
+        } catch (RestClientException exception) {
+            log.error("AI job queue request to {} failed for tool {}: {}", url, request.getToolName(), exception.getMessage(), exception);
+            return FastApiJobResponse.failure("Unable to queue AI job.");
+        }
+    }
+
+    public FastApiJobResponse getJobStatus(Long jobId) {
+        if (jobId == null) {
+            return FastApiJobResponse.failure("jobId is required.");
+        }
+
+        String url = fastApiBaseUrl.replaceAll("/+$", "") + "/internal/ai/jobs/" + jobId;
+        log.debug("Fetching AI job status from {}", url);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("X-INTERNAL-KEY", internalServiceKey);
+        HttpEntity<Void> entity = new HttpEntity<>(headers);
+
+        try {
+            ResponseEntity<String> response = restTemplate.exchange(
+                    url,
+                    HttpMethod.GET,
+                    entity,
+                    String.class
+            );
+            return parseJobResponse(response.getBody(), null);
+        } catch (RestClientException exception) {
+            log.error("AI job status request to {} failed: {}", url, exception.getMessage(), exception);
+            return FastApiJobResponse.failure("Unable to fetch AI job status.");
+        }
+    }
+
+    private FastApiJobResponse parseJobResponse(String responseBody, String fallbackToolName) {
+        if (responseBody == null || responseBody.isBlank()) {
+            return null;
+        }
+
+        try {
+            Map<String, Object> payload = objectMapper.readValue(responseBody, Map.class);
+            FastApiJobResponse response = FastApiJobResponse.fromPayload(payload);
+            if (response != null && (response.getFeatureName() == null || response.getFeatureName().isBlank())) {
+                response.setFeatureName(fallbackToolName);
+            }
+            return response;
+        } catch (Exception exception) {
+            log.error("Unable to parse AI job response body: {}", exception.getMessage(), exception);
+            return FastApiJobResponse.failure("Unable to parse AI job response.");
+        }
+    }
     private FastApiExecuteResponse executeSmartUpscale(FastApiExecuteRequest request) {
-        String inputUrl = request.getInputUrl();
+        String inputUrl = resolveAiAssetUrl(request.getInputUrl());
         if (inputUrl == null || inputUrl.isBlank()) {
             throw new IllegalStateException("Smart upscale requires inputUrl");
         }
@@ -141,13 +240,13 @@ public class FastApiClient {
             );
         } catch (HttpClientErrorException.NotFound exception) {
             log.error("Smart upscale endpoint not found at {}", url);
-            FastApiExecuteResponse errorResponse = new FastApiExecuteResponse();
-            errorResponse.setSuccess(false);
-            errorResponse.setMessage(
+            return failureResponse(
                     "Smart upscale endpoint not found at " + url
                             + ". Configure AI_UPSCALE_URL with the actual FastAPI smart-upscale route."
             );
-            return errorResponse;
+        } catch (RestClientException exception) {
+            log.error("Smart upscale request to {} failed: {}", url, exception.getMessage(), exception);
+            return failureResponse("Unable to reach AI smart-upscale service.");
         }
 
         String responseBody = response.getBody();
@@ -161,7 +260,8 @@ public class FastApiClient {
             Map<String, Object> payload = objectMapper.readValue(responseBody, Map.class);
             return FastApiExecuteResponse.fromPayload(payload);
         } catch (Exception exception) {
-            throw new IllegalStateException("Unable to parse smart upscale response body", exception);
+            log.error("Unable to parse smart upscale response body: {}", exception.getMessage(), exception);
+            return failureResponse("Unable to parse AI smart-upscale response.");
         }
     }
 
@@ -177,6 +277,143 @@ public class FastApiClient {
 
         String baseUrl = fastApiBaseUrl.replaceAll("/+$", "");
         return trimmed.startsWith("/") ? baseUrl + trimmed : baseUrl + "/" + trimmed;
+    }
+
+    private String resolveAiAssetUrl(String inputUrl) {
+        if (inputUrl == null || inputUrl.isBlank()) {
+            return inputUrl;
+        }
+
+        String assetBase = aiAssetBaseUrl == null ? null : aiAssetBaseUrl.trim();
+        if (assetBase == null || assetBase.isBlank()) {
+            assetBase = null;
+        }
+
+        try {
+            URI input = URI.create(inputUrl.trim());
+            URI base = assetBase != null ? URI.create(assetBase) : null;
+            URI reachableBase = resolveReachableAssetBase(base, input.getScheme());
+
+            if (!input.isAbsolute()) {
+                return reachableBase != null ? joinBaseAndPath(reachableBase, inputUrl.trim()) : inputUrl.trim();
+            }
+
+            if (!isLoopbackHost(input.getHost())) {
+                return inputUrl.trim();
+            }
+
+            if (reachableBase == null) {
+                return inputUrl.trim();
+            }
+
+            URI rebuilt = new URI(
+                    reachableBase.getScheme(),
+                    reachableBase.getUserInfo(),
+                    reachableBase.getHost(),
+                    reachableBase.getPort(),
+                    input.getPath(),
+                    input.getQuery(),
+                    input.getFragment()
+            );
+            return rebuilt.toString();
+        } catch (IllegalArgumentException | URISyntaxException exception) {
+            log.warn("Unable to normalize AI asset URL '{}': {}", inputUrl, exception.getMessage());
+            return inputUrl;
+        }
+    }
+
+    private Map<String, Object> resolveAiAssetUrls(Map<String, Object> params) {
+        if (params == null || params.isEmpty()) {
+            return params;
+        }
+
+        Map<String, Object> normalized = new LinkedHashMap<>();
+        params.forEach((key, value) -> normalized.put(key, resolveAiAssetValue(value)));
+        return normalized;
+    }
+
+    private Object resolveAiAssetValue(Object value) {
+        if (value instanceof String text) {
+            return resolvePotentialAssetUrl(text);
+        }
+
+        if (value instanceof List<?> items) {
+            return items.stream()
+                    .map(this::resolveAiAssetValue)
+                    .toList();
+        }
+
+        if (value instanceof Map<?, ?> mapValue) {
+            Map<String, Object> normalized = new LinkedHashMap<>();
+            mapValue.forEach((key, nestedValue) -> normalized.put(String.valueOf(key), resolveAiAssetValue(nestedValue)));
+            return normalized;
+        }
+
+        return value;
+    }
+
+    private String resolvePotentialAssetUrl(String value) {
+        String trimmed = value.trim();
+        if (trimmed.isBlank()) {
+            return value;
+        }
+
+        try {
+            URI uri = URI.create(trimmed);
+            String path = uri.getPath();
+
+            if ((path != null && path.contains("/api/assets/"))
+                    && (!uri.isAbsolute() || isLoopbackHost(uri.getHost()))) {
+                return resolveAiAssetUrl(trimmed);
+            }
+        } catch (IllegalArgumentException ignored) {
+            // Non-URL strings are ordinary prompt/model params and should pass through unchanged.
+        }
+
+        return value;
+    }
+
+    private String joinBaseAndPath(URI base, String path) {
+        String normalizedPath = path.startsWith("/") ? path : "/" + path;
+        return base.toString().replaceAll("/+$", "") + normalizedPath;
+    }
+
+    private URI resolveReachableAssetBase(URI configuredBase, String fallbackScheme) {
+        if (configuredBase != null && !isLoopbackHost(configuredBase.getHost())) {
+            return configuredBase;
+        }
+
+        try {
+            String localHostAddress = InetAddress.getLocalHost().getHostAddress();
+            if (localHostAddress == null || localHostAddress.isBlank()) {
+                return configuredBase;
+            }
+
+            String scheme = configuredBase != null && configuredBase.getScheme() != null
+                    ? configuredBase.getScheme()
+                    : (fallbackScheme != null ? fallbackScheme : "http");
+
+            int port = configuredBase != null ? configuredBase.getPort() : -1;
+            String userInfo = configuredBase != null ? configuredBase.getUserInfo() : null;
+            String path = configuredBase != null ? configuredBase.getPath() : null;
+
+            return new URI(scheme, userInfo, localHostAddress, port, path, null, null);
+        } catch (UnknownHostException | URISyntaxException exception) {
+            log.warn("Unable to resolve a reachable AI asset base URL: {}", exception.getMessage());
+            return configuredBase;
+        }
+    }
+
+    private boolean isLoopbackHost(String host) {
+        if (host == null || host.isBlank()) {
+            return false;
+        }
+
+        String normalized = host.trim().toLowerCase(Locale.ROOT);
+        return "localhost".equals(normalized)
+                || "127.0.0.1".equals(normalized)
+                || "0.0.0.0".equals(normalized)
+                || "::1".equals(normalized);
     }
 
     private int requestedOutputCount(FastApiExecuteRequest request) {
@@ -253,4 +490,12 @@ public class FastApiClient {
 
         return fastApiBaseUrl.replaceAll("/+$", "") + "/ai/upscale";
     }
+
+    private FastApiExecuteResponse failureResponse(String message) {
+        FastApiExecuteResponse errorResponse = new FastApiExecuteResponse();
+        errorResponse.setSuccess(false);
+        errorResponse.setMessage(message);
+        return errorResponse;
+    }
 }
+

@@ -4,11 +4,12 @@ import com.rdc.admin.client.FastApiClient;
 import com.rdc.admin.client.SubscriptionServiceClient;
 import com.rdc.admin.dto.ai.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
-import org.springframework.http.HttpStatus;
 
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -19,6 +20,7 @@ import java.util.UUID;
 public class AiOrchestrationService {
 
     private static final String UPSCALE = "UPSCALE";
+    private static final String COLOR_SEPARATION = "COLOR_SEPARATION";
     private static final String GEMINI_TEXT_TO_IMAGE = "GEMINI_TEXT_TO_IMAGE";
     private static final String GEMINI_IMAGE_TO_IMAGE = "GEMINI_IMAGE_TO_IMAGE";
     private static final String GEMINI_IMAGE_MIX = "GEMINI_IMAGE_MIX";
@@ -65,6 +67,10 @@ public class AiOrchestrationService {
                 .authToken(authToken)
                 .build();
 
+        if (isQueuedTool(fastApiRequest.getToolName())) {
+            return executeQueuedTool(userId, request, fastApiRequest, cost);
+        }
+
         FastApiExecuteResponse fastApiResponse = fastApiClient.execute(fastApiRequest);
 
         if (fastApiResponse == null || !Boolean.TRUE.equals(fastApiResponse.getSuccess())) {
@@ -89,7 +95,94 @@ public class AiOrchestrationService {
                 .outputUrl(outputUrl)
                 .outputData(fastApiResponse.getOutputData())
                 .remainingCredits(consume.getAvailableCredits())
+                .queued(false)
                 .build();
+    }
+
+    public AiToolResponse getJobStatus(Long userId, Long jobId) {
+        FastApiJobResponse job = fastApiClient.getJobStatus(jobId);
+        if (job == null || !Boolean.TRUE.equals(job.getSuccess())) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_GATEWAY,
+                    job != null ? firstNonBlank(job.getMessage(), job.getErrorMessage()) : "Unable to fetch AI job status"
+            );
+        }
+
+        if (job.getUserId() != null && userId != null && !job.getUserId().equals(userId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "AI job access denied");
+        }
+
+        return buildQueuedResponse(job, job.getFeatureName(), null);
+    }
+
+    private AiToolResponse executeQueuedTool(
+            Long userId,
+            AiToolRequest originalRequest,
+            FastApiExecuteRequest fastApiRequest,
+            int cost
+    ) {
+        FastApiJobResponse job = fastApiClient.createJob(fastApiRequest);
+        if (job == null || !Boolean.TRUE.equals(job.getSuccess())) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_GATEWAY,
+                    job != null ? firstNonBlank(job.getMessage(), job.getErrorMessage()) : "AI job queue failed"
+            );
+        }
+
+        SubscriptionAiValidationResponse consume =
+                subscriptionServiceClient.consumeAi(userId, originalRequest.getToolName(), cost);
+        if (consume == null || !consume.isAllowed()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, validationMessage(consume));
+        }
+
+        return buildQueuedResponse(job, originalRequest.getToolName(), consume.getAvailableCredits());
+    }
+
+    private AiToolResponse buildQueuedResponse(
+            FastApiJobResponse job,
+            String requestedToolName,
+            Integer remainingCredits
+    ) {
+        Map<String, Object> outputData = new LinkedHashMap<>();
+        outputData.put("jobId", job.getJobId());
+        outputData.put("status", job.getStatus());
+        outputData.put("workerType", job.getWorkerType());
+        outputData.put("featureName", job.getFeatureName());
+        outputData.put("outputKey", job.getOutputKey());
+        outputData.put("errorMessage", job.getErrorMessage());
+        if (job.getInput() != null) {
+            outputData.put("input", job.getInput());
+        }
+
+        return AiToolResponse.builder()
+                .success(true)
+                .toolName(firstNonBlank(requestedToolName, job.getFeatureName()))
+                .message(firstNonBlank(job.getMessage(), "AI job queued successfully."))
+                .outputUrl(job.getOutputKey())
+                .outputData(outputData)
+                .remainingCredits(remainingCredits)
+                .jobId(job.getJobId())
+                .status(job.getStatus())
+                .workerType(job.getWorkerType())
+                .outputKey(job.getOutputKey())
+                .errorMessage(job.getErrorMessage())
+                .queued(isActiveQueuedStatus(job.getStatus()))
+                .build();
+    }
+
+    private boolean isQueuedTool(String toolName) {
+        return COLOR_SEPARATION.equals(toolName);
+    }
+
+    private boolean isActiveQueuedStatus(String status) {
+        if (status == null) {
+            return false;
+        }
+        String normalized = status.trim().toUpperCase(Locale.ROOT);
+        return "CREATED".equals(normalized)
+                || "QUEUED".equals(normalized)
+                || "GPU_STARTING".equals(normalized)
+                || "PROCESSING".equals(normalized);
     }
 
     private String mapToolName(String toolName) {
@@ -107,12 +200,19 @@ public class AiOrchestrationService {
         Map<String, Object> params = request.getParams() != null ? request.getParams() : Collections.emptyMap();
         switch (request.getToolName()) {
             case UPSCALE -> validateUpscale(request, params);
+            case COLOR_SEPARATION -> validateColorSeparation(request);
             case GEMINI_TEXT_TO_IMAGE -> validateGeminiTextToImage(params);
             case GEMINI_IMAGE_TO_IMAGE -> validateGeminiImageToImage(request, params);
             case GEMINI_IMAGE_MIX -> validateGeminiImageMix(params);
             default -> {
                 // No extra gateway validation needed for other tools.
             }
+        }
+    }
+
+    private void validateColorSeparation(AiToolRequest request) {
+        if (isBlank(request.getInputUrl())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "inputUrl is required for color separation.");
         }
     }
 

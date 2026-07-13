@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/api/ai")
+@RequestMapping({"/api/ai", "/ai"})
 public class AiController {
 
     private final AiOrchestrationService aiOrchestrationService;
@@ -23,5 +23,14 @@ public class AiController {
     ) {
         Long userId = Long.parseLong(jwt.getSubject());
         return ResponseEntity.ok(aiOrchestrationService.executeTool(userId, jwt.getTokenValue(), request));
+    }
+
+    @GetMapping("/jobs/{jobId}")
+    public ResponseEntity<AiToolResponse> getAiJobStatus(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable Long jobId
+    ) {
+        Long userId = Long.parseLong(jwt.getSubject());
+        return ResponseEntity.ok(aiOrchestrationService.getJobStatus(userId, jobId));
     }
 }

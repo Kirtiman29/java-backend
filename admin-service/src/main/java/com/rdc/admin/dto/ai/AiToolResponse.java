@@ -14,4 +14,11 @@ public class AiToolResponse {
     private String outputUrl;
     private Map<String, Object> outputData;
     private Integer remainingCredits;
+
+    private Long jobId;
+    private String status;
+    private String workerType;
+    private String outputKey;
+    private String errorMessage;
+    private Boolean queued;
 }

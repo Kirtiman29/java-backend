@@ -14,6 +14,7 @@ import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.http.HttpMethod;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -30,7 +31,7 @@ public class SecurityConfig {
     @Value("${jwt.secret}")
     private String jwtSecret;
 
-    @Value("${CORS_ALLOWED_ORIGINS}")
+    @Value("${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:3001,http://localhost:5173,https://localhost:3000,https://localhost:3001,https://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:3001,http://127.0.0.1:5173,http://192.168.0.17:3000,http://192.168.0.17:3001,http://192.168.0.17:5173,https://192.168.0.17:3000,https://192.168.0.17:3001,https://192.168.0.17:5173}")
     private String allowedOrigins;
 
 
@@ -47,6 +48,9 @@ public class SecurityConfig {
                 )
 
                 .authorizeHttpRequests(auth -> auth
+                        // Always allow browser preflight requests
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+
                         // ✅ Public Authentication Endpoints [cite: 828-831]
                         .requestMatchers(
                                 "/api/auth/login",
@@ -122,7 +126,7 @@ public class SecurityConfig {
                 .map(String::trim)
                 .collect(Collectors.toList());
 
-        config.setAllowedOrigins(origins);
+        config.setAllowedOriginPatterns(origins);
 
         config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"));
 
