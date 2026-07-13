@@ -18,6 +18,12 @@ public class BitmapWebClientConfig {
     @Value("${service.gemini.url:http://localhost:8000}")
     private String geminiUrl;
 
+    @Value("${service.fastapi.response-timeout-seconds:900}")
+    private long fastApiResponseTimeoutSeconds;
+
+    @Value("${service.fastapi.max-in-memory-mb:512}")
+    private int fastApiMaxInMemoryMb;
+
     @Bean
     public WebClient.Builder webClientBuilder() {
         return WebClient.builder();
@@ -35,14 +41,14 @@ public class BitmapWebClientConfig {
 
     private WebClient buildFastApiClient(WebClient.Builder builder, String baseUrl) {
         HttpClient httpClient = HttpClient.create()
-                .responseTimeout(Duration.ofSeconds(300)); // 300 seconds timeout for processing
+                .responseTimeout(Duration.ofSeconds(fastApiResponseTimeoutSeconds));
 
         return builder
                 .baseUrl(baseUrl)
                 .clientConnector(new ReactorClientHttpConnector(httpClient))
                 .codecs(configurer -> configurer
                         .defaultCodecs()
-                        .maxInMemorySize(64 * 1024 * 1024)) // 64 MB buffer limit for large files/ZIPs
+                        .maxInMemorySize(fastApiMaxInMemoryMb * 1024 * 1024))
                 .build();
     }
 }

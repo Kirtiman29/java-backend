@@ -43,6 +43,8 @@ public class BitmapService {
     private static final int GEMINI_IMAGE_TO_IMAGE_CREDIT_COST = 8;
     private static final String EMBROIDERY_PREVIEW_TOOL = "EMBROIDERY_PREVIEW";
     private static final int EMBROIDERY_PREVIEW_CREDIT_COST = 10;
+    private static final String BITMAP_TOOL = "BITMAP";
+    private static final int BITMAP_CREDIT_COST = 10;
 
     private static final Set<String> ALLOWED_IMAGE_CONTENT_TYPES = Set.of(
             "image/png",
@@ -428,6 +430,7 @@ public class BitmapService {
      */
     public ResponseEntity<byte[]> forwardBinaryRequest(String path, Map<String, String> params, Long userId) {
         checkActiveSubscription(userId);
+        validateAiCredits(userId, BITMAP_TOOL, BITMAP_CREDIT_COST);
 
         String filename = params.get("filename");
         validateFileOwnership(filename, userId);
@@ -455,6 +458,9 @@ public class BitmapService {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(response.getHeaders().getContentType());
             headers.setContentDisposition(response.getHeaders().getContentDisposition());
+            AiValidationResponse creditResponse = consumeAiCredits(userId, BITMAP_TOOL, BITMAP_CREDIT_COST);
+            headers.add("X-Remaining-Credits", String.valueOf(creditResponse.getAvailableCredits()));
+            headers.add("X-Credits-Required", String.valueOf(creditResponse.getCreditsRequired()));
 
             return new ResponseEntity<>(response.getBody(), headers, response.getStatusCode());
 

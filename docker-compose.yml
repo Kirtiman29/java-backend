@@ -165,6 +165,8 @@ services:
       ADMIN_SERVICE_URL: http://admin-service:8080
       BITMAP_BACKEND_URL: ${BITMAP_BACKEND_URL:-http://host.docker.internal:8002}
       GEMINI_BACKEND_URL: ${GEMINI_BACKEND_URL:-http://host.docker.internal:8000}
+      FASTAPI_RESPONSE_TIMEOUT_SECONDS: ${FASTAPI_RESPONSE_TIMEOUT_SECONDS:-900}
+      FASTAPI_MAX_IN_MEMORY_MB: ${FASTAPI_MAX_IN_MEMORY_MB:-512}
       INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:-ORDER_PAYMENT_BRIDGE_KEY}
     extra_hosts:
       - "host.docker.internal:host-gateway"

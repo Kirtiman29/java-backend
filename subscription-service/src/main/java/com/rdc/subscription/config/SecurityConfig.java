@@ -101,6 +101,11 @@ public class SecurityConfig {
                 "X-INTERNAL-KEY"
         ));
         config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
+        config.setExposedHeaders(Arrays.asList(
+                "Content-Disposition",
+                "X-Remaining-Credits",
+                "X-Credits-Required"
+        ));
         config.setAllowCredentials(true);
         config.setMaxAge(3600L);
 
