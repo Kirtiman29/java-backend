@@ -6,6 +6,7 @@ import com.rdc.admin.dto.ai.AiToolRequest;
 import com.rdc.admin.dto.ai.AiToolResponse;
 import com.rdc.admin.dto.ai.FastApiExecuteResponse;
 import com.rdc.admin.dto.ai.SubscriptionAiValidationResponse;
+import com.rdc.admin.repository.AiCreditConsumptionRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
@@ -29,8 +30,14 @@ class AiOrchestrationServiceTest {
     private final AiToolCostService aiToolCostService = new AiToolCostService();
     private final SubscriptionServiceClient subscriptionServiceClient = mock(SubscriptionServiceClient.class);
     private final FastApiClient fastApiClient = mock(FastApiClient.class);
+    private final AiCreditConsumptionRepository aiCreditConsumptionRepository = mock(AiCreditConsumptionRepository.class);
     private final AiOrchestrationService service =
-            new AiOrchestrationService(aiToolCostService, subscriptionServiceClient, fastApiClient);
+            new AiOrchestrationService(
+                    aiToolCostService,
+                    subscriptionServiceClient,
+                    fastApiClient,
+                    aiCreditConsumptionRepository
+            );
 
     @Test
     void shouldRejectGeminiTextToImageWhenUserPromptMissing() {

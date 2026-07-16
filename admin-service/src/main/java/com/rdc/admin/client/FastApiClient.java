@@ -36,6 +36,9 @@ public class FastApiClient {
     @Value("${service.fastapi.url}")
     private String fastApiBaseUrl;
 
+    @Value("${service.fastapi.public-url:${service.fastapi.url}}")
+    private String fastApiPublicBaseUrl;
+
     @Value("${internal.service.key}")
     private String internalServiceKey;
 
@@ -112,7 +115,7 @@ public class FastApiClient {
         body.put("userId", request.getUserId());
         body.put("featureName", request.getToolName());
         body.put("inputUrl", resolveAiAssetUrl(request.getInputUrl()));
-        body.put("params", resolveAiAssetUrls(request.getParams()));
+        body.put("params", buildQueuedJobParams(request));
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -177,6 +180,32 @@ public class FastApiClient {
             return FastApiJobResponse.failure("Unable to parse AI job response.");
         }
     }
+
+    private Map<String, Object> buildQueuedJobParams(FastApiExecuteRequest request) {
+        Map<String, Object> params = resolveAiAssetUrls(request.getParams());
+        if (!isSeamlessTool(request.getToolName())) {
+            return params;
+        }
+
+        Map<String, Object> enriched = new LinkedHashMap<>();
+        if (params != null) {
+            enriched.putAll(params);
+        }
+        enriched.putIfAbsent("publicBaseUrl", fastApiPublicBaseUrl);
+        return enriched;
+    }
+
+    private boolean isSeamlessTool(String toolName) {
+        if (toolName == null) {
+            return false;
+        }
+
+        String normalized = toolName.trim().toUpperCase(Locale.ROOT);
+        return "SEAMLESS".equals(normalized)
+                || "SEAMLESS_GENERATOR".equals(normalized)
+                || "SEAMLESS_PATTERN".equals(normalized);
+    }
+
     private FastApiExecuteResponse executeSmartUpscale(FastApiExecuteRequest request) {
         String inputUrl = resolveAiAssetUrl(request.getInputUrl());
         if (inputUrl == null || inputUrl.isBlank()) {

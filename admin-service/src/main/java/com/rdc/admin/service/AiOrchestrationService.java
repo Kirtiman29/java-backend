@@ -3,9 +3,12 @@ package com.rdc.admin.service;
 import com.rdc.admin.client.FastApiClient;
 import com.rdc.admin.client.SubscriptionServiceClient;
 import com.rdc.admin.dto.ai.*;
+import com.rdc.admin.entity.AiCreditConsumption;
+import com.rdc.admin.repository.AiCreditConsumptionRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Collections;
@@ -24,6 +27,9 @@ public class AiOrchestrationService {
     private static final String GEMINI_TEXT_TO_IMAGE = "GEMINI_TEXT_TO_IMAGE";
     private static final String GEMINI_IMAGE_TO_IMAGE = "GEMINI_IMAGE_TO_IMAGE";
     private static final String GEMINI_IMAGE_MIX = "GEMINI_IMAGE_MIX";
+    private static final String SEAMLESS = "SEAMLESS";
+    private static final String SEAMLESS_GENERATOR = "SEAMLESS_GENERATOR";
+    private static final String SEAMLESS_PATTERN = "SEAMLESS_PATTERN";
     private static final List<String> SUPPORTED_UPSCALE_MODES = List.of("smart", "double", "textile");
 
     private static final List<String> GEMINI_IMAGE_ASPECT_RATIOS = List.of(
@@ -37,6 +43,7 @@ public class AiOrchestrationService {
     private final AiToolCostService aiToolCostService;
     private final SubscriptionServiceClient subscriptionServiceClient;
     private final FastApiClient fastApiClient;
+    private final AiCreditConsumptionRepository aiCreditConsumptionRepository;
 
     public AiToolResponse executeTool(Long userId, AiToolRequest request) {
         return executeTool(userId, null, request);
@@ -112,7 +119,8 @@ public class AiOrchestrationService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "AI job access denied");
         }
 
-        return buildQueuedResponse(job, job.getFeatureName(), null);
+        Integer remainingCredits = consumeQueuedCreditsIfCompleted(userId, job);
+        return buildQueuedResponse(job, job.getFeatureName(), remainingCredits);
     }
 
     private AiToolResponse executeQueuedTool(
@@ -129,13 +137,63 @@ public class AiOrchestrationService {
             );
         }
 
-        SubscriptionAiValidationResponse consume =
-                subscriptionServiceClient.consumeAi(userId, originalRequest.getToolName(), cost);
+        registerQueuedCreditConsumption(job, userId, originalRequest.getToolName(), cost);
+
+        return buildQueuedResponse(job, originalRequest.getToolName(), null);
+    }
+
+    private void registerQueuedCreditConsumption(
+            FastApiJobResponse job,
+            Long userId,
+            String toolName,
+            int cost
+    ) {
+        if (job.getJobId() == null) {
+            return;
+        }
+
+        aiCreditConsumptionRepository.findByJobId(job.getJobId()).orElseGet(() ->
+                aiCreditConsumptionRepository.save(
+                        AiCreditConsumption.builder()
+                                .jobId(job.getJobId())
+                                .userId(userId)
+                                .toolName(toolName)
+                                .creditsRequired(cost)
+                                .consumed(false)
+                                .build()
+                )
+        );
+    }
+
+    @Transactional
+    protected Integer consumeQueuedCreditsIfCompleted(Long userId, FastApiJobResponse job) {
+        if (job == null || job.getJobId() == null || !"COMPLETED".equalsIgnoreCase(job.getStatus())) {
+            return null;
+        }
+
+        AiCreditConsumption consumption = aiCreditConsumptionRepository
+                .findByJobId(job.getJobId())
+                .orElse(null);
+        if (consumption == null || consumption.isConsumed()) {
+            return null;
+        }
+
+        if (userId != null && !userId.equals(consumption.getUserId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "AI job access denied");
+        }
+
+        SubscriptionAiValidationResponse consume = subscriptionServiceClient.consumeAi(
+                consumption.getUserId(),
+                consumption.getToolName(),
+                consumption.getCreditsRequired()
+        );
         if (consume == null || !consume.isAllowed()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, validationMessage(consume));
         }
 
-        return buildQueuedResponse(job, originalRequest.getToolName(), consume.getAvailableCredits());
+        consumption.markConsumed();
+        aiCreditConsumptionRepository.save(consumption);
+        return consume.getAvailableCredits();
     }
 
     private AiToolResponse buildQueuedResponse(
@@ -171,7 +229,10 @@ public class AiOrchestrationService {
     }
 
     private boolean isQueuedTool(String toolName) {
-        return COLOR_SEPARATION.equals(toolName);
+        return COLOR_SEPARATION.equals(toolName)
+                || SEAMLESS.equals(toolName)
+                || SEAMLESS_GENERATOR.equals(toolName)
+                || SEAMLESS_PATTERN.equals(toolName);
     }
 
     private boolean isActiveQueuedStatus(String status) {
@@ -204,6 +265,7 @@ public class AiOrchestrationService {
             case GEMINI_TEXT_TO_IMAGE -> validateGeminiTextToImage(params);
             case GEMINI_IMAGE_TO_IMAGE -> validateGeminiImageToImage(request, params);
             case GEMINI_IMAGE_MIX -> validateGeminiImageMix(params);
+            case SEAMLESS, SEAMLESS_GENERATOR, SEAMLESS_PATTERN -> validateSeamless(request);
             default -> {
                 // No extra gateway validation needed for other tools.
             }
@@ -213,6 +275,12 @@ public class AiOrchestrationService {
     private void validateColorSeparation(AiToolRequest request) {
         if (isBlank(request.getInputUrl())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "inputUrl is required for color separation.");
+        }
+    }
+
+    private void validateSeamless(AiToolRequest request) {
+        if (isBlank(request.getInputUrl())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "inputUrl is required for seamless generation.");
         }
     }
 

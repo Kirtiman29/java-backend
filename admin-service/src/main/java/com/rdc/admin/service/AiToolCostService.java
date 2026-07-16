@@ -24,7 +24,10 @@ public class AiToolCostService {
             "IMAGE_TO_IMAGE",
             "SDXL_IMAGE_TO_IMAGE",
             "PATTERN_GENERATOR",
-            "IMAGE_MIX"
+            "IMAGE_MIX",
+            "SEAMLESS",
+            "SEAMLESS_GENERATOR",
+            "SEAMLESS_PATTERN"
     );
 
     private static final String[] OUTPUT_COUNT_KEYS = {
@@ -66,7 +69,10 @@ public class AiToolCostService {
             Map.entry("COLOR_SEPARATION", 4),
             Map.entry("COLORWAY", 4),
             Map.entry("IMAGE_MIX", 8),
-            Map.entry("PROMPT_ENHANCER", 2)
+            Map.entry("PROMPT_ENHANCER", 2),
+            Map.entry("SEAMLESS", 7),
+            Map.entry("SEAMLESS_GENERATOR", 7),
+            Map.entry("SEAMLESS_PATTERN", 7)
     );
 
     public int getCost(String toolName, Map<String, Object> params) {
