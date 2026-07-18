@@ -319,6 +319,7 @@ public class BitmapService {
 
         try {
             addMultipartFile(bodyBuilder, "file", file);
+            bodyBuilder.part("userId", String.valueOf(userId));
 
             if (maskFile != null && !maskFile.isEmpty()) {
                 addMultipartFile(bodyBuilder, "mask_file", maskFile);
@@ -379,6 +380,7 @@ public class BitmapService {
 
         try {
             addMultipartFile(bodyBuilder, "image", image);
+            bodyBuilder.part("user_id", String.valueOf(userId));
 
             if (!forwardedParams.isEmpty()) {
                 forwardedParams.forEach((key, value) -> {

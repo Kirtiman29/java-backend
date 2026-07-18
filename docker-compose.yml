@@ -42,6 +42,7 @@ services:
       PAYMENT_SERVICE_URL: http://payment-service:8092
       SUBSCRIPTION_SERVICE_URL: http://subscription-service:8094
       FASTAPI_SERVICE_URL: ${FASTAPI_SERVICE_URL:-http://host.docker.internal:8000}
+      FASTAPI_PUBLIC_URL: ${FASTAPI_PUBLIC_URL:-${FASTAPI_SERVICE_URL:-http://host.docker.internal:8000}}
       INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:-ORDER_PAYMENT_BRIDGE_KEY}
     extra_hosts:
       - "host.docker.internal:host-gateway"
