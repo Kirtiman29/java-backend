@@ -1,13 +1,16 @@
 package com.rdc.subscription.service;
 
 import com.rdc.subscription.dto.bitmap.BitmapAnalyzeResponse;
+import com.rdc.subscription.dto.bitmap.BitmapJobResponse;
 import com.rdc.subscription.dto.bitmap.BitmapUploadResponse;
 import com.rdc.subscription.dto.bitmap.GeminiImageToImageResponse;
 import com.rdc.subscription.dto.internal.AiValidationRequest;
 import com.rdc.subscription.dto.internal.AiValidationResponse;
 import com.rdc.subscription.dto.internal.ConsumeAiRequest;
 import com.rdc.subscription.entity.BitmapMetadata;
+import com.rdc.subscription.entity.BitmapQueuedJob;
 import com.rdc.subscription.repository.BitmapMetadataRepository;
+import com.rdc.subscription.repository.BitmapQueuedJobRepository;
 import com.rdc.subscription.repository.SubscriptionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,6 +24,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -31,6 +35,7 @@ import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -63,6 +68,7 @@ public class BitmapService {
     private String internalServiceKey;
 
     private final BitmapMetadataRepository bitmapMetadataRepository;
+    private final BitmapQueuedJobRepository bitmapQueuedJobRepository;
     private final SubscriptionRepository subscriptionRepository;
     private final EntitlementService entitlementService;
 
@@ -423,6 +429,252 @@ public class BitmapService {
             log.error("Failed to connect to FastAPI embroidery endpoint", ex);
             throw new RuntimeException("Embroidery preview service is currently unavailable");
         }
+    }
+
+    public BitmapJobResponse queueBitmapRequest(String path, Map<String, String> params, Long userId) {
+        checkActiveSubscription(userId);
+        validateAiCredits(userId, BITMAP_TOOL, BITMAP_CREDIT_COST);
+
+        Map<String, String> forwardedParams = params == null ? new LinkedHashMap<>() : new LinkedHashMap<>(params);
+        String filename = forwardedParams.get("filename");
+        validateFileOwnership(filename, userId);
+
+        String featureName = resolveBitmapFeatureName(path);
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("userId", userId);
+        body.put("featureName", featureName);
+        body.put("params", forwardedParams);
+
+        try {
+            Map response = bitmapWebClient.post()
+                    .uri("/internal/ai/jobs")
+                    .header("X-User-Id", String.valueOf(userId))
+                    .header("X-INTERNAL-KEY", internalServiceKey)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(body)
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .block();
+
+            BitmapJobResponse job = parseBitmapJobResponse(response, featureName);
+            if (job == null || !Boolean.TRUE.equals(job.getSuccess()) || job.getJobId() == null) {
+                throw new RuntimeException(job != null && job.getMessage() != null ? job.getMessage() : "Bitmap job queue failed");
+            }
+
+            bitmapQueuedJobRepository.findByJobId(job.getJobId()).orElseGet(() ->
+                    bitmapQueuedJobRepository.save(
+                            BitmapQueuedJob.builder()
+                                    .jobId(job.getJobId())
+                                    .userId(userId)
+                                    .featureName(featureName)
+                                    .creditsRequired(BITMAP_CREDIT_COST)
+                                    .consumed(false)
+                                    .status(job.getStatus())
+                                    .outputKey(job.getOutputKey())
+                                    .errorMessage(job.getErrorMessage())
+                                    .build()
+                    )
+            );
+
+            job.setCreditsRequired(BITMAP_CREDIT_COST);
+            job.setCreditsConsumed(false);
+            job.setRemainingCredits(null);
+            job.setQueued(isActiveQueuedStatus(job.getStatus()));
+            return job;
+        } catch (WebClientResponseException ex) {
+            log.error("FastAPI bitmap job queue failed: status={}, body={}", ex.getStatusCode(), ex.getResponseBodyAsString());
+            throw new RuntimeException("Bitmap job queue failed: " + ex.getResponseBodyAsString());
+        } catch (Exception ex) {
+            log.error("Failed to queue bitmap job for path {}", path, ex);
+            throw new RuntimeException("Bitmap job queue failed: " + ex.getMessage());
+        }
+    }
+
+    @Transactional
+    public BitmapJobResponse getBitmapJobStatus(Long jobId, Long userId) {
+        if (jobId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "jobId is required");
+        }
+
+        BitmapJobResponse job = fetchBitmapJobStatus(jobId);
+        if (job == null || !Boolean.TRUE.equals(job.getSuccess())) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_GATEWAY,
+                    job != null ? firstNonBlank(job.getMessage(), job.getErrorMessage()) : "Unable to fetch bitmap job status"
+            );
+        }
+
+        if (job.getUserId() != null && !Objects.equals(job.getUserId(), userId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bitmap job access denied");
+        }
+
+        BitmapQueuedJob queuedJob = bitmapQueuedJobRepository.findByJobIdAndUserId(jobId, userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Bitmap job not found"));
+
+        queuedJob.setStatus(job.getStatus());
+        queuedJob.setOutputKey(job.getOutputKey());
+        queuedJob.setErrorMessage(job.getErrorMessage());
+
+        Integer remainingCredits = null;
+        if ("COMPLETED".equalsIgnoreCase(job.getStatus()) && !queuedJob.isConsumed()) {
+            AiValidationResponse creditResponse = consumeAiCredits(
+                    queuedJob.getUserId(),
+                    BITMAP_TOOL,
+                    queuedJob.getCreditsRequired()
+            );
+            queuedJob.markConsumed();
+            remainingCredits = creditResponse.getAvailableCredits();
+        }
+
+        bitmapQueuedJobRepository.save(queuedJob);
+
+        job.setCreditsRequired(queuedJob.getCreditsRequired());
+        job.setCreditsConsumed(queuedJob.isConsumed());
+        job.setRemainingCredits(remainingCredits);
+        job.setQueued(isActiveQueuedStatus(job.getStatus()));
+        return job;
+    }
+
+    private BitmapJobResponse fetchBitmapJobStatus(Long jobId) {
+        try {
+            Map response = bitmapWebClient.get()
+                    .uri("/internal/ai/jobs/{jobId}", jobId)
+                    .header("X-INTERNAL-KEY", internalServiceKey)
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .block();
+            return parseBitmapJobResponse(response, null);
+        } catch (WebClientResponseException ex) {
+            log.error("FastAPI bitmap job status failed: status={}, body={}", ex.getStatusCode(), ex.getResponseBodyAsString());
+            throw new RuntimeException("Bitmap job status failed: " + ex.getResponseBodyAsString());
+        } catch (Exception ex) {
+            log.error("Failed to fetch bitmap job status for jobId={}", jobId, ex);
+            throw new RuntimeException("Bitmap job status failed: " + ex.getMessage());
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private BitmapJobResponse parseBitmapJobResponse(Map payload, String fallbackFeatureName) {
+        if (payload == null || payload.isEmpty()) {
+            return null;
+        }
+
+        Map<String, Object> record = (Map<String, Object>) payload;
+        Map<String, Object> input = null;
+        Object rawInput = record.get("input");
+        if (rawInput instanceof Map<?, ?> inputMap) {
+            Map<String, Object> parsedInput = new LinkedHashMap<>();
+            inputMap.forEach((key, value) -> parsedInput.put(String.valueOf(key), value));
+            input = parsedInput;
+        }
+
+        String status = stringValue(record, "status");
+        return BitmapJobResponse.builder()
+                .success(booleanValue(record.get("success"), status))
+                .jobId(longValue(record.get("jobId"), record.get("job_id"), record.get("id")))
+                .userId(longValue(record.get("userId"), record.get("user_id")))
+                .featureName(firstNonBlank(stringValue(record, "featureName", "feature_name", "toolName", "tool_name"), fallbackFeatureName))
+                .workerType(stringValue(record, "workerType", "worker_type"))
+                .status(status)
+                .outputKey(stringValue(record, "outputKey", "output_key", "outputUrl", "output_url"))
+                .errorMessage(stringValue(record, "errorMessage", "error_message", "error"))
+                .message(stringValue(record, "message"))
+                .input(input)
+                .queued(isActiveQueuedStatus(status))
+                .build();
+    }
+
+    private String resolveBitmapFeatureName(String path) {
+        String normalized = path == null ? "" : path.trim().toLowerCase(Locale.ROOT);
+        if (normalized.contains("/halftone/separation/proof")) {
+            return "BITMAP_SEPARATION_PROOF";
+        }
+        if (normalized.contains("/halftone/separation/psd")) {
+            return "BITMAP_SEPARATION_PSD";
+        }
+        if (normalized.contains("/halftone/separation")) {
+            return "BITMAP_SEPARATION";
+        }
+        if (normalized.contains("/halftone/cmyk")) {
+            return "BITMAP_CMYK";
+        }
+        if (normalized.contains("/dither")) {
+            return "BITMAP_DITHER";
+        }
+        if (normalized.contains("/halftone/monochrome")) {
+            return "BITMAP_HALFTONE";
+        }
+        return "BITMAP";
+    }
+
+    private boolean isActiveQueuedStatus(String status) {
+        if (status == null || status.isBlank()) {
+            return false;
+        }
+        String normalized = status.trim().toUpperCase(Locale.ROOT);
+        return "CREATED".equals(normalized)
+                || "QUEUED".equals(normalized)
+                || "PROCESSING".equals(normalized);
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value.trim();
+            }
+        }
+        return null;
+    }
+
+    private String stringValue(Map<String, Object> payload, String... keys) {
+        for (String key : keys) {
+            Object value = payload.get(key);
+            if (value instanceof String text && !text.isBlank()) {
+                return text;
+            }
+        }
+        return null;
+    }
+
+    private Long longValue(Object... values) {
+        for (Object value : values) {
+            if (value instanceof Number number) {
+                return number.longValue();
+            }
+            if (value instanceof String text && !text.isBlank()) {
+                try {
+                    return Long.parseLong(text.trim());
+                } catch (NumberFormatException ignored) {
+                    // Try the next candidate.
+                }
+            }
+        }
+        return null;
+    }
+
+    private Boolean booleanValue(Object... values) {
+        for (Object value : values) {
+            if (value instanceof Boolean bool) {
+                return bool;
+            }
+            if (value instanceof String text) {
+                String normalized = text.trim();
+                if ("true".equalsIgnoreCase(normalized)
+                        || "success".equalsIgnoreCase(normalized)
+                        || "created".equalsIgnoreCase(normalized)
+                        || "queued".equalsIgnoreCase(normalized)
+                        || "processing".equalsIgnoreCase(normalized)
+                        || "completed".equalsIgnoreCase(normalized)) {
+                    return true;
+                }
+                if ("false".equalsIgnoreCase(normalized)
+                        || "failed".equalsIgnoreCase(normalized)
+                        || "error".equalsIgnoreCase(normalized)) {
+                    return false;
+                }
+            }
+        }
+        return null;
     }
 
 

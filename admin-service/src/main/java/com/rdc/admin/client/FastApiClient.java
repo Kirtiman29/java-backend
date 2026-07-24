@@ -16,10 +16,8 @@ import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 import tools.jackson.databind.ObjectMapper;
 
-import java.net.InetAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.net.UnknownHostException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -321,13 +319,13 @@ public class FastApiClient {
         try {
             URI input = URI.create(inputUrl.trim());
             URI base = assetBase != null ? URI.create(assetBase) : null;
-            URI reachableBase = resolveReachableAssetBase(base, input.getScheme());
+            URI reachableBase = resolveReachableAssetBase(base);
 
             if (!input.isAbsolute()) {
                 return reachableBase != null ? joinBaseAndPath(reachableBase, inputUrl.trim()) : inputUrl.trim();
             }
 
-            if (!isLoopbackHost(input.getHost())) {
+            if (!isLocalOnlyHost(input.getHost())) {
                 return inputUrl.trim();
             }
 
@@ -392,7 +390,7 @@ public class FastApiClient {
             String path = uri.getPath();
 
             if ((path != null && path.contains("/api/assets/"))
-                    && (!uri.isAbsolute() || isLoopbackHost(uri.getHost()))) {
+                    && (!uri.isAbsolute() || isLocalOnlyHost(uri.getHost()))) {
                 return resolveAiAssetUrl(trimmed);
             }
         } catch (IllegalArgumentException ignored) {
@@ -407,42 +405,29 @@ public class FastApiClient {
         return base.toString().replaceAll("/+$", "") + normalizedPath;
     }
 
-    private URI resolveReachableAssetBase(URI configuredBase, String fallbackScheme) {
-        if (configuredBase != null && !isLoopbackHost(configuredBase.getHost())) {
-            return configuredBase;
+    private URI resolveReachableAssetBase(URI configuredBase) {
+        if (configuredBase == null || isLocalOnlyHost(configuredBase.getHost())) {
+            return null;
         }
 
-        try {
-            String localHostAddress = InetAddress.getLocalHost().getHostAddress();
-            if (localHostAddress == null || localHostAddress.isBlank()) {
-                return configuredBase;
-            }
-
-            String scheme = configuredBase != null && configuredBase.getScheme() != null
-                    ? configuredBase.getScheme()
-                    : (fallbackScheme != null ? fallbackScheme : "http");
-
-            int port = configuredBase != null ? configuredBase.getPort() : -1;
-            String userInfo = configuredBase != null ? configuredBase.getUserInfo() : null;
-            String path = configuredBase != null ? configuredBase.getPath() : null;
-
-            return new URI(scheme, userInfo, localHostAddress, port, path, null, null);
-        } catch (UnknownHostException | URISyntaxException exception) {
-            log.warn("Unable to resolve a reachable AI asset base URL: {}", exception.getMessage());
-            return configuredBase;
-        }
+        return configuredBase;
     }
 
-    private boolean isLoopbackHost(String host) {
+    private boolean isLocalOnlyHost(String host) {
         if (host == null || host.isBlank()) {
             return false;
         }
 
         String normalized = host.trim().toLowerCase(Locale.ROOT);
         return "localhost".equals(normalized)
+                || "asset-service".equals(normalized)
+                || "host.docker.internal".equals(normalized)
                 || "127.0.0.1".equals(normalized)
                 || "0.0.0.0".equals(normalized)
-                || "::1".equals(normalized);
+                || "::1".equals(normalized)
+                || normalized.startsWith("192.168.")
+                || normalized.startsWith("10.")
+                || normalized.matches("^172\\.(1[6-9]|2\\d|3[0-1])\\..*");
     }
 
     private int requestedOutputCount(FastApiExecuteRequest request) {

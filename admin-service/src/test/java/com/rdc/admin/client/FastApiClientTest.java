@@ -32,7 +32,7 @@ class FastApiClientTest {
 
         ReflectionTestUtils.setField(client, "fastApiBaseUrl", "http://fastapi:8000");
         ReflectionTestUtils.setField(client, "internalServiceKey", "internal-key");
-        ReflectionTestUtils.setField(client, "aiAssetBaseUrl", "http://asset-service:8090");
+        ReflectionTestUtils.setField(client, "aiAssetBaseUrl", "https://assets.example.com");
 
         FastApiExecuteRequest request = FastApiExecuteRequest.builder()
                 .requestId("req-1")
@@ -82,14 +82,14 @@ class FastApiClientTest {
 
         FastApiExecuteRequest sentRequest = (FastApiExecuteRequest) body;
         assertEquals(
-                "http://asset-service:8090/api/assets/download/abc-123",
+                "https://assets.example.com/api/assets/download/abc-123",
                 sentRequest.getInputUrl()
         );
 
         assertEquals(
                 List.of(
-                        "http://asset-service:8090/api/assets/download/source-1",
-                        "http://asset-service:8090/api/assets/download/source-2"
+                        "https://assets.example.com/api/assets/download/source-1",
+                        "https://assets.example.com/api/assets/download/source-2"
                 ),
                 sentRequest.getParams().get("inputUrls")
         );

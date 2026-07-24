@@ -56,6 +56,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/assets/download/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/assets/*/download").permitAll()
+                        .requestMatchers(HttpMethod.HEAD, "/api/assets/download/**").permitAll()
+                        .requestMatchers(HttpMethod.HEAD, "/api/assets/*/download").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/assets/resume-upload").permitAll()
                         .requestMatchers("/api/assets/internal/**").permitAll()
                         .requestMatchers(HttpMethod.DELETE, "/api/assets/internal/**").permitAll()

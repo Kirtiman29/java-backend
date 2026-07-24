@@ -1,6 +1,7 @@
 package com.rdc.subscription.controller;
 
 import com.rdc.subscription.dto.bitmap.BitmapAnalyzeResponse;
+import com.rdc.subscription.dto.bitmap.BitmapJobResponse;
 import com.rdc.subscription.dto.bitmap.BitmapUploadResponse;
 import com.rdc.subscription.dto.bitmap.GeminiImageToImageResponse;
 import com.rdc.subscription.service.BitmapService;
@@ -39,57 +40,66 @@ public class BitmapController {
     }
 
     @PostMapping("/preview/halftone")
-    public ResponseEntity<byte[]> previewHalftone(
+    public ResponseEntity<BitmapJobResponse> previewHalftone(
             @RequestParam Map<String, String> params,
             @AuthenticationPrincipal Jwt jwt
     ) {
         Long userId = Long.parseLong(jwt.getSubject());
-        return bitmapService.forwardBinaryRequest("/halftone/monochrome", params, userId);
+        return ResponseEntity.ok(bitmapService.queueBitmapRequest("/halftone/monochrome", params, userId));
     }
 
     @PostMapping("/preview/dither")
-    public ResponseEntity<byte[]> previewDither(
+    public ResponseEntity<BitmapJobResponse> previewDither(
             @RequestParam Map<String, String> params,
             @AuthenticationPrincipal Jwt jwt
     ) {
         Long userId = Long.parseLong(jwt.getSubject());
-        return bitmapService.forwardBinaryRequest("/dither/", params, userId);
+        return ResponseEntity.ok(bitmapService.queueBitmapRequest("/dither/", params, userId));
     }
 
     @PostMapping("/preview/separation-proof")
-    public ResponseEntity<byte[]> previewSeparationProof(
+    public ResponseEntity<BitmapJobResponse> previewSeparationProof(
             @RequestParam Map<String, String> params,
             @AuthenticationPrincipal Jwt jwt
     ) {
         Long userId = Long.parseLong(jwt.getSubject());
-        return bitmapService.forwardBinaryRequest("/halftone/separation/proof", params, userId);
+        return ResponseEntity.ok(bitmapService.queueBitmapRequest("/halftone/separation/proof", params, userId));
     }
 
     @PostMapping("/export/separation-zip")
-    public ResponseEntity<byte[]> exportSeparationZip(
+    public ResponseEntity<BitmapJobResponse> exportSeparationZip(
             @RequestParam Map<String, String> params,
             @AuthenticationPrincipal Jwt jwt
     ) {
         Long userId = Long.parseLong(jwt.getSubject());
-        return bitmapService.forwardBinaryRequest("/halftone/separation", params, userId);
+        return ResponseEntity.ok(bitmapService.queueBitmapRequest("/halftone/separation", params, userId));
     }
 
     @PostMapping("/export/psd")
-    public ResponseEntity<byte[]> exportPsd(
+    public ResponseEntity<BitmapJobResponse> exportPsd(
             @RequestParam Map<String, String> params,
             @AuthenticationPrincipal Jwt jwt
     ) {
         Long userId = Long.parseLong(jwt.getSubject());
-        return bitmapService.forwardBinaryRequest("/halftone/separation/psd", params, userId);
+        return ResponseEntity.ok(bitmapService.queueBitmapRequest("/halftone/separation/psd", params, userId));
     }
 
     @PostMapping("/export/cmyk")
-    public ResponseEntity<byte[]> exportCmyk(
+    public ResponseEntity<BitmapJobResponse> exportCmyk(
             @RequestParam Map<String, String> params,
             @AuthenticationPrincipal Jwt jwt
     ) {
         Long userId = Long.parseLong(jwt.getSubject());
-        return bitmapService.forwardBinaryRequest("/halftone/cmyk/", params, userId);
+        return ResponseEntity.ok(bitmapService.queueBitmapRequest("/halftone/cmyk/", params, userId));
+    }
+
+    @GetMapping("/jobs/{jobId}")
+    public ResponseEntity<BitmapJobResponse> getJobStatus(
+            @PathVariable Long jobId,
+            @AuthenticationPrincipal Jwt jwt
+    ) {
+        Long userId = Long.parseLong(jwt.getSubject());
+        return ResponseEntity.ok(bitmapService.getBitmapJobStatus(jobId, userId));
     }
 
     @PostMapping(value = "/gemini-image/image-to-image", consumes = "multipart/form-data")

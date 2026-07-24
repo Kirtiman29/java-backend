@@ -164,6 +164,7 @@ services:
       ORDER_SERVICE_URL: http://order-service:8095
       PAYMENT_SERVICE_URL: http://payment-service:8092
       ADMIN_SERVICE_URL: http://admin-service:8080
+      AI_ASSET_SERVICE_URL: ${AI_ASSET_SERVICE_URL:-http://host.docker.internal:8090}
       BITMAP_BACKEND_URL: ${BITMAP_BACKEND_URL:-http://host.docker.internal:8002}
       GEMINI_BACKEND_URL: ${GEMINI_BACKEND_URL:-http://host.docker.internal:8000}
       FASTAPI_RESPONSE_TIMEOUT_SECONDS: ${FASTAPI_RESPONSE_TIMEOUT_SECONDS:-900}
