@@ -43,6 +43,9 @@ public class FastApiClient {
     @Value("${service.ai.asset.url:${service.asset.url}}")
     private String aiAssetBaseUrl;
 
+    @Value("${service.asset.url:http://localhost:8090}")
+    private String assetServiceBaseUrl;
+
     @Value("${ai.upscale.url:}")
     private String aiUpscaleUrl;
 
@@ -325,7 +328,7 @@ public class FastApiClient {
                 return reachableBase != null ? joinBaseAndPath(reachableBase, inputUrl.trim()) : inputUrl.trim();
             }
 
-            if (!isLocalOnlyHost(input.getHost())) {
+            if (!isAssetDownloadUrl(input) && !isLocalOnlyHost(input.getHost())) {
                 return inputUrl.trim();
             }
 
@@ -387,10 +390,8 @@ public class FastApiClient {
 
         try {
             URI uri = URI.create(trimmed);
-            String path = uri.getPath();
 
-            if ((path != null && path.contains("/api/assets/"))
-                    && (!uri.isAbsolute() || isLocalOnlyHost(uri.getHost()))) {
+            if (isAssetDownloadUrl(uri)) {
                 return resolveAiAssetUrl(trimmed);
             }
         } catch (IllegalArgumentException ignored) {
@@ -400,17 +401,63 @@ public class FastApiClient {
         return value;
     }
 
+    private boolean isAssetDownloadUrl(URI uri) {
+        String path = uri.getPath();
+        return path != null && path.contains("/api/assets/");
+    }
+
     private String joinBaseAndPath(URI base, String path) {
         String normalizedPath = path.startsWith("/") ? path : "/" + path;
         return base.toString().replaceAll("/+$", "") + normalizedPath;
     }
 
     private URI resolveReachableAssetBase(URI configuredBase) {
-        if (configuredBase == null || isLocalOnlyHost(configuredBase.getHost())) {
+        if (isUsableAssetBase(configuredBase)) {
+            return configuredBase;
+        }
+
+        URI fallbackBase = parseAssetBase(assetServiceBaseUrl);
+        if (isUsableAssetBase(fallbackBase)) {
+            if (configuredBase != null && isTemporaryTunnelHost(configuredBase.getHost())) {
+                log.warn(
+                        "Ignoring temporary AI asset base {} and using service.asset.url {}",
+                        configuredBase,
+                        fallbackBase
+                );
+            }
+            return fallbackBase;
+        }
+
+        return null;
+    }
+
+    private URI parseAssetBase(String value) {
+        if (value == null || value.isBlank()) {
             return null;
         }
 
-        return configuredBase;
+        try {
+            return URI.create(value.trim());
+        } catch (IllegalArgumentException exception) {
+            log.warn("Invalid asset service base URL '{}': {}", value, exception.getMessage());
+            return null;
+        }
+    }
+
+    private boolean isUsableAssetBase(URI base) {
+        return base != null
+                && base.getHost() != null
+                && base.getScheme() != null
+                && !isTemporaryTunnelHost(base.getHost());
+    }
+
+    private boolean isTemporaryTunnelHost(String host) {
+        if (host == null || host.isBlank()) {
+            return false;
+        }
+
+        String normalized = host.trim().toLowerCase(Locale.ROOT);
+        return normalized.endsWith(".trycloudflare.com");
     }
 
     private boolean isLocalOnlyHost(String host) {

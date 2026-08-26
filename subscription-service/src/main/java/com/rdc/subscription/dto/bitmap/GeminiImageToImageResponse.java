@@ -18,6 +18,16 @@ import java.util.Map;
 public class GeminiImageToImageResponse {
     private Boolean success;
     private String message;
+    private String provider;
+
+    @JsonProperty("requested_provider")
+    private String requestedProvider;
+
+    @JsonProperty("provider_fallback_used")
+    private Boolean providerFallbackUsed;
+
+    @JsonProperty("fallback_provider")
+    private String fallbackProvider;
 
     @JsonProperty("input_prompt")
     private String inputPrompt;
@@ -66,4 +76,7 @@ public class GeminiImageToImageResponse {
 
     @JsonProperty("credits_required")
     private Integer creditsRequired;
+
+    @JsonProperty("fallback_used")
+    private Boolean fallbackUsed;
 }

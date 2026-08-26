@@ -6,6 +6,7 @@ import com.rdc.admin.dto.ai.*;
 import com.rdc.admin.entity.AiCreditConsumption;
 import com.rdc.admin.repository.AiCreditConsumptionRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -44,6 +45,9 @@ public class AiOrchestrationService {
     private final SubscriptionServiceClient subscriptionServiceClient;
     private final FastApiClient fastApiClient;
     private final AiCreditConsumptionRepository aiCreditConsumptionRepository;
+
+    @Value("${ai.queue.enabled:true}")
+    private boolean aiQueueEnabled;
 
     public AiToolResponse executeTool(Long userId, AiToolRequest request) {
         return executeTool(userId, null, request);
@@ -229,10 +233,12 @@ public class AiOrchestrationService {
     }
 
     private boolean isQueuedTool(String toolName) {
-        return COLOR_SEPARATION.equals(toolName)
+        return aiQueueEnabled && (
+                COLOR_SEPARATION.equals(toolName)
                 || SEAMLESS.equals(toolName)
                 || SEAMLESS_GENERATOR.equals(toolName)
-                || SEAMLESS_PATTERN.equals(toolName);
+                || SEAMLESS_PATTERN.equals(toolName)
+        );
     }
 
     private boolean isActiveQueuedStatus(String status) {

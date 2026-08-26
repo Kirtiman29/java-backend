@@ -47,7 +47,15 @@ public class BitmapService {
     private static final String GEMINI_IMAGE_TO_IMAGE_TOOL = "GEMINI_IMAGE_TO_IMAGE";
     private static final int GEMINI_IMAGE_TO_IMAGE_CREDIT_COST = 8;
     private static final String EMBROIDERY_PREVIEW_TOOL = "EMBROIDERY_PREVIEW";
+    private static final String PAINTING_TECHNIQUE_TOOL = "PAINTING_TECHNIQUE";
+    private static final String TRADITIONAL_ART_TOOL = "TRADITIONAL_ART";
+    private static final String REPLICATE_UPSCALE_TOOL = "REPLICATE_UPSCALE";
+    private static final String SEAMLESS_PATTERN_TOOL = "SEAMLESS_PATTERN";
     private static final int EMBROIDERY_PREVIEW_CREDIT_COST = 10;
+    private static final int PAINTING_TECHNIQUE_CREDIT_COST = 10;
+    private static final int TRADITIONAL_ART_CREDIT_COST = 10;
+    private static final int REPLICATE_UPSCALE_CREDIT_COST = 10;
+    private static final int SEAMLESS_PATTERN_CREDIT_COST = 10;
     private static final String BITMAP_TOOL = "BITMAP";
     private static final int BITMAP_CREDIT_COST = 10;
 
@@ -370,6 +378,83 @@ public class BitmapService {
         }
     }
 
+    public Map<String, Object> generateSeamlessPattern(
+            MultipartFile file,
+            Map<String, String> params,
+            Long userId,
+            String authorizationHeader
+    ) {
+        checkActiveSubscription(userId);
+        validateAiCredits(userId, SEAMLESS_PATTERN_TOOL, SEAMLESS_PATTERN_CREDIT_COST);
+        validateImageFileType(file, "file");
+
+        MultipartBodyBuilder bodyBuilder = new MultipartBodyBuilder();
+        String effectiveAuthorization = authorizationHeader == null ? "" : authorizationHeader.trim();
+        Map<String, String> forwardedParams = params == null ? new LinkedHashMap<>() : new LinkedHashMap<>(params);
+        forwardedParams.remove("file");
+        String horizontalBand = firstNonBlank(forwardedParams.get("horizontal_band"), forwardedParams.get("horizontalBand"));
+        String verticalBand = firstNonBlank(forwardedParams.get("vertical_band"), forwardedParams.get("verticalBand"));
+        boolean useCustomBands = horizontalBand != null && verticalBand != null;
+        String seamlessPath = useCustomBands ? "/seamless/generate-seamless-custom" : "/seamless/generate-seamless";
+
+        try {
+            addMultipartFile(bodyBuilder, "image", file);
+            bodyBuilder.part("userId", String.valueOf(userId));
+            if (useCustomBands) {
+                bodyBuilder.part("horizontal_band", horizontalBand);
+                bodyBuilder.part("vertical_band", verticalBand);
+            }
+            if (!forwardedParams.isEmpty()) {
+                forwardedParams.forEach((key, value) -> {
+                    if (value != null && !value.isBlank()
+                            && !"horizontal_band".equals(key)
+                            && !"horizontalBand".equals(key)
+                            && !"vertical_band".equals(key)
+                            && !"verticalBand".equals(key)) {
+                        bodyBuilder.part(key, value);
+                    }
+                });
+            }
+
+            Map response = geminiWebClient.post()
+                    .uri(seamlessPath)
+                    .header("X-User-Id", String.valueOf(userId))
+                    .header("X-INTERNAL-KEY", internalServiceKey)
+                    .headers(headers -> {
+                        if (!effectiveAuthorization.isBlank()) {
+                            headers.set(HttpHeaders.AUTHORIZATION, effectiveAuthorization);
+                        }
+                    })
+                    .contentType(MediaType.MULTIPART_FORM_DATA)
+                    .body(BodyInserters.fromMultipartData(bodyBuilder.build()))
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .block();
+
+            if (response == null) {
+                throw new RuntimeException("Received empty response from FastAPI pattern endpoint");
+            }
+
+            AiValidationResponse creditResponse = consumeAiCredits(userId, SEAMLESS_PATTERN_TOOL, SEAMLESS_PATTERN_CREDIT_COST);
+            Map<String, Object> result = new LinkedHashMap<>();
+            response.forEach((key, value) -> result.put(String.valueOf(key), value));
+            result.put("remaining_credits", creditResponse.getAvailableCredits());
+            result.put("credits_required", creditResponse.getCreditsRequired());
+            result.put("remainingCredits", creditResponse.getAvailableCredits());
+            result.put("creditsRequired", creditResponse.getCreditsRequired());
+            return result;
+        } catch (WebClientResponseException ex) {
+            log.error("FastAPI pattern generation failed: status={}, body={}", ex.getStatusCode(), ex.getResponseBodyAsString());
+            throw new ResponseStatusException(ex.getStatusCode(), "Pattern generation failed: " + ex.getResponseBodyAsString(), ex);
+        } catch (IOException ex) {
+            log.error("Failed to read image content for FastAPI pattern request", ex);
+            throw new RuntimeException("Failed to read image contents");
+        } catch (Exception ex) {
+            log.error("Failed to connect to FastAPI pattern endpoint", ex);
+            throw new RuntimeException("Pattern generation service is currently unavailable");
+        }
+    }
+
     public ResponseEntity<Map> embroideryPreview(
             MultipartFile image,
             Map<String, String> params,
@@ -428,6 +513,189 @@ public class BitmapService {
         } catch (Exception ex) {
             log.error("Failed to connect to FastAPI embroidery endpoint", ex);
             throw new RuntimeException("Embroidery preview service is currently unavailable");
+        }
+    }
+
+    public ResponseEntity<Map> paintingTechnique(
+            MultipartFile image,
+            Map<String, String> params,
+            Long userId
+    ) {
+        checkActiveSubscription(userId);
+        validateAiCredits(userId, PAINTING_TECHNIQUE_TOOL, PAINTING_TECHNIQUE_CREDIT_COST);
+        validateImageFileType(image, "image");
+
+        MultipartBodyBuilder bodyBuilder = new MultipartBodyBuilder();
+        Map<String, String> forwardedParams = params == null ? new LinkedHashMap<>() : new LinkedHashMap<>(params);
+        forwardedParams.remove("image");
+        forwardedParams.remove("file");
+
+        try {
+            addMultipartFile(bodyBuilder, "image", image);
+            bodyBuilder.part("user_id", String.valueOf(userId));
+
+            if (!forwardedParams.isEmpty()) {
+                forwardedParams.forEach((key, value) -> {
+                    if (value != null && !value.isBlank()) {
+                        bodyBuilder.part(key, value);
+                    }
+                });
+            }
+
+            Map response = geminiWebClient.post()
+                    .uri("/api/painting-technique")
+                    .header("X-User-Id", String.valueOf(userId))
+                    .header("X-INTERNAL-KEY", internalServiceKey)
+                    .contentType(MediaType.MULTIPART_FORM_DATA)
+                    .body(BodyInserters.fromMultipartData(bodyBuilder.build()))
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .block();
+
+            if (response == null) {
+                throw new RuntimeException("Received empty response from FastAPI painting technique endpoint");
+            }
+
+            AiValidationResponse creditResponse = consumeAiCredits(userId, PAINTING_TECHNIQUE_TOOL, PAINTING_TECHNIQUE_CREDIT_COST);
+            response.put("remaining_credits", creditResponse.getAvailableCredits());
+            response.put("credits_required", creditResponse.getCreditsRequired());
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.add("X-Remaining-Credits", String.valueOf(creditResponse.getAvailableCredits()));
+            headers.add("X-Credits-Required", String.valueOf(creditResponse.getCreditsRequired()));
+
+            return new ResponseEntity<>(response, headers, HttpStatus.OK);
+        } catch (WebClientResponseException ex) {
+            log.error("FastAPI painting technique failed: status={}, body={}", ex.getStatusCode(), ex.getResponseBodyAsString());
+            throw new RuntimeException("Painting technique preview failed: " + ex.getResponseBodyAsString());
+        } catch (IOException ex) {
+            log.error("Failed to read image content for FastAPI painting technique request", ex);
+            throw new RuntimeException("Failed to read image contents");
+        } catch (Exception ex) {
+            log.error("Failed to connect to FastAPI painting technique endpoint", ex);
+            throw new RuntimeException("Painting technique preview service is currently unavailable");
+        }
+    }
+
+    public ResponseEntity<Map> traditionalArt(
+            MultipartFile image,
+            Map<String, String> params,
+            Long userId
+    ) {
+        checkActiveSubscription(userId);
+        validateAiCredits(userId, TRADITIONAL_ART_TOOL, TRADITIONAL_ART_CREDIT_COST);
+        validateImageFileType(image, "image");
+
+        MultipartBodyBuilder bodyBuilder = new MultipartBodyBuilder();
+        Map<String, String> forwardedParams = params == null ? new LinkedHashMap<>() : new LinkedHashMap<>(params);
+        forwardedParams.remove("image");
+        forwardedParams.remove("file");
+
+        try {
+            addMultipartFile(bodyBuilder, "image", image);
+            bodyBuilder.part("user_id", String.valueOf(userId));
+
+            if (!forwardedParams.isEmpty()) {
+                forwardedParams.forEach((key, value) -> {
+                    if (value != null && !value.isBlank()) {
+                        bodyBuilder.part(key, value);
+                    }
+                });
+            }
+
+            Map response = geminiWebClient.post()
+                    .uri("/api/traditional-art")
+                    .header("X-User-Id", String.valueOf(userId))
+                    .header("X-INTERNAL-KEY", internalServiceKey)
+                    .contentType(MediaType.MULTIPART_FORM_DATA)
+                    .body(BodyInserters.fromMultipartData(bodyBuilder.build()))
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .block();
+
+            if (response == null) {
+                throw new RuntimeException("Received empty response from FastAPI traditional art endpoint");
+            }
+
+            AiValidationResponse creditResponse = consumeAiCredits(userId, TRADITIONAL_ART_TOOL, TRADITIONAL_ART_CREDIT_COST);
+            response.put("remaining_credits", creditResponse.getAvailableCredits());
+            response.put("credits_required", creditResponse.getCreditsRequired());
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.add("X-Remaining-Credits", String.valueOf(creditResponse.getAvailableCredits()));
+            headers.add("X-Credits-Required", String.valueOf(creditResponse.getCreditsRequired()));
+
+            return new ResponseEntity<>(response, headers, HttpStatus.OK);
+        } catch (WebClientResponseException ex) {
+            log.error("FastAPI traditional art failed: status={}, body={}", ex.getStatusCode(), ex.getResponseBodyAsString());
+            throw new RuntimeException("Traditional art preview failed: " + ex.getResponseBodyAsString());
+        } catch (IOException ex) {
+            log.error("Failed to read image content for FastAPI traditional art request", ex);
+            throw new RuntimeException("Failed to read image contents");
+        } catch (Exception ex) {
+            log.error("Failed to connect to FastAPI traditional art endpoint", ex);
+            throw new RuntimeException("Traditional art preview service is currently unavailable");
+        }
+    }
+
+    public ResponseEntity<Map> replicateUpscale(
+            MultipartFile image,
+            Map<String, String> params,
+            Long userId
+    ) {
+        checkActiveSubscription(userId);
+        validateAiCredits(userId, REPLICATE_UPSCALE_TOOL, REPLICATE_UPSCALE_CREDIT_COST);
+        validateImageFileType(image, "image");
+
+        MultipartBodyBuilder bodyBuilder = new MultipartBodyBuilder();
+        Map<String, String> forwardedParams = params == null ? new LinkedHashMap<>() : new LinkedHashMap<>(params);
+        forwardedParams.remove("image");
+        forwardedParams.remove("file");
+
+        try {
+            addMultipartFile(bodyBuilder, "image", image);
+            bodyBuilder.part("user_id", String.valueOf(userId));
+
+            if (!forwardedParams.isEmpty()) {
+                forwardedParams.forEach((key, value) -> {
+                    if (value != null && !value.isBlank()) {
+                        bodyBuilder.part(key, value);
+                    }
+                });
+            }
+
+            Map response = geminiWebClient.post()
+                    .uri("/api/replicate-upscale")
+                    .header("X-User-Id", String.valueOf(userId))
+                    .header("X-INTERNAL-KEY", internalServiceKey)
+                    .contentType(MediaType.MULTIPART_FORM_DATA)
+                    .body(BodyInserters.fromMultipartData(bodyBuilder.build()))
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .block();
+
+            if (response == null) {
+                throw new RuntimeException("Received empty response from FastAPI replicate upscale endpoint");
+            }
+
+            AiValidationResponse creditResponse = consumeAiCredits(userId, REPLICATE_UPSCALE_TOOL, REPLICATE_UPSCALE_CREDIT_COST);
+            response.put("remaining_credits", creditResponse.getAvailableCredits());
+            response.put("credits_required", creditResponse.getCreditsRequired());
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.add("X-Remaining-Credits", String.valueOf(creditResponse.getAvailableCredits()));
+            headers.add("X-Credits-Required", String.valueOf(creditResponse.getCreditsRequired()));
+
+            return new ResponseEntity<>(response, headers, HttpStatus.OK);
+        } catch (WebClientResponseException ex) {
+            log.error("FastAPI replicate upscale failed: status={}, body={}", ex.getStatusCode(), ex.getResponseBodyAsString());
+            throw new RuntimeException("Replicate upscale failed: " + ex.getResponseBodyAsString());
+        } catch (IOException ex) {
+            log.error("Failed to read image content for FastAPI replicate upscale request", ex);
+            throw new RuntimeException("Failed to read image contents");
+        } catch (Exception ex) {
+            log.error("Failed to connect to FastAPI replicate upscale endpoint", ex);
+            throw new RuntimeException("Replicate upscale service is currently unavailable");
         }
     }
 

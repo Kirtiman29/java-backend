@@ -94,4 +94,119 @@ class FastApiClientTest {
                 sentRequest.getParams().get("inputUrls")
         );
     }
+
+    @Test
+    void shouldRewritePublicAssetDownloadUrlBeforeCallingFastApi() throws Exception {
+        ObjectMapper objectMapper = mock(ObjectMapper.class);
+        org.springframework.web.client.RestTemplate restTemplate = mock(org.springframework.web.client.RestTemplate.class);
+        FastApiClient client = new FastApiClient(objectMapper, restTemplate);
+
+        ReflectionTestUtils.setField(client, "fastApiBaseUrl", "http://fastapi:8000");
+        ReflectionTestUtils.setField(client, "internalServiceKey", "internal-key");
+        ReflectionTestUtils.setField(client, "aiAssetBaseUrl", "http://asset-service:8090");
+
+        FastApiExecuteRequest request = FastApiExecuteRequest.builder()
+                .requestId("req-1")
+                .userId(42L)
+                .toolName("SEAMLESS_PATTERN")
+                .inputUrl("https://attribute-remained-match-pensions.trycloudflare.com/api/assets/download/029fb745-f36e-4186-9022-e657e44c7067")
+                .params(Map.of("num_images", 1))
+                .build();
+
+        when(restTemplate.exchange(
+                anyString(),
+                eq(HttpMethod.POST),
+                any(HttpEntity.class),
+                eq(String.class)
+        )).thenReturn(ResponseEntity.ok("""
+                {"success":true,"message":"ok","outputUrl":"/files/result.png"}
+                """));
+
+        when(objectMapper.readValue(anyString(), eq(Map.class))).thenReturn(Map.of(
+                "success", true,
+                "message", "ok",
+                "outputUrl", "/files/result.png"
+        ));
+
+        ArgumentCaptor<HttpEntity> entityCaptor = ArgumentCaptor.forClass(HttpEntity.class);
+
+        client.execute(request);
+
+        verify(restTemplate, times(1)).exchange(
+                anyString(),
+                eq(HttpMethod.POST),
+                entityCaptor.capture(),
+                eq(String.class)
+        );
+
+        HttpEntity<?> sentEntity = entityCaptor.getValue();
+        assertNotNull(sentEntity);
+
+        Object body = sentEntity.getBody();
+        assertNotNull(body);
+
+        FastApiExecuteRequest sentRequest = (FastApiExecuteRequest) body;
+        assertEquals(
+                "http://asset-service:8090/api/assets/download/029fb745-f36e-4186-9022-e657e44c7067",
+                sentRequest.getInputUrl()
+        );
+    }
+
+    @Test
+    void shouldIgnoreStaleTryCloudflareAssetBaseForLocalAssetDownloads() throws Exception {
+        ObjectMapper objectMapper = mock(ObjectMapper.class);
+        org.springframework.web.client.RestTemplate restTemplate = mock(org.springframework.web.client.RestTemplate.class);
+        FastApiClient client = new FastApiClient(objectMapper, restTemplate);
+
+        ReflectionTestUtils.setField(client, "fastApiBaseUrl", "http://fastapi:8000");
+        ReflectionTestUtils.setField(client, "internalServiceKey", "internal-key");
+        ReflectionTestUtils.setField(client, "aiAssetBaseUrl", "https://attribute-remained-match-pensions.trycloudflare.com");
+        ReflectionTestUtils.setField(client, "assetServiceBaseUrl", "http://localhost:8090");
+
+        FastApiExecuteRequest request = FastApiExecuteRequest.builder()
+                .requestId("req-1")
+                .userId(42L)
+                .toolName("SEAMLESS_PATTERN")
+                .inputUrl("https://attribute-remained-match-pensions.trycloudflare.com/api/assets/download/2f8775ed-96d6-4326-add3-03b2f37b750b")
+                .params(Map.of("num_images", 1))
+                .build();
+
+        when(restTemplate.exchange(
+                anyString(),
+                eq(HttpMethod.POST),
+                any(HttpEntity.class),
+                eq(String.class)
+        )).thenReturn(ResponseEntity.ok("""
+                {"success":true,"message":"ok","outputUrl":"/files/result.png"}
+                """));
+
+        when(objectMapper.readValue(anyString(), eq(Map.class))).thenReturn(Map.of(
+                "success", true,
+                "message", "ok",
+                "outputUrl", "/files/result.png"
+        ));
+
+        ArgumentCaptor<HttpEntity> entityCaptor = ArgumentCaptor.forClass(HttpEntity.class);
+
+        client.execute(request);
+
+        verify(restTemplate, times(1)).exchange(
+                anyString(),
+                eq(HttpMethod.POST),
+                entityCaptor.capture(),
+                eq(String.class)
+        );
+
+        HttpEntity<?> sentEntity = entityCaptor.getValue();
+        assertNotNull(sentEntity);
+
+        Object body = sentEntity.getBody();
+        assertNotNull(body);
+
+        FastApiExecuteRequest sentRequest = (FastApiExecuteRequest) body;
+        assertEquals(
+                "http://localhost:8090/api/assets/download/2f8775ed-96d6-4326-add3-03b2f37b750b",
+                sentRequest.getInputUrl()
+        );
+    }
 }

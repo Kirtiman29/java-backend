@@ -23,12 +23,18 @@ public class GeminiImageProxyController {
 
     @PostMapping(value = "/image-to-image", consumes = "multipart/form-data")
     public ResponseEntity<GeminiImageToImageResponse> imageToImage(
-            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "file", required = false) MultipartFile file,
+            @RequestParam(value = "image", required = false) MultipartFile imageInput,
+            @RequestParam(value = "input_image", required = false) MultipartFile inputImage,
             @RequestParam(value = "mask_file", required = false) MultipartFile maskFile,
             @RequestParam Map<String, String> params,
             @AuthenticationPrincipal Jwt jwt
     ) {
+        MultipartFile effectiveFile = file != null ? file : (imageInput != null ? imageInput : inputImage);
+        if (effectiveFile == null || effectiveFile.isEmpty()) {
+            throw new IllegalArgumentException("Image file is required under parameter 'file' or 'image'.");
+        }
         Long userId = Long.parseLong(jwt.getSubject());
-        return ResponseEntity.ok(bitmapService.geminiImageToImage(file, maskFile, params, userId));
+        return ResponseEntity.ok(bitmapService.geminiImageToImage(effectiveFile, maskFile, params, userId));
     }
 }

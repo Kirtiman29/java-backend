@@ -72,7 +72,11 @@ public class AiToolCostService {
             Map.entry("PROMPT_ENHANCER", 2),
             Map.entry("SEAMLESS", 7),
             Map.entry("SEAMLESS_GENERATOR", 7),
-            Map.entry("SEAMLESS_PATTERN", 7)
+            Map.entry("SEAMLESS_PATTERN", 7),
+            Map.entry("EMBROIDERY_PREVIEW", 10),
+            Map.entry("PAINTING_TECHNIQUE", 10),
+            Map.entry("TRADITIONAL_ART", 10),
+            Map.entry("REPLICATE_UPSCALE", 10)
     );
 
     public int getCost(String toolName, Map<String, Object> params) {

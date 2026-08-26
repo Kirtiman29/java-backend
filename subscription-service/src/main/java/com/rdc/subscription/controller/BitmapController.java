@@ -6,6 +6,7 @@ import com.rdc.subscription.dto.bitmap.BitmapUploadResponse;
 import com.rdc.subscription.dto.bitmap.GeminiImageToImageResponse;
 import com.rdc.subscription.service.BitmapService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -100,6 +101,17 @@ public class BitmapController {
     ) {
         Long userId = Long.parseLong(jwt.getSubject());
         return ResponseEntity.ok(bitmapService.getBitmapJobStatus(jobId, userId));
+    }
+
+    @PostMapping(value = "/pattern/generate-seamless", consumes = "multipart/form-data")
+    public ResponseEntity<Map<String, Object>> generateSeamlessPattern(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam Map<String, String> params,
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader,
+            @AuthenticationPrincipal Jwt jwt
+    ) {
+        Long userId = Long.parseLong(jwt.getSubject());
+        return ResponseEntity.ok(bitmapService.generateSeamlessPattern(file, params, userId, authorizationHeader));
     }
 
     @PostMapping(value = "/gemini-image/image-to-image", consumes = "multipart/form-data")
